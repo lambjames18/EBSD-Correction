@@ -53,6 +53,6 @@ fig2 = plt.figure(2)
 ax2 = fig2.add_subplot(111)
 ax2.imshow(img)
 for i in range(bse_pts.shape[0]):
-    ax2.scatter(bse_pts[i, 0], bse_pts[i, 1], c="r")
+    ax2.scatter(bse_pts[i, 0], bse_pts[i, 1], c="r", s=10)
     ax2.text(bse_pts[i, 0] + 2, bse_pts[i, 1] + 2, i)
 fig2.savefig(f"slice_{slice_id}_{which}_points.png")
