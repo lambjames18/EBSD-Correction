@@ -29,7 +29,8 @@ deg = 2
 
 # Read 3d feats map map
 slice_id = 170
-featmap = imread(f"slice_{slice_id}_ebsd.tif")
+featmap = imread(f"slice_{slice_id}_ebsd.png")
+featmap = featmap.dot([0.3, 0.59, 0.11, 0])
 # featmap = imread("ebsd_tiltOn.png")
 
 # Read control points from files
@@ -52,8 +53,8 @@ ratio = tools.findRatio(dist_dic, dist_ebsd)
 
 # Convert control points coordinates into same reference frame
 coord_bse_rescaled = coord_bse / ratio
-dst = coord_bse_rescaled  # targets
-src = coord_ebsd  # sources
+src = coord_bse_rescaled  # targets
+dst = coord_ebsd  # sources
 # dst = coord_bse  # sources
 # src = coord_ebsd  # targets
 
@@ -83,7 +84,7 @@ params = np.stack(
 )
 np.save("paramsDistortion", params)
 # Distort image
-buf = 50
+buf = 1500
 featmap_buffered = np.zeros(np.array(featmap.shape) + buf)
 featmap_buffered[int(buf / 2) : -int(buf / 2), int(buf / 2) : -int(buf / 2)] = featmap
 transform = tf._geometric.PolynomialTransform(params)
@@ -94,8 +95,9 @@ featmap_align = tf.warp(
     order=0,  # k-neighbour
     preserve_range=True,
 )
-featmap_align = featmap_align[:-buf, buf:]
-sp.saveim(featmap_align, name=f"slice_{slice_id}_ebsd_aligned.tif", cmap="gray")
+buf = buf //2
+featmap_align = featmap_align[buf:, buf:]
+sp.saveim(featmap_align, name=f"slice_{slice_id}_ebsd_aligned.tiff", cmap="gray")
 
 # featmap_trans_im = Image.fromarray(featmap_align)
 # featmap_trans_im.save("ebsd_aligned.tif")
