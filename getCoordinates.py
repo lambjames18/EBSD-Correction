@@ -12,10 +12,10 @@ def onclick(event):
     global img
     x = np.around(ix, 0).astype(np.uint32)
     y = np.around(iy, 0).astype(np.uint32)
-    
+
     with open(txt_path, "a") as output:
         output.write(f"{x} {y}\n")
-    print(np.loadtxt(txt_path, delimiter=' ')[-1])
+    print(np.loadtxt(txt_path, delimiter=" ")[-1])
 
 
 def close(event):
@@ -25,17 +25,17 @@ def close(event):
 
 
 # Specify which image to look at
-which = "bse"
-slice_id = 170
+which = "ebsd"
+slice_id = 385
 txt_path = f"ctr_pts_{which}.txt"
-im_path = f"slice_{slice_id}_{which}.tif"
-"""
+im_path = f"{slice_id}_{which}.tif"
+# """
 # Old points
 try:
     os.remove(txt_path)
 except FileNotFoundError:
     pass
-"""
+# """
 
 # Open image and select points
 img = io.imread(im_path)
@@ -55,4 +55,4 @@ ax2.imshow(img)
 for i in range(bse_pts.shape[0]):
     ax2.scatter(bse_pts[i, 0], bse_pts[i, 1], c="r", s=1)
     ax2.text(bse_pts[i, 0] + 2, bse_pts[i, 1] + 2, i)
-fig2.savefig(f"slice_{slice_id}_{which}_points.png")
+fig2.savefig(f"{slice_id}_{which}_points.png")

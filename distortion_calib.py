@@ -28,9 +28,9 @@ deg = 2
 
 
 # Read 3d feats map map
-slice_id = 170
-featmap = imread(f"slice_{slice_id}_ebsd.png")
-featmap = featmap.dot([0.3, 0.59, 0.11, 0])
+slice_id = 385
+featmap = imread(f"{slice_id}_ebsd.tif")
+# featmap = featmap.dot([0.3, 0.59, 0.11, 0])
 # featmap = imread("ebsd_tiltOn.png")
 
 # Read control points from files
@@ -95,9 +95,9 @@ featmap_align = tf.warp(
     order=0,  # k-neighbour
     preserve_range=True,
 )
-buf = buf //2
+buf = buf // 2
 featmap_align = featmap_align[buf:, buf:]
-sp.saveim(featmap_align, name=f"slice_{slice_id}_ebsd_aligned.tiff", cmap="gray")
+sp.saveim(featmap_align, name=f"{slice_id}_ebsd_aligned.tiff", cmap="gray")
 
 # featmap_trans_im = Image.fromarray(featmap_align)
 # featmap_trans_im.save("ebsd_aligned.tif")
