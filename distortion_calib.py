@@ -24,7 +24,7 @@ import support as sp
 
 
 # parameters of the polynomial function
-deg = 2
+deg = 3
 
 
 # Read 3d feats map map
