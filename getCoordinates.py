@@ -29,13 +29,13 @@ which = "ebsd"
 slice_id = 385
 txt_path = f"ctr_pts_{which}.txt"
 im_path = f"{slice_id}_{which}.tif"
-# """
+"""
 # Old points
 try:
     os.remove(txt_path)
 except FileNotFoundError:
     pass
-# """
+"""
 
 # Open image and select points
 img = io.imread(im_path)
