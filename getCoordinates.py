@@ -25,7 +25,7 @@ def close(event):
 
 
 # Specify which image to look at
-which = "ebsd"
+which = "bse_resized"
 slice_id = 385
 txt_path = f"ctr_pts_{which}.txt"
 im_path = f"{slice_id}_{which}.tif"
@@ -44,15 +44,15 @@ ax1 = fig1.add_subplot(111)
 ax1.imshow(img)
 cid = fig1.canvas.mpl_connect("button_press_event", onclick)
 qid = fig1.canvas.mpl_connect("close_event", close)
-plt.show()
+# plt.show()
 
 # Save image with coordinates drawn on top
-bse_pts = np.loadtxt(txt_path, delimiter=" ")
+pts = np.loadtxt(txt_path, delimiter=" ")
 
 fig2 = plt.figure(2)
 ax2 = fig2.add_subplot(111)
 ax2.imshow(img)
-for i in range(bse_pts.shape[0]):
-    ax2.scatter(bse_pts[i, 0], bse_pts[i, 1], c="r", s=1)
-    ax2.text(bse_pts[i, 0] + 2, bse_pts[i, 1] + 2, i)
+for i in range(pts.shape[0]):
+    ax2.scatter(pts[i, 0], pts[i, 1], c="r", s=1)
+    ax2.text(pts[i, 0] + 2, pts[i, 1] + 2, i)
 fig2.savefig(f"{slice_id}_{which}_points.png")
