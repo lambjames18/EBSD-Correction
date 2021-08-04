@@ -53,8 +53,8 @@ saveParams = False #TPS parameters
 saveMap = False #pointwise mapping matrix, a larger file
 
 # File path inputs
-referenceImage = "ref_FIB.png"
-distortedImage = "warp_FIB.png"
+referenceImage = "385_bse_resized.tiff"
+distortedImage = "385_ebsd.tif"
 
 # File path outputs
 TPS_Params = "params.csv"
@@ -62,12 +62,18 @@ correctedImage = "TPS_out.tif"
 solutionFile = "pointWise_mapping.npy" #will be a 3D array, with x,y mappings at each X,Y location
 
 # put source (reference) control points in here, must be paired, in pixel coordinates
-xs = [45,  43, 488, 619, 451]
-ys = [66, 472, 474, 293,  73]
+source = np.loadtxt('ctr_pts_bse_resized.txt', delimiter=' ')
+xs = source[:,0]
+ys = source[:,1]
+# xs = [45,  43, 488, 619, 451]
+# ys = [66, 472, 474, 293,  73]
 
 # corresponding control points in image to transform, in pixel coordinates
-xt = [39,  13, 466, 608, 448]
-yt = [39, 470, 431, 225,   6]
+distorted = np.loadtxt('ctr_pts_ebsd.txt', delimiter=' ')
+xt = distorted[:, 0]
+yt = distorted[:, 1]
+# xt = [39,  13, 466, 608, 448]
+# yt = [39, 470, 431, 225,   6]
 
 ### END USER INPUT AREA
 
@@ -226,5 +232,6 @@ c = c * valid
 imageArray = np.reshape(c, (ny,nx))
 
 imageio.imsave(correctedImage, imageArray)
+print(imageArray.shape)
 
 print("Corrected image save to {}\n".format(correctedImage))

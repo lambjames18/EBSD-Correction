@@ -28,7 +28,7 @@ def close(event):
 which = "bse_resized"
 slice_id = 385
 txt_path = f"ctr_pts_{which}.txt"
-im_path = f"{slice_id}_{which}.tif"
+im_path = f"{slice_id}_{which}.tiff"
 """
 # Old points
 try:
