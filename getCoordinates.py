@@ -25,7 +25,7 @@ def close(event):
 
 
 # Specify which image to look at
-which = "ebsd"
+which = "bse_resized"
 slice_id = 385
 txt_path = f"ctr_pts_{which}.txt"
 im_path = f"{slice_id}_{which}.tif"
@@ -44,7 +44,7 @@ ax1 = fig1.add_subplot(111)
 ax1.imshow(img)
 cid = fig1.canvas.mpl_connect("button_press_event", onclick)
 qid = fig1.canvas.mpl_connect("close_event", close)
-plt.show()
+# plt.show()
 
 # Save image with coordinates drawn on top
 bse_pts = np.loadtxt(txt_path, delimiter=" ")
