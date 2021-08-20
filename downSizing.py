@@ -1,15 +1,11 @@
 import os
 import sys
 
-sys.path.insert(0, "D://Research//paraview_analysis//")
-
 import numpy as np
 import skimage.transform as tf
 import skimage.io as io
 import matplotlib.pyplot as plt
 import matplotlib
-
-import support as sp
 
 full_res_path = "D:/Research/NiAlMo_APS/Data/ALL_BSE/"
 small_res_path = "D:/Research/NiAlMo_APS/Data/ALL_BSE_resized/"
