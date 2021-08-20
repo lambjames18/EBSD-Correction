@@ -40,6 +40,7 @@ import numpy as np
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
 import imageio
+import matplotlib.pyplot as plt
 
 # # #
 # #
@@ -62,14 +63,14 @@ correctedImage = "TPS_out.tif"
 solutionFile = "pointWise_mapping.npy"  # will be a 3D array, with x,y mappings at each X,Y location
 
 # put source (reference) control points in here, must be paired, in pixel coordinates
-source = np.loadtxt("ctr_pts_bse_resized.txt", delimiter=" ")
+source = np.loadtxt("ctr_pts_8_bse_resized.txt", delimiter=" ")
 xs = source[:, 0]
 ys = source[:, 1]
 # xs = [45,  43, 488, 619, 451]
 # ys = [66, 472, 474, 293,  73]
 
 # corresponding control points in image to transform, in pixel coordinates
-distorted = np.loadtxt("ctr_pts_ebsd.txt", delimiter=" ")
+distorted = np.loadtxt("ctr_pts_8_ebsd.txt", delimiter=" ")
 xt = distorted[:, 0]
 yt = distorted[:, 1]
 # xt = [39,  13, 466, 608, 448]
@@ -106,6 +107,7 @@ def makeL(cp):
 # check to make sure each control point is paired
 if len(xs) == len(ys) and len(xt) == len(yt) and len(xs) == len(ys):
     n = len(xs)
+    print("Given {} points...".format(n))
 else:
     raise ValueError("Control point arrays are not of equal length")
 
@@ -235,3 +237,6 @@ imageio.imsave(correctedImage, imageArray)
 print(imageArray.shape)
 
 print("Corrected image save to {}\n".format(correctedImage))
+
+plt.imshow(b)
+plt.show()

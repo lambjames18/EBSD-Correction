@@ -19,10 +19,10 @@ np.set_printoptions(linewidth=200)
 
 class SelectCoords:
     def __init__(self, name, ctr_name=None, return_path=False) -> None:
-        self.name = name
-        self.im_path = f"{name}.png"
+        self.name = name[: name.index(".")]
         if ctr_name is None:
-            self.txt_path = f"ctr_pts_{name}.txt"
+            self.txt_path = f"ctr_pts_{self.name}.txt"
+        self.im_path = name
         self.clean_txt_file()
         self.im = io.imread(self.im_path)
         self.get_coords()
@@ -41,7 +41,7 @@ class SelectCoords:
         ix, iy = event.xdata, event.ydata
         x = np.around(ix, 0).astype(np.uint32)
         y = np.around(iy, 0).astype(np.uint32)
-        with open(self.txt_path, "a") as output:
+        with open(self.txt_path, "a", encoding="utf8") as output:
             output.write(f"{x} {y}\n")
         print(np.loadtxt(self.txt_path, delimiter=" ")[-1])
 
@@ -59,7 +59,9 @@ class SelectCoords:
         for i in range(pts.shape[0]):
             ax.scatter(pts[i, 0], pts[i, 1], c="r", s=1)
             ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i)
-        fig.savefig(f"{self.name}_points.png")
+        fig.savefig(f"{str(self.name)}_points.png")
+        plt.close()
+        print(f"Points drawn on image saved to [blue]{self.name}_points.png")
 
     def clean_txt_file(self, path=None) -> None:
         if path is None:
@@ -67,22 +69,20 @@ class SelectCoords:
         try:
             os.remove(path)
         except FileNotFoundError:
-            with open(path, "w") as File:
-                File.write("")
+            pass
 
     def return_paths(self) -> str:
-        return self.txt_path
+        return str(self.txt_path)
 
 
 class Alignment:
-    def __init__(self, referenceImage, distortedImage) -> None:
-        self.referenceImage = referenceImage
-        self.distortedImage = distortedImage
+    def __init__(self, referencePoints, distortedPoints) -> None:
+        self.referencePoints = referencePoints
+        self.distortedPoints = distortedPoints
 
     def TPS(
         self,
-        reference,
-        distorted,
+        referenceImage,
         affineOnly=False,
         checkParams=True,
         saveParams=False,
@@ -90,15 +90,16 @@ class Alignment:
     ) -> None:
         TPS_Params = "TPS_params.csv"
         solutionFile = "TPS_mapping.npy"
-        source = np.loadtxt(reference, delimiter=" ")
+        source = np.loadtxt(self.referencePoints, delimiter=" ")
         xs = source[:, 0]
         ys = source[:, 1]
-        distorted = np.loadtxt(distorted, delimiter=" ")
+        distorted = np.loadtxt(self.distortedPoints, delimiter=" ")
         xt = distorted[:, 0]
         yt = distorted[:, 1]
         # check to make sure each control point is paired
         if len(xs) == len(ys) and len(xt) == len(yt) and len(xs) == len(ys):
             n = len(xs)
+            print("Given {} points...".format(n))
         else:
             raise ValueError("Control point arrays are not of equal length")
 
@@ -146,9 +147,7 @@ class Alignment:
         # Thin plate spline calculation
         # at some point (x,y) in reference, the corresponding point in the distorted data is at
         # [X,Y] = a1 + ax*xRef + ay*yRef + sum(wi*Ui)
-        print("Reading images...\n")
-        a = imageio.imread(self.referenceImage)
-        b = imageio.imread(self.distortedImage)
+        a = imageio.imread(referenceImage)
 
         # dimensions of reference image in pixels
         lx = a.shape[1]
@@ -189,16 +188,9 @@ class Alignment:
             print("Point-wise solution save to {}\n".format(solutionFile))
 
         self.TPS_solution = sol
-        self.TPS_grid_spacing = (nx, ny)
+        self.TPS_grid_spacing = (ny, nx)
 
-    def TPS_apply(self, distortedImage=None, save_name="TPS_out.tif") -> None:
-        if distortedImage is None:
-            b = imageio.imread(self.distortedImage)
-        elif type(distortedImage) == np.ndarray:
-            b = distortedImage
-        else:
-            error = f"distortedImage must be of type {type(np.array(0))} or else None. If None, the distortedImage supplied when initializing the class is used."
-            raise ValueError(error)
+    def TPS_apply(self, im_array, save_name="TPS_out.tif") -> None:
         # get locations in original image to place back into the created grid
         # sol[0] are the corresponding x-coordinates in the distorted image
         # sol[1] are the corresponding y-coorindates in the distorted image
@@ -210,20 +202,20 @@ class Alignment:
         ygtId = ygtId.flatten()
 
         # determine which pixels actually lie within the distorted image
-        validX = (xgtId < b.shape[1]) * (xgtId > 0)
-        validY = (ygtId < b.shape[0]) * (ygtId > 0)
+        validX = (xgtId < im_array.shape[1]) * (xgtId > 0)
+        validY = (ygtId < im_array.shape[0]) * (ygtId > 0)
         valid = validX * validY
 
         # get data from distorted image at apporpiate locations, make any non-valid points = 0
-        c = b[validY * ygtId, validX * xgtId]
+        c = im_array[validY * ygtId, validX * xgtId]
         c = c * valid
 
         imageArray = np.reshape(c, self.TPS_grid_spacing)
         imageio.imsave(save_name, imageArray)
+        print(imageArray.shape)
         print("Corrected image save to {}\n".format(save_name))
 
-    def makeL(self, cp) -> np.ndarray:
-        np.set_printoptions(linewidth=200)
+    def makeL(self, cp):
         # cp: [K x 2] control points
         # L: [(K+3) x (K+3)]
         K = cp.shape[0]
@@ -241,6 +233,9 @@ class Alignment:
         np.fill_diagonal(U, 0)  # should be redundant
         L[:K, :K] = U
         return L
+
+
+### Functions ###
 
 
 def resize_imgs(bse_path, size) -> None:
