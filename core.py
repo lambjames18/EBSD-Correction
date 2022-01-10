@@ -13,12 +13,17 @@ import imageio
 from skimage import io, transform
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import Pipeline
 
 np.set_printoptions(linewidth=200)
 
-
+# Matplotlib window that records clicked locations and stores them in a text file
+# Prints the point number and the (x,y) of the point on each click
+# Designed to be ran twice on the bse and the ebsd
 class SelectCoords:
-    def __init__(self, name, ctr_name=None, return_path=False) -> None:
+    def __init__(self, name, ctr_name=None) -> None:
         self.name = name[: name.index(".")]
         if ctr_name is None:
             self.txt_path = f"ctr_pts_{self.name}.txt"
@@ -26,8 +31,6 @@ class SelectCoords:
         self.clean_txt_file()
         self.im = io.imread(self.im_path)
         self.get_coords()
-        if return_path:
-            self.return_paths()
 
     def get_coords(self) -> None:
         self.fig1 = plt.figure(1, figsize=(12, 8))
@@ -43,7 +46,8 @@ class SelectCoords:
         y = np.around(iy, 0).astype(np.uint32)
         with open(self.txt_path, "a", encoding="utf8") as output:
             output.write(f"{x} {y}\n")
-        print(np.loadtxt(self.txt_path, delimiter=" ")[-1])
+        points = np.loadtxt(self.txt_path, delimiter=" ")
+        print("Point #{} -> {}".format(len(points), tuple(points[-1].astype(int))))
 
     def close(self, event) -> None:
         self.fig1.canvas.mpl_disconnect(self.cid1)
@@ -71,9 +75,6 @@ class SelectCoords:
         except FileNotFoundError:
             pass
 
-    def return_paths(self) -> str:
-        return str(self.txt_path)
-
 
 class Alignment:
     def __init__(self, referencePoints, distortedPoints) -> None:
@@ -97,7 +98,7 @@ class Alignment:
         xt = distorted[:, 0]
         yt = distorted[:, 1]
         # check to make sure each control point is paired
-        if len(xs) == len(ys) and len(xt) == len(yt) and len(xs) == len(ys):
+        if len(xs) == len(ys) and len(xt) == len(yt):
             n = len(xs)
             print("Given {} points...".format(n))
         else:
@@ -191,6 +192,10 @@ class Alignment:
         self.TPS_grid_spacing = (ny, nx)
 
     def TPS_apply(self, im_array, save_name="TPS_out.tif") -> None:
+        print(im_array.shape)
+        if len(im_array.shape) > 2:
+            im_array = im_array[:, :, 0]
+        print(im_array.shape)
         # get locations in original image to place back into the created grid
         # sol[0] are the corresponding x-coordinates in the distorted image
         # sol[1] are the corresponding y-coorindates in the distorted image
@@ -233,6 +238,68 @@ class Alignment:
         np.fill_diagonal(U, 0)  # should be redundant
         L[:K, :K] = U
         return L
+
+    def LR(self, referenceImage, degree=4, saveSolution=False):
+        # Define the output names
+        LR_Params = "LR_params.csv"
+        solutionFile = "LR_mapping.npy"
+
+        # Read in the source/distorted points
+        source = np.loadtxt(self.referencePoints, delimiter=" ")
+        xs = source[:, 0]
+        ys = source[:, 1]
+        distorted = np.loadtxt(self.distortedPoints, delimiter=" ")
+        xt = distorted[:, 0]
+        yt = distorted[:, 1]
+
+        # check to make sure each control point is paired
+        if len(xs) == len(ys) and len(xt) == len(yt):
+            n = len(xs)
+            print("Given {} points...".format(n))
+        else:
+            raise ValueError("Control point arrays are not of equal length")
+
+        # check
+        dist_s = self._LR_successiveDistances(xs)
+        dist_t = self._LR_successiveDistances(xt)
+        ratio = self._LR_findRatio(dist_t, dist_s)
+
+        # Convert control point coords into same reference frame
+        xs = xs / ratio
+
+        # Define polymomial regression
+        model_i = Pipeline(
+            [
+                ("poly", PolynomialFeatures(degree=deg, include_bias=True)),
+                ("linear", LinearRegression(fit_intercept=False, normalize=False)),
+            ]
+        )
+
+        model_j = Pipeline(
+            [
+                ("poly", PolynomialFeatures(degree=deg, include_bias=True)),
+                ("linear", LinearRegression(fit_intercept=False, normalize=False)),
+            ]
+        )
+
+        # Solve regression
+        model_i.fit(xs, xt[:, 0])
+        model_j.fit(xs, xt[:, 1])
+
+        # Define the image transformation
+        params = np.stack(
+            [model_i.named_steps["linear"].coeff_, model_j.named_steps["linear"].coeff_], axis=0
+        )
+        if 
+
+        # Read in distorted image
+
+    def _LR_successiveDistances(self, x):
+        return distances
+
+    def _LR_findRatio(self, dist_target, dist_source):
+
+        return ratio
 
 
 ### Functions ###

@@ -56,6 +56,8 @@ saveMap = True  # pointwise mapping matrix, a larger file
 # File path inputs
 referenceImage = "8_bse_resized.png"
 distortedImage = "8_ebsd.png"
+#referenceImage = "coni16_459.tif"
+#distortedImage = "coni16_459_eds.tif"
 
 # File path outputs
 TPS_Params = "params.csv"
@@ -64,6 +66,7 @@ solutionFile = "pointWise_mapping.npy"  # will be a 3D array, with x,y mappings 
 
 # put source (reference) control points in here, must be paired, in pixel coordinates
 source = np.loadtxt("ctr_pts_8_bse_resized.txt", delimiter=" ")
+source = np.loadtxt("ctr_pts_coni16_459.txt", delimiter=" ")
 xs = source[:, 0]
 ys = source[:, 1]
 # xs = [45,  43, 488, 619, 451]
@@ -71,6 +74,7 @@ ys = source[:, 1]
 
 # corresponding control points in image to transform, in pixel coordinates
 distorted = np.loadtxt("ctr_pts_8_ebsd.txt", delimiter=" ")
+distorted = np.loadtxt("ctr_pts_coni16_459_eds.txt", delimiter=" ")
 xt = distorted[:, 0]
 yt = distorted[:, 1]
 # xt = [39,  13, 466, 608, 448]
@@ -167,7 +171,9 @@ if checkParams:
 print("Reading images...\n")
 ##import images
 a = imageio.imread(referenceImage)
+print(a.shape)
 b = imageio.imread(distortedImage)
+print(b.shape)
 
 # dimensions of reference image in pixels
 lx = a.shape[1]
@@ -229,6 +235,8 @@ valid = validX * validY
 
 # get data from distorted image at apporpiate locations, make any non-valid points = 0
 c = b[validY * ygtId, validX * xgtId]
+print(c.shape)
+print((ny, nx))
 c = c * valid
 
 imageArray = np.reshape(c, (ny, nx))
@@ -238,5 +246,5 @@ print(imageArray.shape)
 
 print("Corrected image save to {}\n".format(correctedImage))
 
-plt.imshow(b)
-plt.show()
+#plt.imshow(b)
+#plt.show()

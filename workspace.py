@@ -1,13 +1,76 @@
 import core
 from skimage import io
+import matplotlib.pyplot as plt
+import numpy as np
 
-bse = "8_bse_resized.png"
-ebsd = "8_ebsd.png"
-# bse_ctr = core.SelectCoords(bse, return_path=True)
-# ebsd_ctr = core.SelectCoords(ebsd, return_path=True)
-bse_ctr = "ctr_pts_8_bse_resized.txt"
-ebsd_ctr = "ctr_pts_8_ebsd.txt"
-align = core.Alignment(bse_ctr, ebsd_ctr)
+bse = "coni16_459.tif"
+ebsd = "coni16_459_eds.tif"
+loop = True
+while loop:
+    pick = input("Select control points (y/n)?   ")
+    if pick == "y":
+        bse_ctr = core.SelectCoords(bse)
+        bse_ctr_path = str(bse_ctr.txt_path)
+        ebsd_ctr = core.SelectCoords(ebsd)
+        ebsd_ctr_path = str(ebsd_ctr.txt_path)
+        loop = False
+    elif pick == "n":
+        bse_ctr_path = "ctr_pts_coni16_459.txt"
+        ebsd_ctr_path = "ctr_pts_coni16_459_eds.txt"
+        loop = False
+    else:
+        loop = True
+
+align = core.Alignment(bse_ctr_path, ebsd_ctr_path)
 align.TPS(bse, saveSolution=True)
 ebsd = io.imread(ebsd)
+# ebsd = io.imread("Al.tif")
 align.TPS_apply(ebsd)
+
+from matplotlib.widgets import Slider
+
+im0 = io.imread("TPS_out.tif")
+im1 = io.imread(bse)
+max_r = im0.shape[0]
+max_c = im0.shape[1]
+alphas = np.ones(im0.shape)
+fig, ax = plt.subplots(figsize=(15, 13))
+ax.imshow(im1, cmap="viridis")
+im = ax.imshow(im0, alpha=alphas, cmap="gray")
+
+# plt.tight_layout()
+plt.subplots_adjust(left=0.15, bottom=0.15)
+left = ax.get_position().x0
+bot = ax.get_position().y0
+width = ax.get_position().width
+height = ax.get_position().height
+axrow = plt.axes([left - 0.15, bot, 0.05, height])
+axcol = plt.axes([left, bot - 0.15, width, 0.05])
+row_slider = Slider(
+    ax=axrow, label="Y position", valmin=0, valmax=max_r, valinit=max_r, orientation="vertical"
+)
+col_slider = Slider(
+    ax=axcol, label="X position", valmin=0, valmax=max_c, valinit=max_c, orientation="horizontal"
+)
+
+
+def update_row(val):
+    val = int(np.around(val, 0))
+    new_alphas = np.copy(alphas)
+    new_alphas[:val, :] = 0
+    im.set(alpha=new_alphas[::-1])
+    fig.canvas.draw_idle()
+
+
+def update_col(val):
+    val = int(np.around(val, 0))
+    new_alphas = np.copy(alphas)
+    new_alphas[:, :val] = 0
+    im.set(alpha=new_alphas)
+    fig.canvas.draw_idle()
+
+
+row_slider.on_changed(update_row)
+col_slider.on_changed(update_col)
+plt.show()
+# plt.savefig("test.png")
