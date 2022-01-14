@@ -5,49 +5,49 @@ sys.path.insert(0, "D://Research//paraview_analysis//")
 
 import numpy as np
 import h5py
-from skimage import io, filters
+from skimage import io, filters, morphology
 import matplotlib.pyplot as plt
 
 # import support as sp
 
+def create_ped_mask(bse):
+    if type(bse) == str:
+        im = io.imread(bse)
+    else:
+        im = bse
+    mask = np.where(im > np.mean(im), 1, 0).astype(bool)
+    mask = morphology.remove_small_objects(mask, min_size=4000)
+    filled = np.where(mask == True, False ,True)
+    filled = morphology.remove_small_objects(filled, min_size=10000)
+    filled = np.where(filled == True, False, True)
+    # final = morphology.opening(filled, selem)
+    # final = morphology.closing(final, selem)
+    return (mask, filled)
 
-def pipeline(im, fig_id=0):
-    im_max = np.amax(im)
-    im_mean = np.mean(im)
-    sobel = filters.sobel(im)
-    
-    fig = plt.figure(fig_id, figsize=(12,4))
-    ax1 = plt.subplot(141)
-    ax2 = plt.subplot(142)
-    ax3 = plt.subplot(143)
-    ax4 = plt.subplot(144)
-    
-    ax1.imshow(im)
-    ax1.set_title("Original")
-    
-    ax2.imshow(np.where(sobel > im_max * 0.2, 1, 0))
-    ax2.set_title("0.2")
+"""
+im = "coni16_459.tif"
+im = io.imread(im, as_gray=True)
+im = np.where(im > np.mean(im), 1, 0)
 
-    ax3.imshow(np.where(sobel > im_max * 0.1, 1, 0))
-    ax3.set_title("0.1")
+mask = morphology.remove_small_objects(im.astype(bool), min_size=4000)
 
-    ax4.imshow(np.where((im_max * 0.2 > sobel) & (sobel > im_max * 0.1), 1, 0))
-    ax4.set_title("(0.1, 0.2)")
-    
-    plt.tight_layout()
-    
+mask_filled = np.where(mask == True, False, True)
+mask_filled = morphology.remove_small_objects(mask_filled, min_size=10000)
+mask_filled = np.where(mask_filled == False, True, False)
 
-bse_folder = "D:/Research/NiAlMo_APS/Data/ALL_BSE_resized/"
-ebsd = h5py.File("D:/Research/NiAlMo_APS/Data/3D/NiAlMo.dream3d", 'r')
-paths = os.listdir(bse_folder)
-bse_paths = sorted(paths, key=lambda x: int(x[8:-4]))
-bse_imgs = np.zeros((391, 781, 1101))
-for i in range(len(bse_paths)):
-    bse_paths[i] = os.path.join(bse_folder, bse_paths[i])
-    bse_imgs[i] = io.imread(bse_paths[i])[:,:,0]
+selem = np.ones((5,5))
+final = morphology.opening(mask_filled, selem)
+final = morphology.closing(final, selem)
 
-ebsd_imgs = ebsd['DataContainers/ImageDataContainer/CellData/Confidence Index'][..., 0]
-
-pipeline(bse_imgs[0], 0)
-pipeline(ebsd_imgs[0], 1)
+fig = plt.figure(figsize=(11,9))
+ax1 = fig.add_subplot(221)
+ax1.imshow(im)
+ax2 = fig.add_subplot(222)
+ax2.imshow(mask)
+ax3 = fig.add_subplot(223)
+ax3.imshow(mask_filled)
+ax4 = fig.add_subplot(224)
+ax4.imshow(final)
+plt.tight_layout()
 plt.show()
+"""

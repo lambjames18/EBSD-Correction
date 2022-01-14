@@ -3,11 +3,14 @@ from skimage import io
 import matplotlib.pyplot as plt
 import numpy as np
 
+from masking import create_ped_mask
+
+# Create the control points
 bse = "coni16_459.tif"
 ebsd = "coni16_459_eds.tif"
 loop = True
 while loop:
-    pick = input("Select control points (y/n)?   ")
+    pick = input("Select control points? (y/n) ")
     if pick == "y":
         bse_ctr = core.SelectCoords(bse)
         bse_ctr_path = str(bse_ctr.txt_path)
@@ -21,20 +24,41 @@ while loop:
     else:
         loop = True
 
-align = core.Alignment(bse_ctr_path, ebsd_ctr_path)
-align.TPS(bse, saveSolution=True)
+# Find solution and apply
 ebsd = io.imread(ebsd)
-# ebsd = io.imread("Al.tif")
+ebsd = io.imread("Al.tif")
+pick = input("Find alignment solution? (y/n) ")
+align = core.Alignment(bse_ctr_path, ebsd_ctr_path)
+loop = True
+while loop:
+    if pick == 'y':
+        align.TPS(bse, saveSolution=True)
+        loop = False
+    elif pick == 'n':
+        align.TPS_import("TPS_mapping.npy", bse)
+        loop = False
+    else: loop = True
+
 align.TPS_apply(ebsd)
 
+# View in the slider
 from matplotlib.widgets import Slider
 
+# Read in images
 im0 = io.imread("TPS_out.tif")
-im1 = io.imread(bse)
+im1 = io.imread(bse)[:,:,0]
+
+im0 = np.where(im0 > 15, 255, 0)
+
+# Crop out background
+mask, filled = create_ped_mask(im1)
+im0[filled == False] = 0
+im1[filled == False] = 0
+
 max_r = im0.shape[0]
 max_c = im0.shape[1]
 alphas = np.ones(im0.shape)
-fig, ax = plt.subplots(figsize=(15, 13))
+fig, ax = plt.subplots(figsize=(12, 8))
 ax.imshow(im1, cmap="viridis")
 im = ax.imshow(im0, alpha=alphas, cmap="gray")
 

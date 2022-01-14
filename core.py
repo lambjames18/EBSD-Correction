@@ -23,7 +23,7 @@ np.set_printoptions(linewidth=200)
 # Prints the point number and the (x,y) of the point on each click
 # Designed to be ran twice on the bse and the ebsd
 class SelectCoords:
-    def __init__(self, name, ctr_name=None) -> None:
+    def __init__(self, name, ctr_name=None):
         self.name = name[: name.index(".")]
         if ctr_name is None:
             self.txt_path = f"ctr_pts_{self.name}.txt"
@@ -32,7 +32,7 @@ class SelectCoords:
         self.im = io.imread(self.im_path)
         self.get_coords()
 
-    def get_coords(self) -> None:
+    def get_coords(self):
         self.fig1 = plt.figure(1, figsize=(12, 8))
         ax1 = self.fig1.add_subplot(111)
         ax1.imshow(self.im)
@@ -40,7 +40,7 @@ class SelectCoords:
         self.qid1 = self.fig1.canvas.mpl_connect("close_event", self.close)
         plt.show()
 
-    def onclick(self, event) -> None:
+    def onclick(self, event):
         ix, iy = event.xdata, event.ydata
         x = np.around(ix, 0).astype(np.uint32)
         y = np.around(iy, 0).astype(np.uint32)
@@ -49,13 +49,13 @@ class SelectCoords:
         points = np.loadtxt(self.txt_path, delimiter=" ")
         print("Point #{} -> {}".format(len(points), tuple(points[-1].astype(int))))
 
-    def close(self, event) -> None:
+    def close(self, event):
         self.fig1.canvas.mpl_disconnect(self.cid1)
         self.fig1.canvas.mpl_disconnect(self.qid1)
         plt.close(1)
         self.draw_points()
 
-    def draw_points(self) -> None:
+    def draw_points(self):
         pts = np.loadtxt(self.txt_path, delimiter=" ")
         fig = plt.figure(2)
         ax = fig.add_subplot(111)
@@ -67,7 +67,7 @@ class SelectCoords:
         plt.close()
         print(f"Points drawn on image saved to [blue]{self.name}_points.png")
 
-    def clean_txt_file(self, path=None) -> None:
+    def clean_txt_file(self, path=None):
         if path is None:
             path = self.txt_path
         try:
@@ -77,7 +77,7 @@ class SelectCoords:
 
 
 class Alignment:
-    def __init__(self, referencePoints, distortedPoints) -> None:
+    def __init__(self, referencePoints, distortedPoints):
         self.referencePoints = referencePoints
         self.distortedPoints = distortedPoints
 
@@ -88,7 +88,7 @@ class Alignment:
         checkParams=True,
         saveParams=False,
         saveSolution=False,
-    ) -> None:
+    ):
         TPS_Params = "TPS_params.csv"
         solutionFile = "TPS_mapping.npy"
         source = np.loadtxt(self.referencePoints, delimiter=" ")
@@ -191,11 +191,9 @@ class Alignment:
         self.TPS_solution = sol
         self.TPS_grid_spacing = (ny, nx)
 
-    def TPS_apply(self, im_array, save_name="TPS_out.tif") -> None:
-        print(im_array.shape)
+    def TPS_apply(self, im_array, save_name="TPS_out.tif"):
         if len(im_array.shape) > 2:
             im_array = im_array[:, :, 0]
-        print(im_array.shape)
         # get locations in original image to place back into the created grid
         # sol[0] are the corresponding x-coordinates in the distorted image
         # sol[1] are the corresponding y-coorindates in the distorted image
@@ -217,8 +215,14 @@ class Alignment:
 
         imageArray = np.reshape(c, self.TPS_grid_spacing)
         imageio.imsave(save_name, imageArray)
-        print(imageArray.shape)
         print("Corrected image save to {}\n".format(save_name))
+
+    def TPS_import(self, sol_path, referenceImage):
+        a = imageio.imread(referenceImage)
+        nx = a.shape[1]
+        ny = a.shape[0] 
+        self.TPS_grid_spacing = (ny, nx)
+        self.TPS_solution = np.load(sol_path)
 
     def makeL(self, cp):
         # cp: [K x 2] control points
@@ -290,7 +294,7 @@ class Alignment:
         params = np.stack(
             [model_i.named_steps["linear"].coeff_, model_j.named_steps["linear"].coeff_], axis=0
         )
-        if 
+        #if 
 
         # Read in distorted image
 
@@ -305,7 +309,7 @@ class Alignment:
 ### Functions ###
 
 
-def resize_imgs(bse_path, size) -> None:
+def resize_imgs(bse_path, size):
     if "." in bse_path:
         basename = bse_path[: bse_path.index(".")]
         ext = bse_path[bse_path.index(".") :]
@@ -324,7 +328,7 @@ def resize_imgs(bse_path, size) -> None:
     print("Resized {} images (ext: [green]{}[/], size: [magenta]{}[/])\n".format(i + 1, ext, size))
 
 
-def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=None) -> None:
+def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=None):
     h5 = h5py.File(h5_path, "r")
     data = h5[f"DataContainers/ImageDataContainer/CellData/{view}"][slice_id]
     if format is None:
