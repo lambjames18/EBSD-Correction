@@ -1,8 +1,13 @@
+import sys
+
+sys.path.insert(0, "D://Research//scripts//paraview_analysis//")
 import core
 from skimage import io
 import matplotlib.pyplot as plt
 import numpy as np
 
+import support as sp
+import gif
 from masking import create_ped_mask
 
 # Create the control points
@@ -54,14 +59,20 @@ im0 = np.where(im0 > 15, 255, 0)
 # Crop out background
 mask, filled = create_ped_mask(im1)
 im0[filled == False] = 0
-im1[filled == False] = 0
+im0[:413] = 0
+im0[1250:] = 0
+im0[:, :760] = 0
+im0[:, 2505:] = 0
+# im1[filled == False] = 0
 
 max_r = im0.shape[0]
 max_c = im0.shape[1]
 alphas = np.ones(im0.shape)
-fig, ax = plt.subplots(figsize=(12, 8))
-ax.imshow(im1, cmap="viridis")
+fig = plt.figure(figsize=(14, 10))
+ax = fig.add_subplot(111)
+ax.imshow(im1, cmap="bone")
 im = ax.imshow(im0, alpha=alphas, cmap="gray")
+
 
 # plt.tight_layout()
 plt.subplots_adjust(left=0.15, bottom=0.15)
