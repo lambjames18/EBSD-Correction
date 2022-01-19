@@ -30,7 +30,9 @@ align.TPS_apply(ebsd)
 from matplotlib.widgets import Slider
 
 im0 = io.imread("TPS_out.tif")
-im1 = io.imread(bse)
+dim = im0.shape
+im0 = im0[400 : dim[0] // 2, 800:1800]
+im1 = io.imread(bse)[400 : dim[0] // 2, 800:1800]
 max_r = im0.shape[0]
 max_c = im0.shape[1]
 alphas = np.ones(im0.shape)

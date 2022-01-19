@@ -290,16 +290,16 @@ class Alignment:
         params = np.stack(
             [model_i.named_steps["linear"].coeff_, model_j.named_steps["linear"].coeff_], axis=0
         )
-        if 
+        # if
 
         # Read in distorted image
 
-    def _LR_successiveDistances(self, x):
-        return distances
+    # def _LR_successiveDistances(self, x):
+    #    return distances
 
-    def _LR_findRatio(self, dist_target, dist_source):
+    # def _LR_findRatio(self, dist_target, dist_source):
 
-        return ratio
+    #    return ratio
 
 
 ### Functions ###
