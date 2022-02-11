@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import sys
 
 sys.path.insert(0, "D://Research//scripts//paraview_analysis//")
@@ -6,107 +8,110 @@ from skimage import io
 import matplotlib.pyplot as plt
 import numpy as np
 
-import support as sp
-import gif
 from masking import create_ped_mask
 
+####
 # Create the control points
-bse = "coni16_459.tif"
-ebsd = "coni16_459_eds.tif"
+folder = "Slice420_CoNi16/"
+bse = "bse"
+ebsd = "ebsd"
+view_overlay = True
+algorithm = "LR"
+####
+
 loop = True
 while loop:
     pick = input("Select control points? (y/n) ")
     if pick == "y":
-        bse_ctr = core.SelectCoords(bse)
+        bse_ctr = core.SelectCoords(bse, save_folder=folder)
         bse_ctr_path = str(bse_ctr.txt_path)
-        ebsd_ctr = core.SelectCoords(ebsd)
+        ebsd_ctr = core.SelectCoords(ebsd, save_folder=folder)
         ebsd_ctr_path = str(ebsd_ctr.txt_path)
         loop = False
     elif pick == "n":
-        bse_ctr_path = "ctr_pts_coni16_459.txt"
-        ebsd_ctr_path = "ctr_pts_coni16_459_eds.txt"
+        bse_ctr_path = f"{folder}ctr_pts_{bse}.txt"
+        ebsd_ctr_path = f"{folder}ctr_pts_{ebsd}.txt"
         loop = False
     else:
         loop = True
 
 # Find solution and apply
-ebsd = io.imread(ebsd)
-ebsd = io.imread("Al.tif")
-pick = input("Find alignment solution? (y/n) ")
-align = core.Alignment(bse_ctr_path, ebsd_ctr_path)
+ebsd_im = io.imread(folder + ebsd + ".tif")
+align = core.Alignment(bse_ctr_path, ebsd_ctr_path, algorithm=algorithm)
 loop = True
 while loop:
+    pick = input("Find alignment solution? (y/n) ")
     if pick == "y":
-        align.TPS(bse, saveSolution=True)
+        align.get_solution(
+            degree=3, saveSolution=True, solutionFile=f"{folder}{algorithm}_mapping.npy"
+        )
+        # align.TPS(folder + bse + ".tif", saveSolution=True)
         loop = False
     elif pick == "n":
-        align.TPS_import("TPS_mapping.npy", bse)
+        print(f"{folder}TPS_mapping.npy")
+        align.import_solution(f"{folder}{algorithm}_mapping.npy", f"{folder}{bse}.tif")
+        # align.TPS_import(folder + "TPS_mapping.npy", folder + bse + ".tif")
         loop = False
     else:
         loop = True
 
-align.TPS_apply(ebsd)
+# align.TPS_apply(ebsd_im, folder + "TPS_out.tif")
+align.apply(ebsd_im, f"{folder}{algorithm}_out.tif")
 
 # View in the slider
 from matplotlib.widgets import Slider
 
 # Read in images
-im0 = io.imread("TPS_out.tif")
-im1 = io.imread(bse)[:, :, 0]
+im0 = io.imread(folder + f"{algorithm}_out.tif")
+im1 = io.imread(folder + bse + ".tif")
 
-im0 = np.where(im0 > 15, 255, 0)
-
-# Crop out background
-mask, filled = create_ped_mask(im1)
-im0[filled == False] = 0
-im0[:413] = 0
-im0[1250:] = 0
-im0[:, :760] = 0
-im0[:, 2505:] = 0
-# im1[filled == False] = 0
-
-max_r = im0.shape[0]
-max_c = im0.shape[1]
-alphas = np.ones(im0.shape)
+# Setup figure
 fig = plt.figure(figsize=(14, 10))
 ax = fig.add_subplot(111)
-ax.imshow(im1, cmap="bone")
-im = ax.imshow(im0, alpha=alphas, cmap="gray")
+ax.set_title(f"{algorithm.upper()} Output")
 
+if view_overlay:
+    # Setup stuff
+    max_r = im0.shape[0]
+    max_c = im0.shape[1]
+    alphas = np.ones(im0.shape)
+    # Show images
+    ax.imshow(im1, cmap="bone")
+    im = ax.imshow(im0, alpha=alphas, cmap="gray")
+    # Put slider on
+    plt.subplots_adjust(left=0.15, bottom=0.15)
+    left = ax.get_position().x0
+    bot = ax.get_position().y0
+    width = ax.get_position().width
+    height = ax.get_position().height
+    axrow = plt.axes([left - 0.15, bot, 0.05, height])
+    axcol = plt.axes([left, bot - 0.15, width, 0.05])
+    row_slider = Slider(
+        ax=axrow, label="Y pos", valmin=0, valmax=max_r, valinit=max_r, orientation="vertical"
+    )
+    col_slider = Slider(
+        ax=axcol, label="X pos", valmin=0, valmax=max_c, valinit=max_c, orientation="horizontal"
+    )
+    # Define update functions
+    def update_row(val):
+        val = int(np.around(val, 0))
+        new_alphas = np.copy(alphas)
+        new_alphas[:val, :] = 0
+        im.set(alpha=new_alphas[::-1])
+        fig.canvas.draw_idle()
 
-# plt.tight_layout()
-plt.subplots_adjust(left=0.15, bottom=0.15)
-left = ax.get_position().x0
-bot = ax.get_position().y0
-width = ax.get_position().width
-height = ax.get_position().height
-axrow = plt.axes([left - 0.15, bot, 0.05, height])
-axcol = plt.axes([left, bot - 0.15, width, 0.05])
-row_slider = Slider(
-    ax=axrow, label="Y position", valmin=0, valmax=max_r, valinit=max_r, orientation="vertical"
-)
-col_slider = Slider(
-    ax=axcol, label="X position", valmin=0, valmax=max_c, valinit=max_c, orientation="horizontal"
-)
+    def update_col(val):
+        val = int(np.around(val, 0))
+        new_alphas = np.copy(alphas)
+        new_alphas[:, :val] = 0
+        im.set(alpha=new_alphas)
+        fig.canvas.draw_idle()
 
-
-def update_row(val):
-    val = int(np.around(val, 0))
-    new_alphas = np.copy(alphas)
-    new_alphas[:val, :] = 0
-    im.set(alpha=new_alphas[::-1])
-    fig.canvas.draw_idle()
-
-
-def update_col(val):
-    val = int(np.around(val, 0))
-    new_alphas = np.copy(alphas)
-    new_alphas[:, :val] = 0
-    im.set(alpha=new_alphas)
-    fig.canvas.draw_idle()
-
-
-row_slider.on_changed(update_row)
-col_slider.on_changed(update_col)
+    # Enable update functions
+    row_slider.on_changed(update_row)
+    col_slider.on_changed(update_col)
+else:
+    ax.imshow(im0, cmap="bone")
+    plt.tight_layout()
 plt.show()
 # plt.savefig("test.png")

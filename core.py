@@ -1,4 +1,6 @@
-# Author: James Lamb
+# -*- coding: utf-8 -*-
+
+"""Author: James Lamb"""
 
 import os
 import sys
@@ -10,9 +12,14 @@ import h5py
 from rich.progress import track
 from rich import print
 import imageio
-from skimage import io, transform
+from skimage import io
+from skimage import transform as tf
+
+# TPS Stuff
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
+
+# LR Stuff
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import Pipeline
@@ -23,12 +30,12 @@ np.set_printoptions(linewidth=200)
 # Prints the point number and the (x,y) of the point on each click
 # Designed to be ran twice on the bse and the ebsd
 class SelectCoords:
-    def __init__(self, name, ctr_name=None):
-        self.name = name[: name.index(".")]
-        if ctr_name is None:
-            self.txt_path = f"ctr_pts_{self.name}.txt"
-        self.im_path = name
-        self.clean_txt_file()
+    def __init__(self, name, save_folder="", ext="tif"):
+        self.save_folder = save_folder
+        self.name = name
+        self.txt_path = f"{self.save_folder}ctr_pts_{self.name}.txt"
+        self.im_path = f"{self.save_folder}{self.name}.{ext}"
+        self.check_txt_file()
         self.im = io.imread(self.im_path)
         self.get_coords()
 
@@ -47,6 +54,8 @@ class SelectCoords:
         with open(self.txt_path, "a", encoding="utf8") as output:
             output.write(f"{x} {y}\n")
         points = np.loadtxt(self.txt_path, delimiter=" ")
+        if len(points.shape) < 2:
+            points = [points]
         print("Point #{} -> {}".format(len(points), tuple(points[-1].astype(int))))
 
     def close(self, event):
@@ -63,23 +72,37 @@ class SelectCoords:
         for i in range(pts.shape[0]):
             ax.scatter(pts[i, 0], pts[i, 1], c="r", s=1)
             ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i)
-        fig.savefig(f"{str(self.name)}_points.png")
+        fig.savefig(f"{self.save_folder}{str(self.name)}_points.png")
         plt.close()
-        print(f"Points drawn on image saved to [blue]{self.name}_points.png")
+        print(f"Points drawn on image saved to [blue]{self.save_folder}{self.name}_points.png")
 
-    def clean_txt_file(self, path=None):
-        if path is None:
-            path = self.txt_path
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
+    def check_txt_file(self):
+        mode = input("Clear old points? (y/n) ")
+        if mode == "y":
+            try:
+                os.remove(self.txt_path)
+            except FileNotFoundError:
+                pass
+            with open(self.txt_path, "w", encoding="utf8") as o:
+                pass
 
 
 class Alignment:
-    def __init__(self, referencePoints, distortedPoints):
+    def __init__(self, referencePoints, distortedPoints, algorithm="TPS"):
         self.referencePoints = referencePoints
         self.distortedPoints = distortedPoints
+        if algorithm.upper() == "TPS":
+            self.get_solution = self.TPS
+            self.apply = self.TPS_apply
+            self.import_solution = self.TPS_import
+        elif algorithm.upper() == "LR":
+            self.get_solution = self.LR
+            self.apply = self.LR_apply
+            self.import_solution = self.LR_import
+        else:
+            raise IOError(
+                "Arg :algorithm: must be either 'LR' for linear regression or 'TPS' for Thin Plate Spline."
+            )
 
     def TPS(
         self,
@@ -88,9 +111,10 @@ class Alignment:
         checkParams=True,
         saveParams=False,
         saveSolution=False,
+        solutionFile="TPS_mapping.npy",
     ):
         TPS_Params = "TPS_params.csv"
-        solutionFile = "TPS_mapping.npy"
+        # solutionFile = "TPS_mapping.npy"
         source = np.loadtxt(self.referencePoints, delimiter=" ")
         xs = source[:, 0]
         ys = source[:, 1]
@@ -112,7 +136,7 @@ class Alignment:
         yt = np.array(yt)
 
         # construct L
-        L = self.makeL(cps)
+        L = self._TPS_makeL(cps)
 
         # construct Y
         xtAug = np.concatenate([xt, np.zeros(3)])
@@ -191,7 +215,7 @@ class Alignment:
         self.TPS_solution = sol
         self.TPS_grid_spacing = (ny, nx)
 
-    def TPS_apply(self, im_array, save_name="TPS_out.tif"):
+    def TPS_apply(self, im_array, save_name="TPS_out.tif", out="image"):
         if len(im_array.shape) > 2:
             im_array = im_array[:, :, 0]
         # get locations in original image to place back into the created grid
@@ -214,8 +238,11 @@ class Alignment:
         c = c * valid
 
         imageArray = np.reshape(c, self.TPS_grid_spacing)
-        imageio.imsave(save_name, imageArray)
-        print("Corrected image save to {}\n".format(save_name))
+        if out == "image":
+            imageio.imsave(save_name, imageArray)
+            print("Corrected image save to {}\n".format(save_name))
+        else:
+            return imageArray
 
     def TPS_import(self, sol_path, referenceImage):
         a = imageio.imread(referenceImage)
@@ -224,7 +251,7 @@ class Alignment:
         self.TPS_grid_spacing = (ny, nx)
         self.TPS_solution = np.load(sol_path)
 
-    def makeL(self, cp):
+    def _TPS_makeL(self, cp):
         # cp: [K x 2] control points
         # L: [(K+3) x (K+3)]
         K = cp.shape[0]
@@ -243,67 +270,92 @@ class Alignment:
         L[:K, :K] = U
         return L
 
-    def LR(self, referenceImage, degree=4, saveSolution=False):
-        # Define the output names
-        LR_Params = "LR_params.csv"
-        solutionFile = "LR_mapping.npy"
-
+    def LR(self, degree=3, saveSolution=False, solutionFile="LR_mapping.npy"):
         # Read in the source/distorted points
-        source = np.loadtxt(self.referencePoints, delimiter=" ")
-        xs = source[:, 0]
-        ys = source[:, 1]
-        distorted = np.loadtxt(self.distortedPoints, delimiter=" ")
-        xt = distorted[:, 0]
-        yt = distorted[:, 1]
+        coord_ebsd = np.loadtxt(open(self.distortedPoints, "rb"), delimiter=" ").astype(int)
+        coord_bse = np.loadtxt(open(self.referencePoints, "rb"), delimiter=" ").astype(int)
 
         # check to make sure each control point is paired
-        if len(xs) == len(ys) and len(xt) == len(yt):
-            n = len(xs)
-            print("Given {} points...".format(n))
+        if len(coord_ebsd) == len(coord_bse):
+            print("Given {} points...".format(coord_bse.shape[0]))
         else:
             raise ValueError("Control point arrays are not of equal length")
 
         # check
-        dist_s = self._LR_successiveDistances(xs)
-        dist_t = self._LR_successiveDistances(xt)
+        dist_s = self._LR_successiveDistances(coord_ebsd)
+        dist_t = self._LR_successiveDistances(coord_bse)
         ratio = self._LR_findRatio(dist_t, dist_s)
 
         # Convert control point coords into same reference frame
-        xs = xs / ratio
+        coord_bse_rescaled = coord_bse / ratio
+        src = coord_bse_rescaled
+        dst = coord_ebsd
 
         # Define polymomial regression
         model_i = Pipeline(
             [
-                ("poly", PolynomialFeatures(degree=deg, include_bias=True)),
+                ("poly", PolynomialFeatures(degree=degree, include_bias=True)),
                 ("linear", LinearRegression(fit_intercept=False, normalize=False)),
             ]
         )
 
         model_j = Pipeline(
             [
-                ("poly", PolynomialFeatures(degree=deg, include_bias=True)),
+                ("poly", PolynomialFeatures(degree=degree, include_bias=True)),
                 ("linear", LinearRegression(fit_intercept=False, normalize=False)),
             ]
         )
 
         # Solve regression
-        model_i.fit(xs, xt[:, 0])
-        model_j.fit(xs, xt[:, 1])
+        model_i.fit(src, dst[:, 0])
+        model_j.fit(src, dst[:, 1])
 
         # Define the image transformation
-        params = np.stack(
-            [model_i.named_steps["linear"].coeff_, model_j.named_steps["linear"].coeff_], axis=0
+        self.params = np.stack(
+            [model_i.named_steps["linear"].coef_, model_j.named_steps["linear"].coef_], axis=0
         )
-        # if
+        if saveSolution:
+            np.save(solutionFile, self.params)
+            print("Point-wise solution save to {}\n".format(solutionFile))
+        # Get transform
+        self.transform = tf._geometric.PolynomialTransform(self.params)
 
+    def LR_apply(self, im_array, save_name="LR_out.tif", out="image"):
+        if len(im_array.shape) > 2:
+            im_array = im_array[:, :, 0]
         # Read in distorted image
+        imageArray = tf.warp(
+            im_array,
+            self.transform,
+            cval=0,  # new pixels are black pixel
+            order=0,  # k-neighbour
+            preserve_range=True,
+        )
+        # Save corrected image
+        if out == "image":
+            imageio.imsave(save_name, imageArray)
+            print("Corrected image save to {}\n".format(save_name))
+        else:
+            return imageArray
 
-    # def _LR_successiveDistances(self, x):
-    #    return distances
+    def LR_import(self, sol_path):
+        self.params = np.load(sol_path)
+        self.transform = tf._geometric.PolynomialTransform(self.params)
 
-    # def _LR_findRatio(self, dist_target, dist_source):
+    def _LR_successiveDistances(self, array):
+        """Calculates euclidian distance btw sets of points in an array"""
+        nb_of_points = int(np.ma.size(array) / 2)
+        diffs = np.zeros(nb_of_points - 1, dtype=float)
+        for i in range(0, nb_of_points - 1):
+            diffs[i] = (array[i][0] - array[i + 1][0]) ** 2 + (array[i][1] - array[i + 1][1]) ** 2
+        dists = np.sqrt(diffs, dtype=float)
+        return dists
 
-    #    return ratio
+    def _LR_findRatio(self, array1, array2):
+        """Finds scaling ratio btw 2 arrays of reference points on their own grids"""
+        ratios = np.divide(array1, array2)
+        ratio = np.average(ratios)
+        return ratio
 
 
 ### Functions ###
@@ -314,7 +366,7 @@ def resize_imgs(bse_path, size):
         basename = bse_path[: bse_path.index(".")]
         ext = bse_path[bse_path.index(".") :]
         im = io.imread(bse_path)
-        resized = transform.resize(im, size, anti_aliasing=True)
+        resized = tf.resize(im, size, anti_aliasing=True)
         matplotlib.image.imsave(basename + "_resized" + ext, resized, cmap="gray", dpi=1)
         i = 0
     else:
@@ -323,7 +375,7 @@ def resize_imgs(bse_path, size):
         basename = [path[: path.index(".")] for path in bse_path]
         for i in range(len(bse_path)):
             im = io.imread(bse_path[i])
-            resized = transform.resize(im, size, anti_aliasing=True)
+            resized = tf.resize(im, size, anti_aliasing=True)
             matplotlib.image.imsave(basename[i] + "_resized" + ext, resized, cmap="gray", dpi=1)
     print("Resized {} images (ext: [green]{}[/], size: [magenta]{}[/])\n".format(i + 1, ext, size))
 
