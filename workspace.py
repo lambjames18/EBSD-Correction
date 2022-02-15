@@ -1,22 +1,21 @@
-# -*- coding: utf-8 -*-
+"""
+Author: James Lamb
 
-import sys
+Script designed to align distorted ebsd to bse using either linear regression or thin-plate spline
+"""
 
-sys.path.insert(0, "D://Research//scripts//paraview_analysis//")
 import core
 from skimage import io
 import matplotlib.pyplot as plt
 import numpy as np
 
-from masking import create_ped_mask
-
 ####
 # Create the control points
-folder = "Slice420_CoNi16/"
-bse = "bse"
-ebsd = "ebsd"
-view_overlay = True
-algorithm = "LR"
+folder = "Slice420_CoNi16/"  # Folder where to save everything, can be empty ""
+bse = "bse"  # The name of the distorted image (should be tif) without the extension
+ebsd = "ebsd"  # The name of the distorted image (should be tif) without the extension
+algorithm = "LR"  # Select the algorithm, either LR or TPS
+view_overlay = True  # Overlays the corrected distortion over the control image with sliders
 ####
 
 loop = True
