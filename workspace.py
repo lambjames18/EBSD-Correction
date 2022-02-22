@@ -14,7 +14,7 @@ import numpy as np
 folder = "Slice420_CoNi16/"  # Folder where to save everything, can be empty ""
 bse = "bse"  # The name of the distorted image (should be tif) without the extension
 ebsd = "ebsd"  # The name of the distorted image (should be tif) without the extension
-algorithm = "LR"  # Select the algorithm, either LR or TPS
+algorithm = "TPS"  # Select the algorithm, either LR or TPS
 view_overlay = True  # Overlays the corrected distortion over the control image with sliders
 ####
 
@@ -38,11 +38,13 @@ while loop:
 ebsd_im = io.imread(folder + ebsd + ".tif")
 align = core.Alignment(bse_ctr_path, ebsd_ctr_path, algorithm=algorithm)
 loop = True
+kwargs = {"referenceImage": folder + bse + ".tif"}
+# kwargs = {}
 while loop:
     pick = input("Find alignment solution? (y/n) ")
     if pick == "y":
         align.get_solution(
-            degree=3, saveSolution=True, solutionFile=f"{folder}{algorithm}_mapping.npy"
+            saveSolution=True, solutionFile=f"{folder}{algorithm}_mapping.npy", **kwargs
         )
         # align.TPS(folder + bse + ".tif", saveSolution=True)
         loop = False
