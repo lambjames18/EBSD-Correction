@@ -11,7 +11,7 @@ import numpy as np
 
 ####
 # Create the control points
-folder = "Slice420_CoNi16/"  # Folder where to save everything, can be empty ""
+folder = "Slice78_CoNi16/"  # Folder where to save everything, can be empty ""
 bse = "bse"  # The name of the distorted image (should be tif) without the extension
 ebsd = "ebsd"  # The name of the distorted image (should be tif) without the extension
 algorithm = "TPS"  # Select the algorithm, either LR or TPS
