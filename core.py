@@ -3,17 +3,15 @@
 """Author: James Lamb"""
 
 import os
-import sys
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import h5py
-from rich.progress import track
-from rich import print
 import imageio
-from skimage import io
+from skimage import io, exposure
 from skimage import transform as tf
+from rich import print
 
 # TPS Stuff
 import numpy.linalg as nl
@@ -26,24 +24,27 @@ from sklearn.pipeline import Pipeline
 
 np.set_printoptions(linewidth=200)
 
-# Matplotlib window that records clicked locations and stores them in a text file
+
+# Matplotlib window that records clicked locations and stores them in txt file
 # Prints the point number and the (x,y) of the point on each click
 # Designed to be ran twice on the bse and the ebsd
 class SelectCoords:
-    def __init__(self, name, save_folder="", ext="tif"):
+    def __init__(self, name, save_folder="", ext="tif", cmap="cividis"):
         self.save_folder = save_folder
         self.name = name
+        self.cmap = cmap
         self.txt_path = f"{self.save_folder}ctr_pts_{self.name}.txt"
         self.im_path = f"{self.save_folder}{self.name}.{ext}"
         self.check_txt_file()
-        self.im = io.imread(self.im_path)
+        self.im = exposure.equalize_hist(io.imread(self.im_path), nbins=512)
         self.get_coords()
 
     def get_coords(self):
         self.fig1 = plt.figure(1, figsize=(12, 8))
         ax1 = self.fig1.add_subplot(111)
-        ax1.imshow(self.im)
-        self.cid1 = self.fig1.canvas.mpl_connect("button_press_event", self.onclick)
+        ax1.imshow(self.im, cmap=self.cmap)
+        self.cid1 = self.fig1.canvas.mpl_connect("button_press_event",
+                                                 self.onclick)
         self.qid1 = self.fig1.canvas.mpl_connect("close_event", self.close)
         plt.show()
 
@@ -56,7 +57,7 @@ class SelectCoords:
         points = np.loadtxt(self.txt_path, delimiter=" ")
         if len(points.shape) < 2:
             points = [points]
-        print("Point #{} -> {}".format(len(points), tuple(points[-1].astype(int))))
+        print(f"Point #{len(points)} -> {tuple(points[-1].astype(int))}")
 
     def close(self, event):
         self.fig1.canvas.mpl_disconnect(self.cid1)
@@ -68,13 +69,13 @@ class SelectCoords:
         pts = np.loadtxt(self.txt_path, delimiter=" ")
         fig = plt.figure(2)
         ax = fig.add_subplot(111)
-        ax.imshow(self.im)
+        ax.imshow(self.im, cmap=self.cmap)
         for i in range(pts.shape[0]):
             ax.scatter(pts[i, 0], pts[i, 1], c="r", s=1)
             ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i)
         fig.savefig(f"{self.save_folder}{str(self.name)}_points.png")
         plt.close()
-        print(f"Points drawn on image saved to [blue]{self.save_folder}{self.name}_points.png")
+        print(f"Pts im saved - [blue]{self.save_folder}{self.name}_points.png")
 
     def check_txt_file(self):
         mode = input("Clear old points? (y/n) ")
@@ -83,7 +84,7 @@ class SelectCoords:
                 os.remove(self.txt_path)
             except FileNotFoundError:
                 pass
-            with open(self.txt_path, "w", encoding="utf8") as o:
+            with open(self.txt_path, "w", encoding="utf8"):
                 pass
 
 

@@ -1,2 +1,3 @@
 data_alignment/
 .DS_Store
+__pycache__/core.cpython-310.pyc

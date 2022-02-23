@@ -77,7 +77,7 @@ if view_overlay:
     max_c = im0.shape[1]
     alphas = np.ones(im0.shape)
     # Show images
-    ax.imshow(im1, cmap="bone")
+    ax.imshow(im1, cmap="gray")
     im = ax.imshow(im0, alpha=alphas, cmap="gray")
     # Put slider on
     plt.subplots_adjust(left=0.15, bottom=0.15)
