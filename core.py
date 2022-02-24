@@ -46,6 +46,7 @@ class SelectCoords:
         self.cid1 = self.fig1.canvas.mpl_connect("button_press_event",
                                                  self.onclick)
         self.qid1 = self.fig1.canvas.mpl_connect("close_event", self.close)
+        plt.tight_layout()
         plt.show()
 
     def onclick(self, event):
@@ -57,7 +58,7 @@ class SelectCoords:
         points = np.loadtxt(self.txt_path, delimiter=" ")
         if len(points.shape) < 2:
             points = [points]
-        print(f"Point #{len(points)} -> {tuple(points[-1].astype(int))}")
+        print(f"Point #{len(points)-1} -> {tuple(points[-1].astype(int))}")
 
     def close(self, event):
         self.fig1.canvas.mpl_disconnect(self.cid1)
@@ -73,6 +74,7 @@ class SelectCoords:
         for i in range(pts.shape[0]):
             ax.scatter(pts[i, 0], pts[i, 1], c="r", s=1)
             ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i)
+        plt.tight_layout()
         fig.savefig(f"{self.save_folder}{str(self.name)}_points.png")
         plt.close()
         print(f"Pts im saved - [blue]{self.save_folder}{self.name}_points.png")

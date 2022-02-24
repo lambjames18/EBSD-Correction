@@ -20,7 +20,8 @@ view_overlay = True  # Overlays the corrected distortion over the control image 
 
 loop = True
 while loop:
-    pick = input("Select control points? (y/n) ")
+    # pick = input("Select control points? (y/n) ")
+    pick = "y"
     if pick == "y":
         bse_ctr = core.SelectCoords(bse, save_folder=folder)
         bse_ctr_path = str(bse_ctr.txt_path)
@@ -41,7 +42,8 @@ loop = True
 kwargs = {"referenceImage": folder + bse + ".tif"}
 # kwargs = {}
 while loop:
-    pick = input("Find alignment solution? (y/n) ")
+    # pick = input("Find alignment solution? (y/n) ")
+    pick = "y"
     if pick == "y":
         align.get_solution(
             saveSolution=True, solutionFile=f"{folder}{algorithm}_mapping.npy", **kwargs
