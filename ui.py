@@ -152,8 +152,8 @@ class App(tk.Tk):
         bse_path = os.path.join(self.folder, "ctr_pts_bse.txt")
         ebsd_path = os.path.join(self.folder, "ctr_pts_ebsd.txt")
         try:
-            bse_pts = np.loadtxt(bse_path)
-            ebsd_pts = np.loadtxt(ebsd_path)
+            bse_pts = list(np.loadtxt(bse_path))
+            ebsd_pts = list(np.loadtxt(ebsd_path))
             self.points = {"ebsd": ebsd_pts, "bse":bse_pts}
             self._show_points()
         except FileNotFoundError:
@@ -164,7 +164,7 @@ class App(tk.Tk):
         self.w.destroy()
         
     def _interactive_view(self):
-        fig = plt.figure(figsize=(14, 10))
+        fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.set_title("TPS Output")
         im0 = self.bse_im
