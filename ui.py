@@ -30,10 +30,10 @@ class App(tk.Tk):
         self.select_folder_popup()
         self.deiconify()
         # frames
-        #frame_w = 1920
-        #frame_h = 1080
-        #self.geometry(f"{frame_w}x{frame_h}")
-        #self.resizable(False, False)
+        # frame_w = 1920
+        # frame_h = 1080
+        # self.geometry(f"{frame_w}x{frame_h}")
+        # self.resizable(False, False)
         self.top = tk.Frame(self)
         self.viewer = tk.Frame(self)
         self.bot = tk.Frame(self)
@@ -50,13 +50,15 @@ class App(tk.Tk):
         # setup top
         self.show_points = tk.IntVar()
         self.show_points.set(1)
-        view_pts = tk.Checkbutton(self.top,
-                             text="Show points",
-                             variable=self.show_points,
-                             onvalue=1,
-                             offvalue=0,
-                             command=self._show_points,
-                             fg='black')
+        view_pts = tk.Checkbutton(
+            self.top,
+            text="Show points",
+            variable=self.show_points,
+            onvalue=1,
+            offvalue=0,
+            command=self._show_points,
+            fg="black",
+        )
         view_pts.grid(row=0, column=0)
         # setup viewer
         self.bse = tk.Canvas(self.viewer)
@@ -67,11 +69,18 @@ class App(tk.Tk):
         self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
         self._update_imgs()
         # setup bot
-        other = tk.Button(self.bot, text="Apply Correction", command=self.apply, fg='black')
-        other.grid(row=0, column=0)
+        tps = tk.Button(
+            self.bot, text="View TPS Correction", command=lambda: self.apply("TPS"), fg="black"
+        )
+        tps.grid(row=0, column=0)
+        lr = tk.Button(
+            self.bot, text="View LR Correction", command=lambda: self.apply("LR"), fg="black"
+        )
+        lr.grid(row=0, column=1)
+        apply = tk.Button(self.bot, text="Apply Correctionto h5", fg="black")
+        apply.grid(row=0, column=2)
         # handle points
         self._read_points()
-        
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
@@ -79,25 +88,27 @@ class App(tk.Tk):
         frame_h = 1080 // 5
         self.w.geometry(f"{frame_w}x{frame_h}")
         self.resizable(False, False)
-        des = tk.Label(self.w, text="Select location to save alignment\nimages/points/solutions", fg='black')
+        des = tk.Label(
+            self.w, text="Select location to save alignment\nimages/points/solutions", fg="black"
+        )
         des.pack(fill="both", expand=1)
-        but = tk.Button(self.w, text="Select directory", command=self._get_dir, fg='black')
+        but = tk.Button(self.w, text="Select directory", command=self._get_dir, fg="black")
         but.pack(fill="both", expand=1)
-        close = tk.Button(self.w, text="Close (select CWD)", command=self.w.destroy, fg='black')
+        close = tk.Button(self.w, text="Close (select CWD)", command=self.w.destroy, fg="black")
         close.pack(fill="both", expand=1)
         self.wait_window(self.w)
         # EBSD
         self.ebsd_path = os.path.join(self.folder, "ebsd.tif")
         ebsd_im = io.imread(self.ebsd_path)
         if ebsd_im.dtype != np.uint8:
-            self.ebsd_im = np.around(255*ebsd_im/ebsd_im.max(), 0).astype(np.uint8)
+            self.ebsd_im = np.around(255 * ebsd_im / ebsd_im.max(), 0).astype(np.uint8)
         else:
             self.ebsd_im = ebsd_im
         # BSE
         self.bse_path = os.path.join(self.folder, "bse.tif")
         bse_im = io.imread(self.bse_path)
         if bse_im.dtype != np.uint8:
-            self.bse_im = np.around(255*bse_im/bse_im.max(), 0).astype(np.uint8)
+            self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
         else:
             self.bse_im = bse_im
 
@@ -107,23 +118,30 @@ class App(tk.Tk):
         with open(path, "a", encoding="utf8") as output:
             output.write(f"{event.x} {event.y}\n")
         self._show_points()
-    
-    def apply(self):
+
+    def apply(self, algo="TPS"):
         referencePoints = os.path.join(self.folder, "Ctr_pts_bse.txt")
         distortedPoints = os.path.join(self.folder, "Ctr_pts_ebsd.txt")
-        align = core.Alignment(referencePoints, distortedPoints, algorithm="TPS")
-        align.get_solution(self.bse_path)
-        align.apply(self.ebsd_im)
-        self._interactive_view()
+        align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
+        if algo == "TPS":
+            save_name = os.path.join(self.folder, "TPS_mapping.npy")
+            align.get_solution(referenceImage=self.bse_path, solutionFile=save_name)
+        elif algo == "LR":
+            save_name = os.path.join(self.folder, "LR_mapping.npy")
+            align.get_solution(degree=3, solutionFile=save_name)
+        save_name = os.path.join(self.folder, f"{algo}_out.tif")
+        align.apply(self.ebsd_im, save_name=save_name)
+        self._interactive_view(algo)
         plt.close("all")
 
     def _show_points(self):
+        pc = "#476042"
         if self.show_points.get() == 1:
-            for i, p in enumerate(self.points['ebsd']):
-                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, activeoutline="#476042")
+            for i, p in enumerate(self.points["ebsd"]):
+                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, activeoutline=pc)
                 self.ebsd.create_text(p[0] + 3, p[1] + 3, anchor=tk.NW, text=i)
-            for i, p in enumerate(self.points['bse']):
-                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, activeoutline="#476042")
+            for i, p in enumerate(self.points["bse"]):
+                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, activeoutline=pc)
                 self.bse.create_text(p[0] + 3, p[1] + 3, anchor=tk.NW, text=i)
         else:
             print("Removing points")
@@ -154,19 +172,19 @@ class App(tk.Tk):
         try:
             bse_pts = list(np.loadtxt(bse_path))
             ebsd_pts = list(np.loadtxt(ebsd_path))
-            self.points = {"ebsd": ebsd_pts, "bse":bse_pts}
+            self.points = {"ebsd": ebsd_pts, "bse": bse_pts}
             self._show_points()
         except FileNotFoundError:
             self.points = {"ebsd": [], "bse": []}
-    
+
     def _get_dir(self):
         self.folder = filedialog.askdirectory(initialdir=self.folder, title="Select folder")
         self.w.destroy()
-        
-    def _interactive_view(self):
+
+    def _interactive_view(self, algo):
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
-        ax.set_title("TPS Output")
+        ax.set_title(f"{algo} Output")
         im0 = self.bse_im
         im1 = io.imread(os.path.join(self.folder, "TPS_out.tif"))
         max_r = im0.shape[0]
@@ -208,7 +226,6 @@ class App(tk.Tk):
         row_slider.on_changed(update_row)
         col_slider.on_changed(update_col)
         plt.show()
-        
 
 
 if __name__ == "__main__":

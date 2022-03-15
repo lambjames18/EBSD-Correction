@@ -43,8 +43,7 @@ class SelectCoords:
         self.fig1 = plt.figure(1, figsize=(12, 8))
         ax1 = self.fig1.add_subplot(111)
         ax1.imshow(self.im, cmap=self.cmap)
-        self.cid1 = self.fig1.canvas.mpl_connect("button_press_event",
-                                                 self.onclick)
+        self.cid1 = self.fig1.canvas.mpl_connect("button_press_event", self.onclick)
         self.qid1 = self.fig1.canvas.mpl_connect("close_event", self.close)
         plt.tight_layout()
         plt.show()
@@ -113,7 +112,7 @@ class Alignment:
         affineOnly=False,
         checkParams=True,
         saveParams=False,
-        saveSolution=False,
+        saveSolution=True,
         solutionFile="TPS_mapping.npy",
     ):
         TPS_Params = "TPS_params.csv"
@@ -273,7 +272,7 @@ class Alignment:
         L[:K, :K] = U
         return L
 
-    def LR(self, degree=3, saveSolution=False, solutionFile="LR_mapping.npy"):
+    def LR(self, degree=3, saveSolution=True, solutionFile="LR_mapping.npy"):
         # Read in the source/distorted points
         coord_ebsd = np.loadtxt(open(self.distortedPoints, "rb"), delimiter=" ").astype(int)
         coord_bse = np.loadtxt(open(self.referencePoints, "rb"), delimiter=" ").astype(int)
