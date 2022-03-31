@@ -108,7 +108,7 @@ class Alignment:
 
     def TPS(
         self,
-        referenceImage,
+        l,
         affineOnly=False,
         checkParams=True,
         saveParams=False,
@@ -174,11 +174,9 @@ class Alignment:
         # Thin plate spline calculation
         # at some point (x,y) in reference, the corresponding point in the distorted data is at
         # [X,Y] = a1 + ax*xRef + ay*yRef + sum(wi*Ui)
-        a = imageio.imread(referenceImage)
-
         # dimensions of reference image in pixels
-        lx = a.shape[1]
-        ly = a.shape[0]
+        lx = l[1]
+        ly = l[0]
 
         # for fineness of grid, if you want to fix all points, leave nx=lx, ny=ly
         nx = lx  # num points along reference x-direction, full correction will have nx = lx

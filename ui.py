@@ -8,8 +8,10 @@ UI for running distortion correction
 import os
 import tkinter as tk
 from tkinter import filedialog
+from threading import Thread
 
 # 3rd party packages
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
@@ -27,7 +29,8 @@ class App(tk.Tk):
         self.update_idletasks()
         self.withdraw()
         self.folder = os.getcwd()
-        self.select_folder_popup()
+        # self.select_folder_popup()
+        self._easy_start()
         self.deiconify()
         # frames
         # frame_w = 1920
@@ -60,6 +63,18 @@ class App(tk.Tk):
             fg="black",
         )
         view_pts.grid(row=0, column=0)
+        self.slice_picker = tk.Spinbox(
+            self.top,
+            textvariable=self.slice_num,
+            from_=self.slice_min,
+            to=self.slice_max,
+            command=self._update_viewers,
+        )
+        self.slice_picker.grid(row=0, column=1)
+        self.ebsd_picker = tk.OptionMenu(
+            self.top, self.ebsd_mode, *self.ebsd_mode_options, command=self._update_viewers
+        )
+        self.ebsd_picker.grid(row=0, column=2)
         # setup viewer
         self.bse = tk.Canvas(self.viewer)
         self.bse.grid(row=0, column=0)
@@ -67,7 +82,13 @@ class App(tk.Tk):
         self.ebsd = tk.Canvas(self.viewer)
         self.ebsd.grid(row=0, column=1)
         self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
-        self._update_imgs()
+        # handle points
+        self.all_points = {}
+        self.current_points = {}
+        self.current_slice_num = 0
+        self._read_points()
+        # Update viewers
+        self._update_viewers()
         # setup bot
         tps = tk.Button(
             self.bot, text="View TPS Correction", command=lambda: self.apply("TPS"), fg="black"
@@ -79,8 +100,6 @@ class App(tk.Tk):
         lr.grid(row=0, column=1)
         apply = tk.Button(self.bot, text="Apply Correctionto h5", fg="black")
         apply.grid(row=0, column=2)
-        # handle points
-        self._read_points()
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
@@ -88,44 +107,55 @@ class App(tk.Tk):
         frame_h = 1080 // 5
         self.w.geometry(f"{frame_w}x{frame_h}")
         self.resizable(False, False)
-        des = tk.Label(
-            self.w, text="Select location to save alignment\nimages/points/solutions", fg="black"
+        for i in range(5):
+            self.w.rowconfigure(i, weight=1)
+        self.w.columnconfigure(0, weight=1)
+        des = tk.Label(self.w, text="Select relevant folders/files", fg="black")
+        des.grid(row=0, column=0, sticky="ew")
+        folder = tk.Button(
+            self.w,
+            text="Select folder for control points",
+            command=self._get_FOLDER_dir,
+            fg="black",
         )
-        des.pack(fill="both", expand=1)
-        but = tk.Button(self.w, text="Select directory", command=self._get_dir, fg="black")
-        but.pack(fill="both", expand=1)
-        close = tk.Button(self.w, text="Close (select CWD)", command=self.w.destroy, fg="black")
-        close.pack(fill="both", expand=1)
+        folder.grid(row=1, column=0, sticky="nsew")
+        self.w.d3d = tk.Button(
+            self.w, text="Select Dream3d file", command=self._get_EBSD_dir, fg="black"
+        )
+        self.w.d3d.grid(row=2, column=0, sticky="nsew")
+        self.w.d3d["state"] = "disabled"
+        self.w.bse = tk.Button(
+            self.w, text="Select BSE folder", command=self._get_BSE_dir, fg="black"
+        )
+        self.w.bse.grid(row=3, column=0, sticky="nsew")
+        self.w.bse["state"] = "disabled"
+        self.w.close = tk.Button(
+            self.w,
+            text="Close (reading in data will take a few moments)",
+            command=self._startup_items,
+            fg="black",
+        )
+        self.w.close["state"] = "disabled"
+        self.w.close.grid(row=4, column=0, sticky="nsew")
         self.wait_window(self.w)
-        # EBSD
-        self.ebsd_path = os.path.join(self.folder, "ebsd.tif")
-        ebsd_im = io.imread(self.ebsd_path)
-        if ebsd_im.dtype != np.uint8:
-            self.ebsd_im = np.around(255 * ebsd_im / ebsd_im.max(), 0).astype(np.uint8)
-        else:
-            self.ebsd_im = ebsd_im
-        # BSE
-        self.bse_path = os.path.join(self.folder, "bse.tif")
-        bse_im = io.imread(self.bse_path)
-        if bse_im.dtype != np.uint8:
-            self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
-        else:
-            self.bse_im = bse_im
 
     def coords(self, pos, event):
-        self.points[pos].append([event.x, event.y])
-        path = os.path.join(self.folder, f"ctr_pts_{pos}.txt")
+        """Responds to a click on an image. Redraws the images after the click. Also saves the click location in a file."""
+        i = self.slice_num.get()
+        self.current_points[pos].append([event.x, event.y])
+        path = os.path.join(self.folder, f"ctr_pts_{i}_{pos}.txt")
         with open(path, "a", encoding="utf8") as output:
             output.write(f"{event.x} {event.y}\n")
         self._show_points()
 
     def apply(self, algo="TPS"):
-        referencePoints = os.path.join(self.folder, "Ctr_pts_bse.txt")
-        distortedPoints = os.path.join(self.folder, "Ctr_pts_ebsd.txt")
+        """Applies the correction algorithm and calls the interactive view"""
+        referencePoints = os.path.join(self.folder, "ctr_pts_bse.txt")
+        distortedPoints = os.path.join(self.folder, "ctr_pts_ebsd.txt")
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         if algo == "TPS":
             save_name = os.path.join(self.folder, "TPS_mapping.npy")
-            align.get_solution(referenceImage=self.bse_path, solutionFile=save_name)
+            align.get_solution(referenceImage=self.bse_im.shape, solutionFile=save_name)
         elif algo == "LR":
             save_name = os.path.join(self.folder, "LR_mapping.npy")
             align.get_solution(degree=3, solutionFile=save_name)
@@ -134,22 +164,53 @@ class App(tk.Tk):
         self._interactive_view(algo)
         plt.close("all")
 
-    def _show_points(self):
-        pc = "#476042"
-        if self.show_points.get() == 1:
-            for i, p in enumerate(self.points["ebsd"]):
-                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, activeoutline=pc)
-                self.ebsd.create_text(p[0] + 3, p[1] + 3, anchor=tk.NW, text=i)
-            for i, p in enumerate(self.points["bse"]):
-                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, activeoutline=pc)
-                self.bse.create_text(p[0] + 3, p[1] + 3, anchor=tk.NW, text=i)
+    def _update_viewers(self, *args):
+        i = self.slice_num.get()
+        key = self.ebsd_mode.get()
+        bse_im = self.bse_imgs[i]
+        ebsd_im = self.ebsd_data[key][i]
+        if ebsd_im.shape[-1] == 1:
+            ebsd_im = ebsd_im[:, :, 0]
         else:
-            print("Removing points")
+            ebsd_im = np.sqrt(np.sum(ebsd_im ** 2, axis=2))
+
+        if ebsd_im.dtype == np.uint8:
+            self.ebsd_im = ebsd_im
+        else:
+            self.ebsd_im = np.around(255 * ebsd_im / ebsd_im.max(), 0).astype(np.uint8)
+
+        self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
+        self.all_points[self.current_slice_num] = self.current_points
+        if self.slice_num.get() in self.all_points.keys():
+            self.current_points = self.all_points[self.slice_num.get()]
+        else:
+            self.current_points = {"ebsd": [], "bse": []}
+        self._update_imgs()
+        self._show_points()
+        self.current_slice_num = i
+
+    def _show_points(self):
+        """Either turns on or turns off control point viewing"""
+        if self.show_points.get() == 1:
+            pc = "#c2344e"
+            for i, p in enumerate(self.current_points["ebsd"]):
+                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc)
+                self.ebsd.create_text(
+                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold")
+                )
+            pc = "#34c295"
+            for i, p in enumerate(self.current_points["bse"]):
+                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc)
+                self.bse.create_text(
+                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold")
+                )
+        else:
             self.ebsd.delete()
             self.bse.delete()
             self._update_imgs()
 
     def _update_imgs(self):
+        """Updates the images in the viewers"""
         # BSE
         self.bse["width"] = self.bse_im.shape[1]
         self.bse["height"] = self.bse_im.shape[0]
@@ -162,26 +223,96 @@ class App(tk.Tk):
         self.ebsd.create_image(0, 0, anchor="nw", image=self.ebsd_im_ppm)
 
     def _photo_image(self, image: np.ndarray):
+        """Creates a PhotoImage object that plays nicely with a tkinter canvas for viewing purposes."""
         height, width = image.shape
         data = f"P5 {width} {height} 255 ".encode() + image.astype(np.uint8).tobytes()
         return tk.PhotoImage(width=width, height=height, data=data, format="PPM")
 
     def _read_points(self):
-        bse_path = os.path.join(self.folder, "ctr_pts_bse.txt")
-        ebsd_path = os.path.join(self.folder, "ctr_pts_ebsd.txt")
-        try:
-            bse_pts = list(np.loadtxt(bse_path))
-            ebsd_pts = list(np.loadtxt(ebsd_path))
-            self.points = {"ebsd": ebsd_pts, "bse": bse_pts}
-            self._show_points()
-        except FileNotFoundError:
-            self.points = {"ebsd": [], "bse": []}
+        """Reads a set of control points"""
+        ebsd_files = [
+            os.path.join(self.folder, f)
+            for f in os.listdir(self.folder)
+            if "ebsd" in f and "txt" in f
+        ]
+        bse_files = [
+            os.path.join(self.folder, f)
+            for f in os.listdir(self.folder)
+            if "bse" in f and "txt" in f
+        ]
+        for i in range(len(bse_files)):
+            base = os.path.splitext(os.path.basename(bse_files[i]))[0]
+            key = int(base.split("_")[-2])
+            bse_pts = list(np.loadtxt(bse_files[i]))
+            ebsd_pts = list(np.loadtxt(ebsd_files[i]))
+            self.all_points[key] = {"ebsd": ebsd_pts, "bse": bse_pts}
 
-    def _get_dir(self):
-        self.folder = filedialog.askdirectory(initialdir=self.folder, title="Select folder")
+        if self.slice_num.get() in self.all_points.keys():
+            self.current_points = self.all_points[self.slice_num.get()]
+        else:
+            self.current_points = {"ebsd": [], "bse": []}
+        self._show_points()
+
+    def _startup_items(self):
+        print("Running startup")
+        self._open_BSE_stack(self.BSE_DIR)
+        self._read_h5(self.EBSD_DIR)
+        self.ebsd_mode_options = list(self.ebsd_data.keys())
+        self.ebsd_mode = tk.StringVar()
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.slice_min = 0
+        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
+        self.slice_num = tk.IntVar()
+        self.slice_num.set(self.slice_min)
         self.w.destroy()
+        print("Startup complete")
+
+    def _get_FOLDER_dir(self):
+        """Gets the folder where all control points and other images will be saved."""
+        self.folder = filedialog.askdirectory(
+            initialdir=self.folder, title="Select control points folder"
+        )
+        self.w.d3d["state"] = "active"
+
+    def _get_EBSD_dir(self):
+        """Gets the H5 file and saves its location"""
+        self.EBSD_DIR = filedialog.askopenfilename(
+            initialdir=self.folder, title="Select Dream3D file"
+        )
+        self.w.bse["state"] = "active"
+
+    def _get_BSE_dir(self):
+        """Gets the folder containing the BSE images and saves the location"""
+        self.BSE_DIR = filedialog.askdirectory(initialdir=self.EBSD_DIR, title="Select BSE folder")
+        self.w.close["state"] = "active"
+
+    def _read_h5(self, path: str):
+        """Reads a Dream3D file"""
+        h5 = h5py.File(path, "r")
+        self.ebsd_data = h5["DataContainers/ImageDataContainer/CellData"]
+
+    def _open_BSE_stack(self, imgs_path: str):
+        """Reads a stack of BSE images into one numpy array"""
+        paths_tiff = sorted(
+            [path for path in os.listdir(imgs_path) if os.path.splitext(path)[1] == ".tiff"],
+            key=lambda x: int(x.replace(".tiff", "")),
+        )
+        paths_tif = sorted(
+            [path for path in os.listdir(imgs_path) if os.path.splitext(path)[1] == ".tif"],
+            key=lambda x: int(x.replace(".tif", "")),
+        )
+        paths = []
+        for p in [paths_tiff, paths_tif]:
+            if len(p) > len(paths):
+                paths = p
+        if len(paths) == 0:
+            raise ValueError("BSE images must be either tiff or tif. No other format is supported.")
+        self.bse_imgs = np.array(
+            [io.imread(os.path.join(imgs_path, p), as_gray=True) for p in paths]
+        )
 
     def _interactive_view(self, algo):
+        """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.set_title(f"{algo} Output")
@@ -226,6 +357,20 @@ class App(tk.Tk):
         row_slider.on_changed(update_row)
         col_slider.on_changed(update_col)
         plt.show()
+
+    def _easy_start(self):
+        self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
+        self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
+        self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
+        self._open_BSE_stack(self.BSE_DIR)
+        self._read_h5(self.EBSD_DIR)
+        self.ebsd_mode_options = list(self.ebsd_data.keys())
+        self.ebsd_mode = tk.StringVar()
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.slice_min = 0
+        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
+        self.slice_num = tk.IntVar()
+        self.slice_num.set(self.slice_min)
 
 
 if __name__ == "__main__":
