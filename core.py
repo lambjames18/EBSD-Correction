@@ -91,8 +91,8 @@ class SelectCoords:
 
 class Alignment:
     def __init__(self, referencePoints, distortedPoints, algorithm="TPS"):
-        self.referencePoints = referencePoints
-        self.distortedPoints = distortedPoints
+        self.source = referencePoints
+        self.distorted = distortedPoints
         if algorithm.upper() == "TPS":
             self.get_solution = self.TPS
             self.apply = self.TPS_apply
@@ -117,10 +117,12 @@ class Alignment:
     ):
         TPS_Params = "TPS_params.csv"
         # solutionFile = "TPS_mapping.npy"
-        source = np.loadtxt(self.referencePoints, delimiter=" ")
+        # source = np.loadtxt(self.referencePoints, delimiter=" ")
+        source = self.source
         xs = source[:, 0]
         ys = source[:, 1]
-        distorted = np.loadtxt(self.distortedPoints, delimiter=" ")
+        # distorted = np.loadtxt(self.distortedPoints, delimiter=" ")
+        distorted = self.distorted
         xt = distorted[:, 0]
         yt = distorted[:, 1]
         # check to make sure each control point is paired
@@ -272,8 +274,10 @@ class Alignment:
 
     def LR(self, degree=3, saveSolution=True, solutionFile="LR_mapping.npy"):
         # Read in the source/distorted points
-        coord_ebsd = np.loadtxt(open(self.distortedPoints, "rb"), delimiter=" ").astype(int)
-        coord_bse = np.loadtxt(open(self.referencePoints, "rb"), delimiter=" ").astype(int)
+        coord_ebsd = self.distorted
+        coord_bse = self.source
+        # coord_ebsd = np.loadtxt(open(self.distortedPoints, "rb"), delimiter=" ").astype(int)
+        # coord_bse = np.loadtxt(open(self.referencePoints, "rb"), delimiter=" ").astype(int)
 
         # check to make sure each control point is paired
         if len(coord_ebsd) == len(coord_bse):

@@ -98,8 +98,14 @@ class App(tk.Tk):
             self.bot, text="View LR Correction", command=lambda: self.apply("LR"), fg="black"
         )
         lr.grid(row=0, column=1)
-        apply = tk.Button(self.bot, text="Apply Correctionto h5", fg="black")
-        apply.grid(row=0, column=2)
+        tps_stack = tk.Button(self.bot, text="Apply TPS correction to stack", fg="black")
+        tps_stack.grid(row=0, column=2)
+        lr_stack = tk.Button(self.bot, text="Apply LR correction to stack", fg="black")
+        lr_stack.grid(row=0, column=3)
+        ex_ctr_pt_ims = tk.Button(
+            self.bot, text="Export control point images", fg="black", command=self.export_CP_imgs
+        )
+        ex_ctr_pt_ims.grid(row=0, column=4)
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
@@ -150,19 +156,39 @@ class App(tk.Tk):
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
-        referencePoints = os.path.join(self.folder, "ctr_pts_bse.txt")
-        distortedPoints = os.path.join(self.folder, "ctr_pts_ebsd.txt")
+        referencePoints = np.array(self.current_points["bse"])
+        distortedPoints = np.array(self.current_points["ebsd"])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         if algo == "TPS":
             save_name = os.path.join(self.folder, "TPS_mapping.npy")
-            align.get_solution(referenceImage=self.bse_im.shape, solutionFile=save_name)
+            align.get_solution(l=self.bse_im.shape, solutionFile=save_name)
         elif algo == "LR":
             save_name = os.path.join(self.folder, "LR_mapping.npy")
             align.get_solution(degree=3, solutionFile=save_name)
         save_name = os.path.join(self.folder, f"{algo}_out.tif")
-        align.apply(self.ebsd_im, save_name=save_name)
-        self._interactive_view(algo)
+        im1 = align.apply(self.ebsd_im, out="array")
+        self._interactive_view(algo, im1)
         plt.close("all")
+
+    def export_CP_imgs(self):
+        i = self.slice_num.get()
+        pts = np.array(self.current_points["ebsd"])
+        self._save_CP_img(f"{i}_ebsd", self.ebsd_im, pts, "gray", "#c2344e")
+        pts = np.array(self.current_points["bse"])
+        self._save_CP_img(f"{i}_bse", self.bse_im, pts, "gray", "#34c295")
+
+    def _save_CP_img(self, name, im, pts, cmap, tc="red"):
+        fig = plt.figure(2)
+        ax = fig.add_subplot(111)
+        ax.imshow(im, cmap=cmap)
+        for i in range(pts.shape[0]):
+            ax.scatter(pts[i, 0], pts[i, 1], c=tc, s=1)
+            ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i, c=tc, fontweight="bold")
+        ax.axis("off")
+        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+        plt.tight_layout()
+        fig.savefig(f"{os.path.join(self.folder,name)}_points.png")
+        plt.close()
 
     def _update_viewers(self, *args):
         i = self.slice_num.get()
@@ -311,13 +337,12 @@ class App(tk.Tk):
             [io.imread(os.path.join(imgs_path, p), as_gray=True) for p in paths]
         )
 
-    def _interactive_view(self, algo):
+    def _interactive_view(self, algo, im1):
         """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
         ax.set_title(f"{algo} Output")
         im0 = self.bse_im
-        im1 = io.imread(os.path.join(self.folder, "TPS_out.tif"))
         max_r = im0.shape[0]
         max_c = im0.shape[1]
         alphas = np.ones(im0.shape)
