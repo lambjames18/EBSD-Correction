@@ -84,8 +84,7 @@ class App(tk.Tk):
         self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
         # handle points
         self.all_points = {}
-        self.current_points = {}
-        self.current_slice_num = 0
+        self.current_points = {"ebsd": [], "bse": []}
         self._read_points()
         # Update viewers
         self._update_viewers()
@@ -98,9 +97,19 @@ class App(tk.Tk):
             self.bot, text="View LR Correction", command=lambda: self.apply("LR"), fg="black"
         )
         lr.grid(row=0, column=1)
-        tps_stack = tk.Button(self.bot, text="Apply TPS correction to stack", fg="black")
+        tps_stack = tk.Button(
+            self.bot,
+            text="Apply TPS correction to stack",
+            fg="black",
+            command=lambda: self.apply_3D("TPS"),
+        )
         tps_stack.grid(row=0, column=2)
-        lr_stack = tk.Button(self.bot, text="Apply LR correction to stack", fg="black")
+        lr_stack = tk.Button(
+            self.bot,
+            text="Apply LR correction to stack",
+            fg="black",
+            command=lambda: self.apply_3D("LR"),
+        )
         lr_stack.grid(row=0, column=3)
         ex_ctr_pt_ims = tk.Button(
             self.bot, text="Export control point images", fg="black", command=self.export_CP_imgs
@@ -149,6 +158,7 @@ class App(tk.Tk):
         """Responds to a click on an image. Redraws the images after the click. Also saves the click location in a file."""
         i = self.slice_num.get()
         self.current_points[pos].append([event.x, event.y])
+        self.all_points[i] = self.current_points
         path = os.path.join(self.folder, f"ctr_pts_{i}_{pos}.txt")
         with open(path, "a", encoding="utf8") as output:
             output.write(f"{event.x} {event.y}\n")
@@ -167,7 +177,24 @@ class App(tk.Tk):
             align.get_solution(degree=3, solutionFile=save_name)
         save_name = os.path.join(self.folder, f"{algo}_out.tif")
         im1 = align.apply(self.ebsd_im, out="array")
+        print("Creating interactive view")
         self._interactive_view(algo, im1)
+        plt.close("all")
+
+    def apply_3D(self, algo="LR"):
+        """Applies the correction algorithm and calls the interactive view"""
+        points = self.all_points
+        ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
+        referencePoints = np.array(self.current_points["bse"])
+        distortedPoints = np.array(self.current_points["ebsd"])
+        print("Aligning the full ESBSD stack in mode {}".format(self.ebsd_mode.get()))
+        align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
+        if algo == "TPS":
+            self.ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack)
+        elif algo == "LR":
+            self.ebsd_cStack = align.LR_3D_Apply(points, ebsd_stack, deg=3)
+        print("Creating interactive view")
+        self._interactive_view(algo, self.ebsd_cStack, True)
         plt.close("all")
 
     def export_CP_imgs(self):
@@ -176,6 +203,7 @@ class App(tk.Tk):
         self._save_CP_img(f"{i}_ebsd", self.ebsd_im, pts, "gray", "#c2344e")
         pts = np.array(self.current_points["bse"])
         self._save_CP_img(f"{i}_bse", self.bse_im, pts, "gray", "#34c295")
+        print("Control point images exported successfully.")
 
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
         fig = plt.figure(2)
@@ -206,14 +234,14 @@ class App(tk.Tk):
             self.ebsd_im = np.around(255 * ebsd_im / ebsd_im.max(), 0).astype(np.uint8)
 
         self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
-        self.all_points[self.current_slice_num] = self.current_points
+        # Change current points dict by either reading in one or creating a new one
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
         else:
             self.current_points = {"ebsd": [], "bse": []}
+        # Update the images and draw points
         self._update_imgs()
         self._show_points()
-        self.current_slice_num = i
 
     def _show_points(self):
         """Either turns on or turns off control point viewing"""
@@ -272,7 +300,6 @@ class App(tk.Tk):
             bse_pts = list(np.loadtxt(bse_files[i]))
             ebsd_pts = list(np.loadtxt(ebsd_files[i]))
             self.all_points[key] = {"ebsd": ebsd_pts, "bse": bse_pts}
-
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
         else:
@@ -316,6 +343,8 @@ class App(tk.Tk):
         """Reads a Dream3D file"""
         h5 = h5py.File(path, "r")
         self.ebsd_data = h5["DataContainers/ImageDataContainer/CellData"]
+        key = list(self.ebsd_data.keys())[0]
+        self.ebsd_cStack = np.zeros(self.ebsd_data[key].shape)
 
     def _open_BSE_stack(self, imgs_path: str):
         """Reads a stack of BSE images into one numpy array"""
@@ -337,17 +366,23 @@ class App(tk.Tk):
             [io.imread(os.path.join(imgs_path, p), as_gray=True) for p in paths]
         )
 
-    def _interactive_view(self, algo, im1):
+    def _interactive_view(self, algo, im1, stack=False):
         """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
+        if len(im1.shape) == 3:
+            im1 = self.ebsd_cStack[self.slice_num.get()]
+        elif len(im1.shape) > 3:
+            raise IOError("im1 must be a 3D volume or a 2D image.")
+        key = self.ebsd_mode.get()
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
-        ax.set_title(f"{algo} Output")
         im0 = self.bse_im
         max_r = im0.shape[0]
         max_c = im0.shape[1]
+        max_s = self.slice_max
+        ax.set_title(f"{algo} Output (Slice {self.slice_num.get()})")
         alphas = np.ones(im0.shape)
         # Show images
-        ax.imshow(im1, cmap="gray")
+        im_ebsd = ax.imshow(im1, cmap="gray")
         im = ax.imshow(im0, alpha=alphas, cmap="gray")
         # Put slider on
         plt.subplots_adjust(left=0.15, bottom=0.15)
@@ -357,12 +392,22 @@ class App(tk.Tk):
         height = ax.get_position().height
         axrow = plt.axes([left - 0.15, bot, 0.05, height])
         axcol = plt.axes([left, bot - 0.15, width, 0.05])
+        axslice = plt.axes([left + 0.65, bot, 0.05, height])
         row_slider = Slider(
             ax=axrow, label="Y pos", valmin=0, valmax=max_r, valinit=max_r, orientation="vertical"
         )
         col_slider = Slider(
             ax=axcol, label="X pos", valmin=0, valmax=max_c, valinit=max_c, orientation="horizontal"
         )
+        slice_slider = Slider(
+            ax=axslice,
+            label="Slice #",
+            valmin=0,
+            valmax=max_s,
+            valinit=self.slice_num.get(),
+            orientation="vertical",
+        )
+
         # Define update functions
         def update_row(val):
             val = int(np.around(val, 0))
@@ -378,9 +423,23 @@ class App(tk.Tk):
             im.set(alpha=new_alphas)
             fig.canvas.draw_idle()
 
+        def change_image(val):
+            val = int(np.around(val, 0))
+            im1 = self.ebsd_cStack[val]
+            im0 = self.bse_imgs[val]
+            im.set_data(im0)
+            im_ebsd.set_data(im1)
+            ax.set_title(f"{algo} Output (Slice {val})")
+            im.axes.figure.canvas.draw()
+            im_ebsd.axes.figure.canvas.draw()
+            # fig.canvas.draw_idle()
+
         # Enable update functions
         row_slider.on_changed(update_row)
         col_slider.on_changed(update_col)
+        if stack:
+            print("Created slice slider")
+            slice_slider.on_changed(change_image)
         plt.show()
 
     def _easy_start(self):

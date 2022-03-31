@@ -18,9 +18,10 @@ import numpy.linalg as nl
 from scipy.spatial.distance import cdist
 
 # LR Stuff
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures as PF
+from sklearn.linear_model import LinearRegression as LR
 from sklearn.pipeline import Pipeline
+from scipy import interpolate
 
 np.set_printoptions(linewidth=200)
 
@@ -113,6 +114,7 @@ class Alignment:
         checkParams=True,
         saveParams=False,
         saveSolution=True,
+        returnSolution=False,
         solutionFile="TPS_mapping.npy",
     ):
         TPS_Params = "TPS_params.csv"
@@ -213,6 +215,8 @@ class Alignment:
         if saveSolution:
             np.save(solutionFile, sol)
             print("Point-wise solution save to {}\n".format(solutionFile))
+        elif returnSolution:
+            return sol
 
         self.TPS_solution = sol
         self.TPS_grid_spacing = (ny, nx)
@@ -252,6 +256,26 @@ class Alignment:
         ny = a.shape[0]
         self.TPS_grid_spacing = (ny, nx)
         self.TPS_solution = np.load(sol_path)
+
+    def TPS_apply_3D(self, points, dataset):
+        slice_numbers = list(points.keys())
+        params = []
+        for key in slice_numbers:
+            self.source = np.array(points[key]["bse"])
+            self.distorted = np.array(points[key]["ebsd"])
+            slice_params = self.TPS(dataset.shape[1:], returnSolution=True)
+            params.append(slice_params)
+        params = np.array(params)
+        print(params.shape)
+        # Create function to interpolate coefficients
+        f = interpolate.interp1d(slice_numbers, params, axis=0)
+        # Create transform object for each slice and warp
+        aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+        for i in range(dataset.shape[0]):
+            self.TPS_solution = f(i)
+            print(self.TPS_solution.shape)
+            aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
+        return aligned_dataset
 
     def _TPS_makeL(self, cp):
         # cp: [K x 2] control points
@@ -298,15 +322,15 @@ class Alignment:
         # Define polymomial regression
         model_i = Pipeline(
             [
-                ("poly", PolynomialFeatures(degree=degree, include_bias=True)),
-                ("linear", LinearRegression(fit_intercept=False, normalize=False)),
+                ("poly", PF(degree=degree, include_bias=True)),
+                ("linear", LR(fit_intercept=False, normalize=False)),
             ]
         )
 
         model_j = Pipeline(
             [
-                ("poly", PolynomialFeatures(degree=degree, include_bias=True)),
-                ("linear", LinearRegression(fit_intercept=False, normalize=False)),
+                ("poly", PF(degree=degree, include_bias=True)),
+                ("linear", LR(fit_intercept=False, normalize=False)),
             ]
         )
 
@@ -360,6 +384,34 @@ class Alignment:
         ratios = np.divide(array1, array2)
         ratio = np.average(ratios)
         return ratio
+
+    def LR_3D_Apply(self, points, dataset, deg=3):
+        slice_numbers = list(points.keys())
+        params = []
+        for key in slice_numbers:
+            slice_params = []
+            for i in range(2):
+                model = Pipeline(
+                    [
+                        ("poly", PF(degree=deg, include_bias=True)),
+                        ("linear", LR(fit_intercept=False)),
+                    ]
+                )
+                model.fit(np.array(points[key]["bse"]), np.array(points[key]["ebsd"])[:, i])
+                slice_params.append(model.named_steps["linear"].coef_)
+            params.append(slice_params)
+        # Create function to interpolate coefficients
+        f = interpolate.interp1d(slice_numbers, params, axis=0)
+        # Create transform object for each slice and warp
+        aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+        for i in range(dataset.shape[0]):
+            params = f(i)
+            tform = tf._geometric.PolynomialTransform(params)
+            aligned_slice = tf.warp(dataset[i], tform, cval=0, order=0, preserve_range=True).astype(
+                dataset.dtype
+            )
+            aligned_dataset[i] = aligned_slice
+        return aligned_dataset
 
 
 ### Functions ###
