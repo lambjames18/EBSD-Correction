@@ -7,8 +7,7 @@ UI for running distortion correction
 # Python packages
 import os
 import tkinter as tk
-from tkinter import filedialog
-from threading import Thread
+from tkinter import filedialog, ttk
 
 # 3rd party packages
 import h5py
@@ -16,7 +15,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io
-import imageio
 
 # Local files
 import core
@@ -62,19 +60,32 @@ class App(tk.Tk):
             command=self._show_points,
             fg="black",
         )
-        view_pts.grid(row=0, column=0)
-        self.slice_picker = tk.Spinbox(
+        view_pts.grid(row=0, column=0, sticky="ew")
+        self.slice_options = np.arange(self.slice_min, self.slice_max)
+        self.slice_picker = ttk.Combobox(
             self.top,
             textvariable=self.slice_num,
-            from_=self.slice_min,
-            to=self.slice_max,
-            command=self._update_viewers,
+            values=self.slice_options,
+            height=10,
+            width=5,
         )
-        self.slice_picker.grid(row=0, column=1)
-        self.ebsd_picker = tk.OptionMenu(
-            self.top, self.ebsd_mode, *self.ebsd_mode_options, command=self._update_viewers
+        self.slice_picker["state"] = "readonly"
+        self.slice_picker.bind("<<ComboboxSelected>>", self._update_viewers)
+        self.slice_picker.grid(row=0, column=1, sticky="ew")
+        self.ebsd_picker = ttk.Combobox(
+            self.top,
+            textvariable=self.ebsd_mode,
+            values=self.ebsd_mode_options,
+            height=10,
+            width=20,
         )
-        self.ebsd_picker.grid(row=0, column=2)
+        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker.bind("<<ComboboxSelected>>", self._update_viewers)
+        self.ebsd_picker.grid(row=0, column=2, sticky="ew")
+        ex_ctr_pt_ims = tk.Button(
+            self.top, text="Export control point images", fg="black", command=self.export_CP_imgs
+        )
+        ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew")
         # setup viewer
         self.bse = tk.Canvas(self.viewer)
         self.bse.grid(row=0, column=0)
@@ -89,32 +100,33 @@ class App(tk.Tk):
         # Update viewers
         self._update_viewers()
         # setup bot
-        tps = tk.Button(
-            self.bot, text="View TPS Correction", command=lambda: self.apply("TPS"), fg="black"
-        )
-        tps.grid(row=0, column=0)
-        lr = tk.Button(
-            self.bot, text="View LR Correction", command=lambda: self.apply("LR"), fg="black"
-        )
-        lr.grid(row=0, column=1)
+        tps_l = tk.Label(self.bot, text="Thin-Plate Spline Correction:")
+        tps_l.grid(row=0, column=0, sticky="e")
+        lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
+        lr_l.grid(row=1, column=0, sticky="e")
+        tps = tk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"), fg="black")
+        tps.grid(row=0, column=1, sticky="ew")
+        lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
+        lr.grid(row=1, column=1, sticky="ew")
         tps_stack = tk.Button(
             self.bot,
-            text="Apply TPS correction to stack",
+            text="Apply to stack",
             fg="black",
             command=lambda: self.apply_3D("TPS"),
         )
-        tps_stack.grid(row=0, column=2)
+        tps_stack.grid(row=0, column=2, sticky="ew")
         lr_stack = tk.Button(
             self.bot,
-            text="Apply LR correction to stack",
+            text="Apply to stack",
             fg="black",
             command=lambda: self.apply_3D("LR"),
         )
-        lr_stack.grid(row=0, column=3)
-        ex_ctr_pt_ims = tk.Button(
-            self.bot, text="Export control point images", fg="black", command=self.export_CP_imgs
-        )
-        ex_ctr_pt_ims.grid(row=0, column=4)
+        lr_stack.grid(row=1, column=2, sticky="ew")
+        lr_deg_l = tk.Label(self.bot, text="Polynomial order:")
+        lr_deg_l.grid(row=1, column=3, sticky="e")
+        self.lr_degree = tk.Entry(self.bot)
+        self.lr_degree.insert(0, "3")
+        self.lr_degree.grid(row=1, column=4, sticky="ew")
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
@@ -174,7 +186,7 @@ class App(tk.Tk):
             align.get_solution(l=self.bse_im.shape, solutionFile=save_name)
         elif algo == "LR":
             save_name = os.path.join(self.folder, "LR_mapping.npy")
-            align.get_solution(degree=3, solutionFile=save_name)
+            align.get_solution(degree=int(self.lr_degree.get()), solutionFile=save_name)
         save_name = os.path.join(self.folder, f"{algo}_out.tif")
         im1 = align.apply(self.ebsd_im, out="array")
         print("Creating interactive view")

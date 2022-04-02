@@ -293,6 +293,7 @@ class Alignment:
         return L
 
     def LR(self, degree=3, saveSolution=True, solutionFile="LR_mapping.npy"):
+        print(degree)
         # Read in the source/distorted points
         coord_ebsd = self.distorted
         coord_bse = self.source
