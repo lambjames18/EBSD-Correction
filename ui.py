@@ -372,10 +372,9 @@ class App(tk.Tk):
             im1 = self.ebsd_cStack[self.slice_num.get()]
         elif len(im1.shape) > 3:
             raise IOError("im1 must be a 3D volume or a 2D image.")
-        key = self.ebsd_mode.get()
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
-        im0 = self.bse_im
+        im0 = self.bse_imgs[self.slice_num.get()]
         max_r = im0.shape[0]
         max_c = im0.shape[1]
         max_s = self.slice_max
@@ -392,20 +391,11 @@ class App(tk.Tk):
         height = ax.get_position().height
         axrow = plt.axes([left - 0.15, bot, 0.05, height])
         axcol = plt.axes([left, bot - 0.15, width, 0.05])
-        axslice = plt.axes([left + 0.65, bot, 0.05, height])
         row_slider = Slider(
             ax=axrow, label="Y pos", valmin=0, valmax=max_r, valinit=max_r, orientation="vertical"
         )
         col_slider = Slider(
             ax=axcol, label="X pos", valmin=0, valmax=max_c, valinit=max_c, orientation="horizontal"
-        )
-        slice_slider = Slider(
-            ax=axslice,
-            label="Slice #",
-            valmin=0,
-            valmax=max_s,
-            valinit=self.slice_num.get(),
-            orientation="vertical",
         )
 
         # Define update functions
@@ -432,13 +422,22 @@ class App(tk.Tk):
             ax.set_title(f"{algo} Output (Slice {val})")
             im.axes.figure.canvas.draw()
             im_ebsd.axes.figure.canvas.draw()
-            # fig.canvas.draw_idle()
+            fig.canvas.draw_idle()
 
         # Enable update functions
         row_slider.on_changed(update_row)
         col_slider.on_changed(update_col)
+        # Create slice slider if need be
         if stack:
-            print("Created slice slider")
+            axslice = plt.axes([left + 0.65, bot, 0.05, height])
+            slice_slider = Slider(
+                ax=axslice,
+                label="Slice #",
+                valmin=0,
+                valmax=max_s,
+                valinit=self.slice_num.get(),
+                orientation="vertical",
+            )
             slice_slider.on_changed(change_image)
         plt.show()
 
