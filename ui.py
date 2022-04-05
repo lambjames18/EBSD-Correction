@@ -61,11 +61,11 @@ class App(tk.Tk):
             fg="black",
         )
         view_pts.grid(row=0, column=0, sticky="ew")
-        self.slice_options = np.arange(self.slice_min, self.slice_max)
+        self.slice_options = np.arange(self.slice_min, self.slice_max + 1)
         self.slice_picker = ttk.Combobox(
             self.top,
             textvariable=self.slice_num,
-            values=self.slice_options,
+            values=list(self.slice_options),
             height=10,
             width=5,
         )
