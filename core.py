@@ -115,6 +115,7 @@ class Alignment:
         saveParams=False,
         saveSolution=True,
         solutionFile="TPS_mapping.npy",
+        verbose=True,
     ):
         TPS_Params = "TPS_params.csv"
         # solutionFile = "TPS_mapping.npy"
@@ -127,11 +128,14 @@ class Alignment:
         xt = distorted[:, 0]
         yt = distorted[:, 1]
         # check to make sure each control point is paired
-        if len(xs) == len(ys) and len(xt) == len(yt):
+        if len(xs) == len(ys) and len(xt) == len(yt) and len(xt) == len(yt):
             n = len(xs)
-            print("Given {} points...".format(n))
+            if verbose:
+                print("Given {} points...".format(n))
         else:
-            raise ValueError("Control point arrays are not of equal length")
+            raise ValueError(
+                f"Control point arrays are not of equal length: xs {xs.shape}, ys {ys.shape}, xt {xt.shape}, yt {yt.shape}"
+            )
 
         # convert input pixels in arrays. cps are control points
         xs = np.asarray(xs)
@@ -163,7 +167,8 @@ class Alignment:
 
         if saveParams:
             np.savetxt(TPS_Params, params.T, delimiter=",", header=header)
-            print("Parameters saved to {}\n".format(TPS_Params))
+            if verbose:
+                print("Parameters saved to {}\n".format(TPS_Params))
 
         # verifies that functional has square integrable second derivatives. Print outs should be zero or basically zero
         wShiftX = params[:n, 0]
@@ -217,7 +222,8 @@ class Alignment:
 
         if saveSolution:
             np.save(solutionFile, sol)
-            print("Point-wise solution save to {}\n".format(solutionFile))
+            if verbose:
+                print("Point-wise solution save to {}\n".format(solutionFile))
 
     def TPS_apply(self, im_array, save_name="TPS_out.tif", out="image"):
         if len(im_array.shape) > 2:
@@ -255,20 +261,45 @@ class Alignment:
         self.TPS_grid_spacing = (ny, nx)
         self.TPS_solution = np.load(sol_path)
 
+    # def TPS_apply_3D(self, points, dataset):
+    #     slice_numbers = list(points.keys())
+    #     params = []
+    #     for key in slice_numbers:
+    #         self.source = np.array(points[key]["bse"])
+    #         self.distorted = np.array(points[key]["ebsd"])
+    #         self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+    #         params.append(self.TPS_solution)
+    #     # Create function to interpolate coefficients
+    #     f = interpolate.interp1d(slice_numbers, params, axis=0)
+    #     # Create transform object for each slice and warp
+    #     aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+    #     for i in range(dataset.shape[0]):
+    #         sol = f(i)
+    #         self.TPS_solution = sol
+    #         aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
+    #     return aligned_dataset
+
     def TPS_apply_3D(self, points, dataset):
         slice_numbers = list(points.keys())
         params = []
         for key in slice_numbers:
             self.source = np.array(points[key]["bse"])
             self.distorted = np.array(points[key]["ebsd"])
-            self.TPS(dataset.shape[1:])
+            self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
             params.append(self.TPS_solution)
         # Create function to interpolate coefficients
-        f = interpolate.interp1d(slice_numbers, params, axis=0)
+        funcs = []
+        indices = np.zeros(dataset.shape[0], dtype=int)
+        for i in range(len(slice_numbers) - 1):
+            nums = np.array([slice_numbers[i], slice_numbers[i + 1]])
+            indices[nums[0] : nums[1] + 1] = i
+            ps = np.array([params[i], params[i + 1]])
+            f = interpolate.interp1d(nums, ps, axis=0)
+            funcs.append(f)
         # Create transform object for each slice and warp
         aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
         for i in range(dataset.shape[0]):
-            sol = f(i)
+            sol = funcs[indices[i]](i)
             self.TPS_solution = sol
             aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
         return aligned_dataset

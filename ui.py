@@ -6,6 +6,7 @@ UI for running distortion correction
 
 # Python packages
 import os
+import shutil
 import tkinter as tk
 from tkinter import filedialog, ttk
 
@@ -16,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io
 from rich import print
+import mpire
 
 # Local files
 import core
@@ -128,6 +130,18 @@ class App(tk.Tk):
         self.lr_degree = tk.Entry(self.bot)
         self.lr_degree.insert(0, "3")
         self.lr_degree.grid(row=1, column=4, sticky="ew")
+        fixh5TPS = tk.Button(
+            self.bot,
+            text="Save TPS correction in DREAM3D file",
+            command=lambda: self.apply_correction_to_h5("TPS"),
+        )
+        fixh5TPS.grid(row=0, column=5, columnspan=2)
+        fixh5TPS = tk.Button(
+            self.bot,
+            text="Save LR correction in DREAM3D file",
+            command=lambda: self.apply_correction_to_h5("LR"),
+        )
+        fixh5TPS.grid(row=1, column=5, columnspan=2)
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
@@ -212,6 +226,42 @@ class App(tk.Tk):
         self._interactive_view(algo, self.ebsd_cStack, True)
         plt.close("all")
 
+    def apply_correction_to_h5(self, algo):
+        points = self.all_points
+        referencePoints = np.array(self.current_points["bse"])
+        distortedPoints = np.array(self.current_points["ebsd"])
+        align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
+        # Grab the h5 file
+        print("Generating a new DREAM3D file...")
+        EBSD_DIR_CORRECTED = (w := os.path.splitext(self.EBSD_DIR))[0] + "_corrected" + w[1]
+        shutil.copyfile(self.EBSD_DIR, EBSD_DIR_CORRECTED)
+        h5 = h5py.File(EBSD_DIR_CORRECTED, "r+")
+        # Actually apply it here
+        keys = list(h5["DataContainers/ImageDataContainer/CellData"])
+        print(f"[bold green]Success![/bold green] Applying to volume ({len(keys)} modes)")
+        for key in keys:
+            # Get stack of one mode and determine characteristics
+            ebsd_stack = np.array(h5.get("DataContainers/ImageDataContainer/CellData/" + key))
+            n_dims = ebsd_stack.shape[-1]
+            dtype = ebsd_stack.dtype
+            # Loop over all dimensions
+            print(f"  -> Correcting {key} ({n_dims} components of type {dtype})")
+            for i in range(ebsd_stack.shape[-1]):
+                if algo == "TPS":
+                    # Isolate one dimension and correct
+                    stack = np.copy(ebsd_stack[:, :, :, i])
+                    c_stack = align.TPS_apply_3D(points, stack)
+                    if dtype == np.uint8:
+                        c_stack = np.around(255 * c_stack / c_stack.max(), 0).astype(np.uint8)
+                    # Fill original stack
+                    ebsd_stack[:, :, :, i] = c_stack
+                elif algo == "LR":
+                    raise ValueError("algo must be TPS at this time. LR is not supported")
+            # Write new stack to the h5
+            h5["DataContainers/ImageDataContainer/CellData/" + key][...] = ebsd_stack
+        h5.close()
+        print("[bold green]Correction complete![/bold green]")
+
     def export_CP_imgs(self):
         i = self.slice_num.get()
         pts = np.array(self.current_points["ebsd"])
@@ -219,19 +269,6 @@ class App(tk.Tk):
         pts = np.array(self.current_points["bse"])
         self._save_CP_img(f"{i}_bse", self.bse_im, pts, "gray", "#34c295")
         print("Control point images exported successfully.")
-
-    def _save_CP_img(self, name, im, pts, cmap, tc="red"):
-        fig = plt.figure(2)
-        ax = fig.add_subplot(111)
-        ax.imshow(im, cmap=cmap)
-        for i in range(pts.shape[0]):
-            ax.scatter(pts[i, 0], pts[i, 1], c=tc, s=1)
-            ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i, c=tc, fontweight="bold")
-        ax.axis("off")
-        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-        plt.tight_layout()
-        fig.savefig(f"{os.path.join(self.folder,name)}_points.png")
-        plt.close()
 
     def _update_viewers(self, *args):
         i = self.slice_num.get()
@@ -337,6 +374,19 @@ class App(tk.Tk):
         self.w.destroy()
         print("Startup complete")
 
+    def _save_CP_img(self, name, im, pts, cmap, tc="red"):
+        fig = plt.figure(2)
+        ax = fig.add_subplot(111)
+        ax.imshow(im, cmap=cmap)
+        for i in range(pts.shape[0]):
+            ax.scatter(pts[i, 0], pts[i, 1], c=tc, s=1)
+            ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i, c=tc, fontweight="bold")
+        ax.axis("off")
+        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+        plt.tight_layout()
+        fig.savefig(f"{os.path.join(self.folder,name)}_points.png")
+        plt.close()
+
     def _get_FOLDER_dir(self):
         """Gets the folder where all control points and other images will be saved."""
         self.folder = filedialog.askdirectory(
@@ -414,10 +464,22 @@ class App(tk.Tk):
         axrow = plt.axes([left - 0.15, bot, 0.05, height])
         axcol = plt.axes([left, bot - 0.15, width, 0.05])
         row_slider = Slider(
-            ax=axrow, label="Y pos", valmin=0, valmax=max_r, valinit=max_r, orientation="vertical"
+            ax=axrow,
+            label="Y pos",
+            valmin=0,
+            valmax=max_r,
+            valinit=max_r,
+            valstep=1,
+            orientation="vertical",
         )
         col_slider = Slider(
-            ax=axcol, label="X pos", valmin=0, valmax=max_c, valinit=max_c, orientation="horizontal"
+            ax=axcol,
+            label="X pos",
+            valmin=0,
+            valmax=max_c,
+            valinit=max_c,
+            valstep=1,
+            orientation="horizontal",
         )
 
         # Define update functions
@@ -458,6 +520,7 @@ class App(tk.Tk):
                 valmin=0,
                 valmax=max_s,
                 valinit=self.slice_num.get(),
+                valstep=1,
                 orientation="vertical",
             )
             slice_slider.on_changed(change_image)
