@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io
+from rich import print
 
 # Local files
 import core
@@ -87,12 +88,12 @@ class App(tk.Tk):
         )
         ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew")
         # setup viewer
-        self.bse = tk.Canvas(self.viewer)
-        self.bse.grid(row=0, column=0)
-        self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
         self.ebsd = tk.Canvas(self.viewer)
-        self.ebsd.grid(row=0, column=1)
+        self.ebsd.grid(row=0, column=0)
         self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
+        self.bse = tk.Canvas(self.viewer)
+        self.bse.grid(row=0, column=1)
+        self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
         # handle points
         self.all_points = {}
         self.current_points = {"ebsd": [], "bse": []}
@@ -183,10 +184,12 @@ class App(tk.Tk):
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         if algo == "TPS":
             save_name = os.path.join(self.folder, "TPS_mapping.npy")
-            align.get_solution(l=self.bse_im.shape, solutionFile=save_name)
+            align.get_solution(l=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
         elif algo == "LR":
             save_name = os.path.join(self.folder, "LR_mapping.npy")
-            align.get_solution(degree=int(self.lr_degree.get()), solutionFile=save_name)
+            align.get_solution(
+                degree=int(self.lr_degree.get()), solutionFile=save_name, saveSolution=False
+            )
         save_name = os.path.join(self.folder, f"{algo}_out.tif")
         im1 = align.apply(self.ebsd_im, out="array")
         print("Creating interactive view")
@@ -245,7 +248,9 @@ class App(tk.Tk):
         else:
             self.ebsd_im = np.around(255 * ebsd_im / ebsd_im.max(), 0).astype(np.uint8)
 
-        self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
+        if bse_im.dtype != np.uint8:
+            bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
+        self.bse_im = bse_im
         # Change current points dict by either reading in one or creating a new one
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
@@ -374,9 +379,14 @@ class App(tk.Tk):
                 paths = p
         if len(paths) == 0:
             raise ValueError("BSE images must be either tiff or tif. No other format is supported.")
-        self.bse_imgs = np.array(
-            [io.imread(os.path.join(imgs_path, p), as_gray=True) for p in paths]
-        )
+        bse_imgs = []
+        for i in range(len(paths)):
+            p = os.path.join(imgs_path, paths[i])
+            im = io.imread(p, as_gray=True).astype(np.float32)
+            im = np.around(255 * im / im.max(), 0).astype(np.uint8)
+            bse_imgs.append(im)
+        self.bse_imgs = np.array(bse_imgs, dtype=np.uint8)
+        print(f"{self.bse_imgs.shape[0]} BSE images imported!")
 
     def _interactive_view(self, algo, im1, stack=False):
         """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
@@ -454,9 +464,12 @@ class App(tk.Tk):
         plt.show()
 
     def _easy_start(self):
-        self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
-        self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
-        self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
+        # self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
+        self.BSE_DIR = "D:/Research/Ta_AM-Spalled/Data/3D/BSE/small/"
+        # self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
+        self.EBSD_DIR = "D:/Research/ta_AM-Spalled/Data/3D/Ta_AM-Spalled_aligned.dream3d"
+        # self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
+        self.folder = "D:/Research/scripts/Alignment/Ta_AM-Spalled_3D/"
         self._open_BSE_stack(self.BSE_DIR)
         self._read_h5(self.EBSD_DIR)
         self.ebsd_mode_options = list(self.ebsd_data.keys())
