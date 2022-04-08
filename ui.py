@@ -30,8 +30,8 @@ class App(tk.Tk):
         self.update_idletasks()
         self.withdraw()
         self.folder = os.getcwd()
-        # self.select_folder_popup()
-        self._easy_start()
+        self.select_folder_popup()
+        # self._easy_start()
         self.deiconify()
         # frames
         # frame_w = 1920
@@ -313,12 +313,14 @@ class App(tk.Tk):
                     p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold")
                 )
         else:
-            self.ebsd.delete()
-            self.bse.delete()
+            self.ebsd.delete("all")
+            self.bse.delete("all")
             self._update_imgs()
 
     def _update_imgs(self):
         """Updates the images in the viewers"""
+        self.ebsd.delete("all")
+        self.bse.delete("all")
         # BSE
         self.bse["width"] = self.bse_im.shape[1]
         self.bse["height"] = self.bse_im.shape[0]
