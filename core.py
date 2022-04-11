@@ -11,6 +11,7 @@ import h5py
 import imageio
 from skimage import io, exposure
 from skimage import transform as tf
+
 from rich import print
 
 # TPS Stuff
@@ -22,8 +23,6 @@ from sklearn.preprocessing import PolynomialFeatures as PF
 from sklearn.linear_model import LinearRegression as LR
 from sklearn.pipeline import Pipeline
 from scipy import interpolate
-
-np.set_printoptions(linewidth=200)
 
 
 # Matplotlib window that records clicked locations and stores them in txt file
