@@ -11,9 +11,9 @@ import numpy as np
 
 ####
 # Create the control points
-folder = "Slice78_CoNi16/"  # Folder where to save everything, can be empty ""
-bse = "bse"  # The name of the distorted image (should be tif) without the extension
-ebsd = "ebsd"  # The name of the distorted image (should be tif) without the extension
+folder = "Alumina/"  # Folder where to save everything, can be empty ""
+bse = "BSE_Raw"  # The name of the reference image (should be tif) without the extension
+ebsd = "SEM-EDS_Raw"  # The name of the distorted image (should be tif) without the extension
 algorithm = "TPS"  # Select the algorithm, either LR or TPS
 view_overlay = True  # Overlays the corrected distortion over the control image with sliders
 ####
@@ -37,9 +37,12 @@ while loop:
 
 # Find solution and apply
 ebsd_im = io.imread(folder + ebsd + ".tif")
-align = core.Alignment(bse_ctr_path, ebsd_ctr_path, algorithm=algorithm)
+bse_im = io.imread(folder + bse + ".tif")
+bse_ctr_pts = np.loadtxt(bse_ctr_path)
+ebsd_ctr_pts = np.loadtxt(ebsd_ctr_path)
+align = core.Alignment(bse_ctr_pts, ebsd_ctr_pts, algorithm=algorithm)
 loop = True
-kwargs = {"referenceImage": folder + bse + ".tif"}
+kwargs = {"l": bse_im.shape}
 # kwargs = {}
 while loop:
     # pick = input("Find alignment solution? (y/n) ")
@@ -58,8 +61,10 @@ while loop:
     else:
         loop = True
 
-# align.TPS_apply(ebsd_im, folder + "TPS_out.tif")
-align.apply(ebsd_im, f"{folder}{algorithm}_out.tif")
+# align.apply(ebsd_im, f"{folder}{algorithm}_out.tif")
+im = io.imread(f"{folder}Al-EDS_Raw.tif", as_gray=True)
+im = np.around(255*im/im.max(), 0).astype(np.uint8)
+align.apply(im, f"{folder}Al-EDS_Corrected.tif")
 
 # View in the slider
 from matplotlib.widgets import Slider

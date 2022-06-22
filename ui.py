@@ -8,7 +8,7 @@ UI for running distortion correction
 import os
 import shutil
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, ALL, EventType
 
 # 3rd party packages
 import h5py
@@ -28,10 +28,11 @@ class App(tk.Tk):
         super().__init__(screenName, baseName)
         # handle main folder
         self.update_idletasks()
-        self.withdraw()
-        self.folder = os.getcwd()
-        self.select_folder_popup()
-        # self._easy_start()
+        # self.withdraw()
+        # self.folder = os.getcwd()
+        # self.select_folder_popup()
+        self._easy_start()
+        # 
         self.deiconify()
         # frames
         # frame_w = 1920
@@ -96,6 +97,12 @@ class App(tk.Tk):
         self.bse = tk.Canvas(self.viewer)
         self.bse.grid(row=0, column=1)
         self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
+        self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
+        self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
+        self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
+        self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
+        self.bse.bind("<ButtonPress-3>", lambda event: self.bse.scan_mark(event.x, event.y))
+        self.bse.bind("<B3-Motion>", lambda event: self.bse.scan_dragto(event.x, event.y, gain=1))
         # handle points
         self.all_points = {}
         self.current_points = {"ebsd": [], "bse": []}
@@ -105,12 +112,12 @@ class App(tk.Tk):
         # setup bot
         tps_l = tk.Label(self.bot, text="Thin-Plate Spline Correction:")
         tps_l.grid(row=0, column=0, sticky="e")
-        lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
-        lr_l.grid(row=1, column=0, sticky="e")
+        # lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
+        # lr_l.grid(row=1, column=0, sticky="e")
         tps = tk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"), fg="black")
         tps.grid(row=0, column=1, sticky="ew")
-        lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
-        lr.grid(row=1, column=1, sticky="ew")
+        # lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
+        # lr.grid(row=1, column=1, sticky="ew")
         tps_stack = tk.Button(
             self.bot,
             text="Apply to stack",
@@ -118,30 +125,30 @@ class App(tk.Tk):
             command=lambda: self.apply_3D("TPS"),
         )
         tps_stack.grid(row=0, column=2, sticky="ew")
-        lr_stack = tk.Button(
-            self.bot,
-            text="Apply to stack",
-            fg="black",
-            command=lambda: self.apply_3D("LR"),
-        )
-        lr_stack.grid(row=1, column=2, sticky="ew")
-        lr_deg_l = tk.Label(self.bot, text="Polynomial order:")
-        lr_deg_l.grid(row=1, column=3, sticky="e")
-        self.lr_degree = tk.Entry(self.bot)
-        self.lr_degree.insert(0, "3")
-        self.lr_degree.grid(row=1, column=4, sticky="ew")
+        # lr_stack = tk.Button(
+        #     self.bot,
+        #     text="Apply to stack",
+        #     fg="black",
+        #     command=lambda: self.apply_3D("LR"),
+        # )
+        # lr_stack.grid(row=1, column=2, sticky="ew")
+        # lr_deg_l = tk.Label(self.bot, text="Polynomial order:")
+        # lr_deg_l.grid(row=1, column=3, sticky="e")
+        # self.lr_degree = tk.Entry(self.bot)
+        # self.lr_degree.insert(0, "3")
+        # self.lr_degree.grid(row=1, column=4, sticky="ew")
         fixh5TPS = tk.Button(
             self.bot,
             text="Save TPS correction in DREAM3D file",
             command=lambda: self.apply_correction_to_h5("TPS"),
         )
         fixh5TPS.grid(row=0, column=5, columnspan=2)
-        fixh5TPS = tk.Button(
+        # fixh5LR = tk.Button(
             self.bot,
             text="Save LR correction in DREAM3D file",
             command=lambda: self.apply_correction_to_h5("LR"),
         )
-        fixh5TPS.grid(row=1, column=5, columnspan=2)
+        # fixh5LR.grid(row=1, column=5, columnspan=2)
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
@@ -270,6 +277,20 @@ class App(tk.Tk):
         self._save_CP_img(f"{i}_bse", self.bse_im, pts, "gray", "#34c295")
         print("Control point images exported successfully.")
 
+    def _zoom(self, event, view):
+        """Zooms in or out on the image in the specified view"""
+        print("Zooming not supported yet")
+        # factor = 1.001 * event.delta
+        # if view == 'ebsd':
+        #     x = self.ebsd.canvasx(event.x)
+        #     y = self.ebsd.canvasy(event.y)
+        #     self.ebsd.scale(ALL, x, y, factor, factor)
+        # elif view == 'bse':
+        #     x = self.bse.canvasx(event.x)
+        #     y = self.bse.canvasy(event.y)
+        #     self.bse.scale(ALL, x, y, factor, factor)
+            
+    
     def _update_viewers(self, *args):
         i = self.slice_num.get()
         key = self.ebsd_mode.get()
@@ -529,12 +550,12 @@ class App(tk.Tk):
         plt.show()
 
     def _easy_start(self):
-        # self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
-        self.BSE_DIR = "D:/Research/Ta_AM-Spalled/Data/3D/BSE/small/"
-        # self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
-        self.EBSD_DIR = "D:/Research/ta_AM-Spalled/Data/3D/Ta_AM-Spalled_aligned.dream3d"
-        # self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
-        self.folder = "D:/Research/scripts/Alignment/Ta_AM-Spalled_3D/"
+        self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
+        # self.BSE_DIR = "D:/Research/Ta_AM-Spalled/Data/3D/BSE/small/"
+        self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/new/CoNi16_aligned.dream3d"
+        # self.EBSD_DIR = "D:/Research/ta_AM-Spalled/Data/3D/Ta_AM-Spalled_aligned.dream3d"
+        self.folder = "D:/Research/scripts/Alignment/CoNi16_Rerun/"
+        # self.folder = "D:/Research/scripts/Alignment/Ta_AM-Spalled_3D/"
         self._open_BSE_stack(self.BSE_DIR)
         self._read_h5(self.EBSD_DIR)
         self.ebsd_mode_options = list(self.ebsd_data.keys())

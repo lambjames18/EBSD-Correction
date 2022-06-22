@@ -7,6 +7,7 @@ import os
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 import h5py
 import imageio
 from skimage import io, exposure
@@ -108,7 +109,7 @@ class Alignment:
 
     def TPS(
         self,
-        l,
+        size,
         affineOnly=False,
         checkParams=False,
         saveParams=False,
@@ -182,8 +183,8 @@ class Alignment:
         # at some point (x,y) in reference, the corresponding point in the distorted data is at
         # [X,Y] = a1 + ax*xRef + ay*yRef + sum(wi*Ui)
         # dimensions of reference image in pixels
-        lx = l[1]
-        ly = l[0]
+        lx = size[1]
+        ly = size[0]
 
         # for fineness of grid, if you want to fix all points, leave nx=lx, ny=ly
         nx = lx  # num points along reference x-direction, full correction will have nx = lx
@@ -279,26 +280,43 @@ class Alignment:
     #     return aligned_dataset
 
     def TPS_apply_3D(self, points, dataset):
+        # Linear function for interpolation
+        def linear(x, m, b):
+            return x * m + b
+        # Get slice numbers
         slice_numbers = list(points.keys())
-        params = []
+        print("Correcting stack from control points on slices {}".format(slice_numbers))
+        # Get the solution for each set of control points
+        params = {}
         for key in slice_numbers:
             self.source = np.array(points[key]["bse"])
             self.distorted = np.array(points[key]["ebsd"])
             self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
-            params.append(self.TPS_solution)
-        # Create function to interpolate coefficients
-        funcs = []
-        indices = np.zeros(dataset.shape[0], dtype=int)
+            params[key] = self.TPS_solution
+        # Interpolate the solutions
+        interpolations = {}
         for i in range(len(slice_numbers) - 1):
-            nums = np.array([slice_numbers[i], slice_numbers[i + 1]])
-            indices[nums[0] : nums[1] + 1] = i
-            ps = np.array([params[i], params[i + 1]])
-            f = interpolate.interp1d(nums, ps, axis=0)
-            funcs.append(f)
+            f = interpolate.interp1d([slice_numbers[i], slice_numbers[i + 1]], [params[slice_numbers[i]], params[slice_numbers[i + 1]]], axis=0)
+            interpolations[f"{slice_numbers[i]} {slice_numbers[i + 1]}"] = {index: f(index) for index in range(slice_numbers[i] + 1, slice_numbers[i + 1])}
+        solutions = np.zeros((dataset.shape[0], * self.TPS_solution.shape))
+        # Get the solution for each slice
+        for i in range(solutions.shape[0]):
+            if i in slice_numbers:
+                solutions[i] = params[i]
+            elif i not in slice_numbers:
+                max_lower = 0
+                min_upper = solutions.shape[0]
+                for j in range(len(slice_numbers) - 1):
+                    if slice_numbers[j] < i < slice_numbers[j + 1]:
+                        max_lower = slice_numbers[j]
+                        min_upper = slice_numbers[j + 1]
+                solutions[i] = interpolations[f"{max_lower} {min_upper}"][i]
+            else:
+                raise RuntimeError("Something went wrong while generating solutions")
         # Create transform object for each slice and warp
         aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
         for i in range(dataset.shape[0]):
-            sol = funcs[indices[i]](i)
+            sol = solutions[i]
             self.TPS_solution = sol
             aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
         return aligned_dataset
@@ -310,10 +328,10 @@ class Alignment:
         L = np.zeros((K + 3, K + 3))
         # make P in L
         L[:K, K] = 1
-        L[:K, K + 1 : K + 3] = cp
+        L[:K, K + 1: K + 3] = cp
         # make P.T in L
         L[K, :K] = 1
-        L[K + 1 :, :K] = cp.T
+        L[K + 1:, :K] = cp.T
         R = cdist(cp, cp, "euclidean")
         Rsq = R * R
         Rsq[R == 0] = 1  # avoid log(0) undefined, will correct itself as log(1) = 0, so U(0) = 0
@@ -441,20 +459,20 @@ class Alignment:
         return aligned_dataset
 
 
-### Functions ###
+# Functions #
 
 
 def resize_imgs(bse_path, size):
     if "." in bse_path:
         basename = bse_path[: bse_path.index(".")]
-        ext = bse_path[bse_path.index(".") :]
+        ext = bse_path[bse_path.index("."):]
         im = io.imread(bse_path)
         resized = tf.resize(im, size, anti_aliasing=True)
         matplotlib.image.imsave(basename + "_resized" + ext, resized, cmap="gray", dpi=1)
         i = 0
     else:
         bse_path = os.listdir(bse_path)
-        ext = bse_path[0][bse_path.index(".") :]
+        ext = bse_path[0][bse_path.index(".")]
         basename = [path[: path.index(".")] for path in bse_path]
         for i in range(len(bse_path)):
             im = io.imread(bse_path[i])
@@ -474,3 +492,63 @@ def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=
         im = np.sum(data, axis=2)
     io.imsave(fname, im)
     print("Saved the [red]{}[/] image to [blue]{}[/]".format(view, fname))
+
+
+def interactive_overlay(im0, im1):
+    """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
+    plt.close(81234)
+    fig = plt.figure(81234, figsize=(12, 8))
+    ax = fig.add_subplot(111)
+    max_r = im0.shape[0]
+    max_c = im0.shape[1]
+    ax.set_title("")
+    alphas = np.ones(im0.shape)
+    # Show images
+    ax.imshow(im1, cmap="gray")
+    im = ax.imshow(im0, alpha=alphas, cmap="gray")
+    # Put slider on
+    plt.subplots_adjust(left=0.15, bottom=0.15)
+    left = ax.get_position().x0
+    bot = ax.get_position().y0
+    width = ax.get_position().width
+    height = ax.get_position().height
+    axrow = plt.axes([left - 0.15, bot, 0.05, height])
+    axcol = plt.axes([left, bot - 0.15, width, 0.05])
+    row_slider = Slider(
+        ax=axrow,
+        label="Y pos",
+        valmin=0,
+        valmax=max_r,
+        valinit=max_r,
+        valstep=1,
+        orientation="vertical",
+    )
+    col_slider = Slider(
+        ax=axcol,
+        label="X pos",
+        valmin=0,
+        valmax=max_c,
+        valinit=max_c,
+        valstep=1,
+        orientation="horizontal",
+    )
+
+    # Define update functions
+    def update_row(val):
+        val = int(np.around(val, 0))
+        new_alphas = np.copy(alphas)
+        new_alphas[:val, :] = 0
+        im.set(alpha=new_alphas[::-1])
+        fig.canvas.draw_idle()
+
+    def update_col(val):
+        val = int(np.around(val, 0))
+        new_alphas = np.copy(alphas)
+        new_alphas[:, :val] = 0
+        im.set(alpha=new_alphas)
+        fig.canvas.draw_idle()
+
+    # Enable update functions
+    row_slider.on_changed(update_row)
+    col_slider.on_changed(update_col)
+    plt.show()
