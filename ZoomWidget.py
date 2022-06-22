@@ -30,10 +30,11 @@ class CanvasImage:
     def __init__(self, placeholder, path):
         """ Initialize the ImageFrame """
         self.imscale = 1.0  # scale for the canvas image zoom, public for outer classes
-        self.__delta = 1.3  # zoom magnitude
+        self.__delta = 1.1  # zoom magnitude
         self.__filter = Image.ANTIALIAS  # could be: NEAREST, BILINEAR, BICUBIC and ANTIALIAS
         self.__previous_state = 0  # previous state of the keyboard
         self.path = path  # path to the image, should be public for outer classes
+        ### self.im = im
         # Create ImageFrame in placeholder widget
         self.__imframe = ttk.Frame(placeholder)  # placeholder of the ImageFrame object
         # Vertical and horizontal scrollbars for canvas
@@ -42,16 +43,16 @@ class CanvasImage:
         hbar.grid(row=1, column=0, sticky='we')
         vbar.grid(row=0, column=1, sticky='ns')
         # Create canvas and bind it with scrollbars. Public for outer classes
-        self.canvas = tk.Canvas(self.__imframe, highlightthickness=0,
+        self.canvas = tk.Canvas(self.__imframe, highlightbackground="#007fff", bg="#007fff", cursor='tcross',
                                 xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-        self.canvas.grid(row=0, column=0, sticky='nswe')
+        self.canvas.grid(row=0, column=0, sticky='nswe', padx=20, pady=20)
         self.canvas.update()  # wait till canvas is created
         hbar.configure(command=self.__scroll_x)  # bind scrollbars to the canvas
         vbar.configure(command=self.__scroll_y)
         # Bind events to the Canvas
         self.canvas.bind('<Configure>', lambda event: self.__show_image())  # canvas is resized
-        self.canvas.bind('<ButtonPress-1>', self.__move_from)  # remember canvas position
-        self.canvas.bind('<B1-Motion>', self.__move_to)  # move canvas to the new position
+        self.canvas.bind('<ButtonPress-3>', self.__move_from)  # remember canvas position
+        self.canvas.bind('<B3-Motion>', self.__move_to)  # move canvas to the new position
         self.canvas.bind('<MouseWheel>', self.__wheel)  # zoom for Windows and MacOS, but not Linux
         self.canvas.bind('<Button-5>', self.__wheel)  # zoom for Linux, wheel scroll down
         self.canvas.bind('<Button-4>', self.__wheel)  # zoom for Linux, wheel scroll up
@@ -67,6 +68,7 @@ class CanvasImage:
             warnings.simplefilter('ignore')
             self.__image = Image.open(self.path)  # open image, but down't load it
         self.imwidth, self.imheight = self.__image.size  # public for outer classes
+        ### self.imheight, self.imwidth = self.im.shape
         if self.imwidth * self.imheight > self.__huge_size * self.__huge_size and \
            self.__image.tile[0][0] == 'raw':  # only raw images could be tiled
             self.__huge = True  # image is huge

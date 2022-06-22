@@ -104,6 +104,9 @@ class App(tk.Tk):
         # setup viewer_left
         self.ebsd = tk.Canvas(self.viewer_left, highlightbackground="#007fff", bg="#007fff", cursor='tcross')
         self.ebsd.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        """
+        self.ebsd = Zoom.CanvasImage(self.viewer_left, self.ebsd_img)
+        """
         # self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
         # self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
         # self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
@@ -364,6 +367,7 @@ class App(tk.Tk):
         self.ebsd["width"] = self.ebsd_im.shape[1]
         self.ebsd["height"] = self.ebsd_im.shape[0]
         self.ebsd_im_ppm = self._photo_image(self.ebsd_im)
+        print(type(self.ebsd_im_ppm))
         self.ebsd.create_image(0, 0, anchor="nw", image=self.ebsd_im_ppm)
 
     def _photo_image(self, image: np.ndarray):
