@@ -32,26 +32,31 @@ class App(tk.Tk):
         # self.folder = os.getcwd()
         # self.select_folder_popup()
         self._easy_start()
-        # 
         self.deiconify()
+        #
+        # Setup structure of window
         # frames
         # frame_w = 1920
         # frame_h = 1080
         # self.geometry(f"{frame_w}x{frame_h}")
         # self.resizable(False, False)
         self.top = tk.Frame(self)
-        self.viewer = tk.Frame(self)
+        self.viewer_left = tk.Frame(self)
+        self.viewer_right = tk.Frame(self)
         self.bot = tk.Frame(self)
         self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=3)
         self.rowconfigure(2, weight=1)
-        self.top.grid(row=0, column=0, sticky="nsew")
-        self.viewer.grid(row=1, column=0, sticky="nsew")
-        self.bot.grid(row=2, column=0, sticky="nsew")
-        self.viewer.rowconfigure(0, weight=1)
-        self.viewer.columnconfigure(0, weight=1)
-        self.viewer.columnconfigure(1, weight=1)
+        self.top.grid(row=0, column=0, columnspan=2, sticky="nsew")
+        self.viewer_left.grid(row=1, column=0, sticky="nsew")
+        self.viewer_right.grid(row=1, column=1, sticky="nsew")
+        self.bot.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        # self.viewer.rowconfigure(0, weight=1)
+        # self.viewer.columnconfigure(0, weight=1)
+        # self.viewer.columnconfigure(1, weight=1)
+        #
         # setup top
         self.show_points = tk.IntVar()
         self.show_points.set(1)
@@ -90,34 +95,35 @@ class App(tk.Tk):
             self.top, text="Export control point images", fg="black", command=self.export_CP_imgs
         )
         ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew")
-        # setup viewer
-        self.ebsd = tk.Canvas(self.viewer)
+        #
+        # setup viewer_left
+        self.ebsd = tk.Canvas(self.viewer_left)
         self.ebsd.grid(row=0, column=0)
         self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
-        self.bse = tk.Canvas(self.viewer)
-        self.bse.grid(row=0, column=1)
-        self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
         self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
         self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
         self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
+        #
+        # setup viewer right
+        self.bse = tk.Canvas(self.viewer_right)
+        self.bse.grid(row=0, column=1)
+        self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
         self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
         self.bse.bind("<ButtonPress-3>", lambda event: self.bse.scan_mark(event.x, event.y))
         self.bse.bind("<B3-Motion>", lambda event: self.bse.scan_dragto(event.x, event.y, gain=1))
+        #
         # handle points
         self.all_points = {}
         self.current_points = {"ebsd": [], "bse": []}
         self._read_points()
         # Update viewers
         self._update_viewers()
+        #
         # setup bot
         tps_l = tk.Label(self.bot, text="Thin-Plate Spline Correction:")
         tps_l.grid(row=0, column=0, sticky="e")
-        # lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
-        # lr_l.grid(row=1, column=0, sticky="e")
         tps = tk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"), fg="black")
         tps.grid(row=0, column=1, sticky="ew")
-        # lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
-        # lr.grid(row=1, column=1, sticky="ew")
         tps_stack = tk.Button(
             self.bot,
             text="Apply to stack",
@@ -125,6 +131,16 @@ class App(tk.Tk):
             command=lambda: self.apply_3D("TPS"),
         )
         tps_stack.grid(row=0, column=2, sticky="ew")
+        fixh5TPS = tk.Button(
+            self.bot,
+            text="Save TPS correction in DREAM3D file",
+            command=lambda: self.apply_correction_to_h5("TPS"),
+        )
+        fixh5TPS.grid(row=0, column=5, columnspan=2)
+        # lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
+        # lr_l.grid(row=1, column=0, sticky="e")
+        # lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
+        # lr.grid(row=1, column=1, sticky="ew")
         # lr_stack = tk.Button(
         #     self.bot,
         #     text="Apply to stack",
@@ -137,17 +153,11 @@ class App(tk.Tk):
         # self.lr_degree = tk.Entry(self.bot)
         # self.lr_degree.insert(0, "3")
         # self.lr_degree.grid(row=1, column=4, sticky="ew")
-        fixh5TPS = tk.Button(
-            self.bot,
-            text="Save TPS correction in DREAM3D file",
-            command=lambda: self.apply_correction_to_h5("TPS"),
-        )
-        fixh5TPS.grid(row=0, column=5, columnspan=2)
         # fixh5LR = tk.Button(
-            self.bot,
-            text="Save LR correction in DREAM3D file",
-            command=lambda: self.apply_correction_to_h5("LR"),
-        )
+        #     self.bot,
+        #     text="Save LR correction in DREAM3D file",
+        #     command=lambda: self.apply_correction_to_h5("LR"),
+        # )
         # fixh5LR.grid(row=1, column=5, columnspan=2)
 
     def select_folder_popup(self):

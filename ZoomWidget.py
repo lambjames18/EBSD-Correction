@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 
+
 class AutoScrollbar(ttk.Scrollbar):
     """ A scrollbar that hides itself if it's not needed. Works only for grid geometry manager """
     def set(self, lo, hi):
@@ -22,6 +23,7 @@ class AutoScrollbar(ttk.Scrollbar):
 
     def place(self, **kw):
         raise tk.TclError('Cannot use place with the widget ' + self.__class__.__name__)
+
 
 class CanvasImage:
     """ Display and zoom image """
@@ -49,10 +51,10 @@ class CanvasImage:
         # Bind events to the Canvas
         self.canvas.bind('<Configure>', lambda event: self.__show_image())  # canvas is resized
         self.canvas.bind('<ButtonPress-1>', self.__move_from)  # remember canvas position
-        self.canvas.bind('<B1-Motion>',     self.__move_to)  # move canvas to the new position
+        self.canvas.bind('<B1-Motion>', self.__move_to)  # move canvas to the new position
         self.canvas.bind('<MouseWheel>', self.__wheel)  # zoom for Windows and MacOS, but not Linux
-        self.canvas.bind('<Button-5>',   self.__wheel)  # zoom for Linux, wheel scroll down
-        self.canvas.bind('<Button-4>',   self.__wheel)  # zoom for Linux, wheel scroll up
+        self.canvas.bind('<Button-5>', self.__wheel)  # zoom for Linux, wheel scroll down
+        self.canvas.bind('<Button-4>', self.__wheel)  # zoom for Linux, wheel scroll up
         # Handle keystrokes in idle mode, because program slows down on a weak computers,
         # when too many key stroke events in the same time
         self.canvas.bind('<Key>', lambda event: self.canvas.after_idle(self.__keystroke, event))
@@ -120,10 +122,10 @@ class CanvasImage:
             self.__image.size = (self.imwidth, band)  # set size of the tile band
             self.__image.tile = [self.__tile]  # set tile
             cropped = self.__image.crop((0, 0, self.imwidth, band))  # crop tile band
-            image.paste(cropped.resize((w, int(band * k)+1), self.__filter), (0, int(i * k)))
+            image.paste(cropped.resize((w, int(band * k) + 1), self.__filter), (0, int(i * k)))
             i += band
             j += 1
-        print('\r' + 30*' ' + '\r', end='')  # hide printed string
+        print('\r' + 30 * ' ' + '\r', end='')  # hide printed string
         return image
 
     def redraw_figures(self):
@@ -169,13 +171,13 @@ class CanvasImage:
         box_scroll = [min(box_img_int[0], box_canvas[0]), min(box_img_int[1], box_canvas[1]),
                       max(box_img_int[2], box_canvas[2]), max(box_img_int[3], box_canvas[3])]
         # Horizontal part of the image is in the visible area
-        if  box_scroll[0] == box_canvas[0] and box_scroll[2] == box_canvas[2]:
-            box_scroll[0]  = box_img_int[0]
-            box_scroll[2]  = box_img_int[2]
+        if box_scroll[0] == box_canvas[0] and box_scroll[2] == box_canvas[2]:
+            box_scroll[0] = box_img_int[0]
+            box_scroll[2] = box_img_int[2]
         # Vertical part of the image is in the visible area
-        if  box_scroll[1] == box_canvas[1] and box_scroll[3] == box_canvas[3]:
-            box_scroll[1]  = box_img_int[1]
-            box_scroll[3]  = box_img_int[3]
+        if box_scroll[1] == box_canvas[1] and box_scroll[3] == box_canvas[3]:
+            box_scroll[1] = box_img_int[1]
+            box_scroll[3] = box_img_int[3]
         # Convert scroll region to tuple and to integer
         self.canvas.configure(scrollregion=tuple(map(int, box_scroll)))  # set scroll region
         x1 = max(box_canvas[0] - box_image[0], 0)  # get coordinates (x1,y1,x2,y2) of the image tile
@@ -194,8 +196,8 @@ class CanvasImage:
                 image = self.__image.crop((int(x1 / self.imscale), 0, int(x2 / self.imscale), h))
             else:  # show normal image
                 image = self.__pyramid[max(0, self.__curr_img)].crop(  # crop current img from pyramid
-                                    (int(x1 / self.__scale), int(y1 / self.__scale),
-                                     int(x2 / self.__scale), int(y2 / self.__scale)))
+                    (int(x1 / self.__scale), int(y1 / self.__scale),
+                     int(x2 / self.__scale), int(y2 / self.__scale)))
             #
             imagetk = ImageTk.PhotoImage(image.resize((int(x2 - x1), int(y2 - y1)), self.__filter))
             imageid = self.canvas.create_image(max(box_canvas[0], box_img_int[0]),
@@ -225,18 +227,21 @@ class CanvasImage:
         """ Zoom with mouse wheel """
         x = self.canvas.canvasx(event.x)  # get coordinates of the event on the canvas
         y = self.canvas.canvasy(event.y)
-        if self.outside(x, y): return  # zoom only inside image area
+        if self.outside(x, y):
+            return  # zoom only inside image area
         scale = 1.0
         # Respond to Linux (event.num) or Windows (event.delta) wheel event
         if event.num == 5 or event.delta == -120:  # scroll down, smaller
-            if round(self.__min_side * self.imscale) < 30: return  # image is less than 30 pixels
+            if round(self.__min_side * self.imscale) < 30:
+                return  # image is less than 30 pixels
             self.imscale /= self.__delta
-            scale        /= self.__delta
+            scale /= self.__delta
         if event.num == 4 or event.delta == 120:  # scroll up, bigger
             i = min(self.canvas.winfo_width(), self.canvas.winfo_height()) >> 1
-            if i < self.imscale: return  # 1 pixel is bigger than the visible area
+            if i < self.imscale:
+                return  # 1 pixel is bigger than the visible area
             self.imscale *= self.__delta
-            scale        *= self.__delta
+            scale *= self.__delta
         # Take appropriate image from the pyramid
         k = self.imscale * self.__ratio  # temporary coefficient
         self.__curr_img = min((-1) * int(math.log(k, self.__reduction)), len(self.__pyramid) - 1)
@@ -256,13 +261,13 @@ class CanvasImage:
             self.__previous_state = event.state  # remember the last keystroke state
             # Up, Down, Left, Right keystrokes
             if event.keycode in [68, 39, 102]:  # scroll right: keys 'D', 'Right' or 'Numpad-6'
-                self.__scroll_x('scroll',  1, 'unit', event=event)
+                self.__scroll_x('scroll', 1, 'unit', event=event)
             elif event.keycode in [65, 37, 100]:  # scroll left: keys 'A', 'Left' or 'Numpad-4'
                 self.__scroll_x('scroll', -1, 'unit', event=event)
             elif event.keycode in [87, 38, 104]:  # scroll up: keys 'W', 'Up' or 'Numpad-8'
                 self.__scroll_y('scroll', -1, 'unit', event=event)
             elif event.keycode in [83, 40, 98]:  # scroll down: keys 'S', 'Down' or 'Numpad-2'
-                self.__scroll_y('scroll',  1, 'unit', event=event)
+                self.__scroll_y('scroll', 1, 'unit', event=event)
 
     def crop(self, bbox):
         """ Crop rectangle from the image and return it """
@@ -287,6 +292,7 @@ class CanvasImage:
         self.canvas.destroy()
         self.__imframe.destroy()
 
+
 class MainWindow(ttk.Frame):
     """ Main window class """
     def __init__(self, mainframe, path):
@@ -299,12 +305,13 @@ class MainWindow(ttk.Frame):
         canvas = CanvasImage(self.master, path)  # create widget
         canvas.grid(row=0, column=0)  # show widget
 
-filename = './data/img_plg5.png'  # place path to your image here
-#filename = 'd:/Data/yandex_z18_1-1.tif'  # huge TIFF file 1.4 GB
-#filename = 'd:/Data/The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.jpg'
-#filename = 'd:/Data/The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.tif'
-#filename = 'd:/Data/heic1502a.tif'
-#filename = 'd:/Data/land_shallow_topo_east.tif'
-#filename = 'd:/Data/X1D5_B0002594.3FR'
-app = MainWindow(tk.Tk(), path=filename)
-app.mainloop()
+
+# filename = './data/img_plg5.png'  # place path to your image here
+# filename = 'd:/Data/yandex_z18_1-1.tif'  # huge TIFF file 1.4 GB
+# filename = 'd:/Data/The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.jpg'
+# filename = 'd:/Data/The_Garden_of_Earthly_Delights_by_Bosch_High_Resolution.tif'
+# filename = 'd:/Data/heic1502a.tif'
+# filename = 'd:/Data/land_shallow_topo_east.tif'
+# filename = 'd:/Data/X1D5_B0002594.3FR'
+# app = MainWindow(tk.Tk(), path=filename)
+# app.mainloop()
