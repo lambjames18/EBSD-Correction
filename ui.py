@@ -26,33 +26,35 @@ import ZoomWidget as Zoom
 class App(tk.Tk):
     def __init__(self, screenName=None, baseName=None):
         super().__init__(screenName, baseName)
+        self.tk.call('source', r"./theme/dark.tcl")
+        s = ttk.Style(self)
+        s.theme_use("azure-dark")
+        s.configure("TFrame", background="#333333")
+        s.configure("TLabel", background="#333333", foreground="#ffffff")
+        s.configure("TCheckbutton", background="#333333", foreground="#ffffff")
+        # self.configure(background="grey")
         # handle main folder
         self.update_idletasks()
-        # self.withdraw()
+        self.withdraw()
         # self.folder = os.getcwd()
         # self.select_folder_popup()
         self._easy_start()
         self.deiconify()
-        # Setup style
-        self.tk.call("source", "azure.tcl")
-        # self.tk.call("set", "tk_theme", "azure")
-        self.tk.call("set_theme", "azure")
-        #
         # Setup structure of window
         # frames
         # frame_w = 1920
         # frame_h = 1080
         # self.geometry(f"{frame_w}x{frame_h}")
         # self.resizable(False, False)
-        self.top = ttk.Frame(self)
-        self.viewer_left = ttk.Frame(self)
-        self.viewer_right = ttk.Frame(self)
-        self.bot = ttk.Frame(self)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=3)
         self.rowconfigure(2, weight=1)
+        self.top = ttk.Frame(self)
+        self.viewer_left = ttk.Frame(self)
+        self.viewer_right = ttk.Frame(self)
+        self.bot = ttk.Frame(self)
         self.top.grid(row=0, column=0, columnspan=2, sticky="nsew")
         self.viewer_left.grid(row=1, column=0, sticky="nsew")
         self.viewer_right.grid(row=1, column=1, sticky="nsew")
@@ -71,9 +73,8 @@ class App(tk.Tk):
             onvalue=1,
             offvalue=0,
             command=self._show_points,
-            # fg="black",
         )
-        view_pts.grid(row=0, column=0, sticky="ew")
+        view_pts.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         self.slice_options = np.arange(self.slice_min, self.slice_max + 1)
         self.slice_picker = ttk.Combobox(
             self.top,
@@ -84,7 +85,7 @@ class App(tk.Tk):
         )
         self.slice_picker["state"] = "readonly"
         self.slice_picker.bind("<<ComboboxSelected>>", self._update_viewers)
-        self.slice_picker.grid(row=0, column=1, sticky="ew")
+        self.slice_picker.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         self.ebsd_picker = ttk.Combobox(
             self.top,
             textvariable=self.ebsd_mode,
@@ -94,27 +95,27 @@ class App(tk.Tk):
         )
         self.ebsd_picker["state"] = "readonly"
         self.ebsd_picker.bind("<<ComboboxSelected>>", self._update_viewers)
-        self.ebsd_picker.grid(row=0, column=2, sticky="ew")
+        self.ebsd_picker.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
         ex_ctr_pt_ims = ttk.Button(
-            self.top, text="Export control point images", command=self.export_CP_imgs#, fg="black"
+            self.top, text="Export control point images", command=self.export_CP_imgs
         )
-        ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew")
+        ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
         #
         # setup viewer_left
-        self.ebsd = tk.Canvas(self.viewer_left)
-        self.ebsd.grid(row=0, column=0)
-        self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
-        self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
-        self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
-        self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
+        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground="#007fff", bg="#007fff", cursor='tcross')
+        self.ebsd.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        # self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
+        # self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
+        # self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
+        # self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
         #
         # setup viewer right
-        self.bse = tk.Canvas(self.viewer_right)
-        self.bse.grid(row=0, column=1)
+        self.bse = tk.Canvas(self.viewer_right, highlightbackground="#007fff", bg="#007fff", cursor='tcross')
+        self.bse.grid(row=0, column=1, pady=20, padx=20, sticky="nsew")
         self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
-        self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
-        self.bse.bind("<ButtonPress-3>", lambda event: self.bse.scan_mark(event.x, event.y))
-        self.bse.bind("<B3-Motion>", lambda event: self.bse.scan_dragto(event.x, event.y, gain=1))
+        # self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
+        # self.bse.bind("<ButtonPress-3>", lambda event: self.bse.scan_mark(event.x, event.y))
+        # self.bse.bind("<B3-Motion>", lambda event: self.bse.scan_dragto(event.x, event.y, gain=1))
         #
         # handle points
         self.all_points = {}
@@ -125,22 +126,21 @@ class App(tk.Tk):
         #
         # setup bot
         tps_l = ttk.Label(self.bot, text="Thin-Plate Spline Correction:")
-        tps_l.grid(row=0, column=0, sticky="e")
-        tps = ttk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"))# , fg="black")
-        tps.grid(row=0, column=1, sticky="ew")
+        tps_l.grid(row=0, column=0, sticky="e", padx=5, pady=5)
+        tps = ttk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"))
+        tps.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         tps_stack = ttk.Button(
             self.bot,
             text="Apply to stack",
-            # fg="black",
             command=lambda: self.apply_3D("TPS"),
         )
-        tps_stack.grid(row=0, column=2, sticky="ew")
+        tps_stack.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
         fixh5TPS = ttk.Button(
             self.bot,
             text="Save TPS correction in DREAM3D file",
             command=lambda: self.apply_correction_to_h5("TPS"),
         )
-        fixh5TPS.grid(row=0, column=5, columnspan=2)
+        fixh5TPS.grid(row=0, column=5, columnspan=2, sticky='ew', padx=5, pady=5)
         # lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
         # lr_l.grid(row=1, column=0, sticky="e")
         # lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
@@ -175,7 +175,7 @@ class App(tk.Tk):
         self.w.columnconfigure(0, weight=1)
         des = ttk.Label(self.w, text="Select relevant folders/files")#, fg="black")
         des.grid(row=0, column=0, sticky="ew")
-        folder = tk.Button(
+        folder = ttk.Button(
             self.w,
             text="Select folder for control points",
             command=self._get_FOLDER_dir,
@@ -304,7 +304,6 @@ class App(tk.Tk):
         #     y = self.bse.canvasy(event.y)
         #     self.bse.scale(ALL, x, y, factor, factor)
             
-    
     def _update_viewers(self, *args):
         i = self.slice_num.get()
         key = self.ebsd_mode.get()
@@ -335,13 +334,13 @@ class App(tk.Tk):
     def _show_points(self):
         """Either turns on or turns off control point viewing"""
         if self.show_points.get() == 1:
-            pc = "#c2344e"
+            pc = "#FEBC11"
             for i, p in enumerate(self.current_points["ebsd"]):
                 self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc)
                 self.ebsd.create_text(
                     p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold")
                 )
-            pc = "#34c295"
+            pc = "#EF5645"
             for i, p in enumerate(self.current_points["bse"]):
                 self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc)
                 self.bse.create_text(
@@ -582,5 +581,11 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
+    # s = ttk.Style()
+    # print(s.theme_names())
+    # s.theme_use("xpnative")
+    # root = tk.Tk()
+    # root.tk.call("source", "azure.tcl")
+    # root.tk.call("set_theme", "dark")
     app = App()
     app.mainloop()
