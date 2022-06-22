@@ -16,11 +16,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io
-
 from rich import print
 
 # Local files
 import core
+import ZoomWidget as Zoom
 
 
 class App(tk.Tk):
@@ -33,6 +33,10 @@ class App(tk.Tk):
         # self.select_folder_popup()
         self._easy_start()
         self.deiconify()
+        # Setup style
+        self.tk.call("source", "azure.tcl")
+        # self.tk.call("set", "tk_theme", "azure")
+        self.tk.call("set_theme", "azure")
         #
         # Setup structure of window
         # frames
@@ -40,10 +44,10 @@ class App(tk.Tk):
         # frame_h = 1080
         # self.geometry(f"{frame_w}x{frame_h}")
         # self.resizable(False, False)
-        self.top = tk.Frame(self)
-        self.viewer_left = tk.Frame(self)
-        self.viewer_right = tk.Frame(self)
-        self.bot = tk.Frame(self)
+        self.top = ttk.Frame(self)
+        self.viewer_left = ttk.Frame(self)
+        self.viewer_right = ttk.Frame(self)
+        self.bot = ttk.Frame(self)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
@@ -60,14 +64,14 @@ class App(tk.Tk):
         # setup top
         self.show_points = tk.IntVar()
         self.show_points.set(1)
-        view_pts = tk.Checkbutton(
+        view_pts = ttk.Checkbutton(
             self.top,
             text="Show points",
             variable=self.show_points,
             onvalue=1,
             offvalue=0,
             command=self._show_points,
-            fg="black",
+            # fg="black",
         )
         view_pts.grid(row=0, column=0, sticky="ew")
         self.slice_options = np.arange(self.slice_min, self.slice_max + 1)
@@ -91,8 +95,8 @@ class App(tk.Tk):
         self.ebsd_picker["state"] = "readonly"
         self.ebsd_picker.bind("<<ComboboxSelected>>", self._update_viewers)
         self.ebsd_picker.grid(row=0, column=2, sticky="ew")
-        ex_ctr_pt_ims = tk.Button(
-            self.top, text="Export control point images", fg="black", command=self.export_CP_imgs
+        ex_ctr_pt_ims = ttk.Button(
+            self.top, text="Export control point images", command=self.export_CP_imgs#, fg="black"
         )
         ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew")
         #
@@ -120,18 +124,18 @@ class App(tk.Tk):
         self._update_viewers()
         #
         # setup bot
-        tps_l = tk.Label(self.bot, text="Thin-Plate Spline Correction:")
+        tps_l = ttk.Label(self.bot, text="Thin-Plate Spline Correction:")
         tps_l.grid(row=0, column=0, sticky="e")
-        tps = tk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"), fg="black")
+        tps = ttk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"))# , fg="black")
         tps.grid(row=0, column=1, sticky="ew")
-        tps_stack = tk.Button(
+        tps_stack = ttk.Button(
             self.bot,
             text="Apply to stack",
-            fg="black",
+            # fg="black",
             command=lambda: self.apply_3D("TPS"),
         )
         tps_stack.grid(row=0, column=2, sticky="ew")
-        fixh5TPS = tk.Button(
+        fixh5TPS = ttk.Button(
             self.bot,
             text="Save TPS correction in DREAM3D file",
             command=lambda: self.apply_correction_to_h5("TPS"),
@@ -169,30 +173,30 @@ class App(tk.Tk):
         for i in range(5):
             self.w.rowconfigure(i, weight=1)
         self.w.columnconfigure(0, weight=1)
-        des = tk.Label(self.w, text="Select relevant folders/files", fg="black")
+        des = ttk.Label(self.w, text="Select relevant folders/files")#, fg="black")
         des.grid(row=0, column=0, sticky="ew")
         folder = tk.Button(
             self.w,
             text="Select folder for control points",
             command=self._get_FOLDER_dir,
-            fg="black",
+            #fg="black",
         )
         folder.grid(row=1, column=0, sticky="nsew")
-        self.w.d3d = tk.Button(
-            self.w, text="Select Dream3d file", command=self._get_EBSD_dir, fg="black"
+        self.w.d3d = ttk.Button(
+            self.w, text="Select Dream3d file", command=self._get_EBSD_dir, #fg="black"
         )
         self.w.d3d.grid(row=2, column=0, sticky="nsew")
         self.w.d3d["state"] = "disabled"
-        self.w.bse = tk.Button(
-            self.w, text="Select BSE folder", command=self._get_BSE_dir, fg="black"
+        self.w.bse = ttk.Button(
+            self.w, text="Select BSE folder", command=self._get_BSE_dir, #fg="black"
         )
         self.w.bse.grid(row=3, column=0, sticky="nsew")
         self.w.bse["state"] = "disabled"
-        self.w.close = tk.Button(
+        self.w.close = ttk.Button(
             self.w,
             text="Close (reading in data will take a few moments)",
             command=self._startup_items,
-            fg="black",
+            #fg="black",
         )
         self.w.close["state"] = "disabled"
         self.w.close.grid(row=4, column=0, sticky="nsew")
@@ -215,7 +219,7 @@ class App(tk.Tk):
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         if algo == "TPS":
             save_name = os.path.join(self.folder, "TPS_mapping.npy")
-            align.get_solution(l=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
+            align.get_solution(size=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
         elif algo == "LR":
             save_name = os.path.join(self.folder, "LR_mapping.npy")
             align.get_solution(
