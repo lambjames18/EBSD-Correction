@@ -301,8 +301,12 @@ class Alignment:
         solutions = np.zeros((dataset.shape[0], * self.TPS_solution.shape))
         # Get the solution for each slice
         for i in range(solutions.shape[0]):
+            found_match = False
             if i in slice_numbers:
                 solutions[i] = params[i]
+                found_match = True
+                print("Found match for slice {}".format(i))
+                continue
             elif i not in slice_numbers:
                 max_lower = 0
                 min_upper = solutions.shape[0]
@@ -310,7 +314,17 @@ class Alignment:
                     if slice_numbers[j] < i < slice_numbers[j + 1]:
                         max_lower = slice_numbers[j]
                         min_upper = slice_numbers[j + 1]
-                solutions[i] = interpolations[f"{max_lower} {min_upper}"][i]
+                        solutions[i] = interpolations[f"{max_lower} {min_upper}"][i]
+                        found_match = True
+                        print("Found interpolation ({} {}) match for slice {}".format(max_lower, min_upper, i))
+                if not found_match:
+                    # Copy the closest slice
+                    if i < slice_numbers[0]:
+                        solutions[i] = params[0]
+                    elif i > slice_numbers[-1]:
+                        solutions[i] = params[-1]
+                    raise Warning("Slice {} is above/below the last/first slice with control points, extrapolating the closest slice.".format(i))
+                        
             else:
                 raise RuntimeError("Something went wrong while generating solutions")
         # Create transform object for each slice and warp

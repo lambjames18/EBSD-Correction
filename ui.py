@@ -26,13 +26,7 @@ import ZoomWidget as Zoom
 class App(tk.Tk):
     def __init__(self, screenName=None, baseName=None):
         super().__init__(screenName, baseName)
-        self.tk.call('source', r"./theme/dark.tcl")
-        s = ttk.Style(self)
-        s.theme_use("azure-dark")
-        s.configure("TFrame", background="#333333")
-        s.configure("TLabel", background="#333333", foreground="#ffffff")
-        s.configure("TCheckbutton", background="#333333", foreground="#ffffff")
-        # self.configure(background="grey")
+        self._style_call("dark")
         # handle main folder
         self.update_idletasks()
         self.withdraw()
@@ -102,7 +96,7 @@ class App(tk.Tk):
         ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
         #
         # setup viewer_left
-        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground="#007fff", bg="#007fff", cursor='tcross')
+        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.ebsd.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
         """
         self.ebsd = Zoom.CanvasImage(self.viewer_left, self.ebsd_img)
@@ -113,7 +107,7 @@ class App(tk.Tk):
         # self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
         #
         # setup viewer right
-        self.bse = tk.Canvas(self.viewer_right, highlightbackground="#007fff", bg="#007fff", cursor='tcross')
+        self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.bse.grid(row=0, column=1, pady=20, padx=20, sticky="nsew")
         self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
         # self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
@@ -169,40 +163,42 @@ class App(tk.Tk):
 
     def select_folder_popup(self):
         self.w = tk.Toplevel(self)
+        self.w.rowconfigure(0, weight=1)
+        self.w.columnconfigure(0, weight=1)
+        master = ttk.Frame(self.w)
+        master.grid(row=0, column=0, sticky="nsew")
         frame_w = 1920 // 6
         frame_h = 1080 // 5
         self.w.geometry(f"{frame_w}x{frame_h}")
         self.resizable(False, False)
         for i in range(5):
-            self.w.rowconfigure(i, weight=1)
-        self.w.columnconfigure(0, weight=1)
-        des = ttk.Label(self.w, text="Select relevant folders/files")#, fg="black")
-        des.grid(row=0, column=0, sticky="ew")
+            master.rowconfigure(i, weight=1)
+        master.columnconfigure(0, weight=1)
+        des = ttk.Label(master, text="Select relevant folders/files", justify='center')
+        des.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         folder = ttk.Button(
-            self.w,
+            master,
             text="Select folder for control points",
             command=self._get_FOLDER_dir,
-            #fg="black",
         )
-        folder.grid(row=1, column=0, sticky="nsew")
+        folder.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.w.d3d = ttk.Button(
-            self.w, text="Select Dream3d file", command=self._get_EBSD_dir, #fg="black"
+            master, text="Select Dream3d file", command=self._get_EBSD_dir,
         )
-        self.w.d3d.grid(row=2, column=0, sticky="nsew")
+        self.w.d3d.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.w.d3d["state"] = "disabled"
         self.w.bse = ttk.Button(
-            self.w, text="Select BSE folder", command=self._get_BSE_dir, #fg="black"
+            master, text="Select BSE folder", command=self._get_BSE_dir,
         )
-        self.w.bse.grid(row=3, column=0, sticky="nsew")
+        self.w.bse.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
         self.w.bse["state"] = "disabled"
         self.w.close = ttk.Button(
-            self.w,
+            master,
             text="Close (reading in data will take a few moments)",
             command=self._startup_items,
-            #fg="black",
         )
         self.w.close["state"] = "disabled"
-        self.w.close.grid(row=4, column=0, sticky="nsew")
+        self.w.close.grid(row=4, column=0, sticky="nsew", padx=5, pady=5)
         self.wait_window(self.w)
 
     def coords(self, pos, event):
@@ -367,7 +363,6 @@ class App(tk.Tk):
         self.ebsd["width"] = self.ebsd_im.shape[1]
         self.ebsd["height"] = self.ebsd_im.shape[0]
         self.ebsd_im_ppm = self._photo_image(self.ebsd_im)
-        print(type(self.ebsd_im_ppm))
         self.ebsd.create_image(0, 0, anchor="nw", image=self.ebsd_im_ppm)
 
     def _photo_image(self, image: np.ndarray):
@@ -565,6 +560,28 @@ class App(tk.Tk):
             )
             slice_slider.on_changed(change_image)
         plt.show()
+    
+    def _style_call(self, style='dark'):
+        if style == 'dark':
+            self.bg = "#333333"
+            self.fg = "#ffffff"
+            self.hl = "#007fff"
+            self.tk.call('source', r"./theme/dark.tcl")
+            s = ttk.Style(self)
+            s.theme_use("azure-dark")
+            s.configure("TFrame", background=self.bg)
+            s.configure("TLabel", background=self.bg, foreground=self.fg)
+            s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
+        elif style == 'light':
+            self.bg = "#ffffff"
+            self.fg = "#000000"
+            self.hl = "#007fff"
+            self.tk.call('source', r"./theme/light.tcl")
+            s = ttk.Style(self)
+            s.theme_use("azure-light")
+            s.configure("TFrame", background=self.bg)
+            s.configure("TLabel", background=self.bg, foreground=self.fg)
+            s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
 
     def _easy_start(self):
         self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
