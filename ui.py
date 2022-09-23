@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io
 from rich import print
+import imageio
 
 # Local files
 import core
@@ -30,9 +31,7 @@ class App(tk.Tk):
         # handle main folder
         self.update_idletasks()
         self.withdraw()
-        # self.folder = os.getcwd()
-        # self.select_folder_popup()
-        self._easy_start()
+        self.folder = os.getcwd()
         self.deiconify()
         # Setup structure of window
         # frames
@@ -57,6 +56,16 @@ class App(tk.Tk):
         # self.viewer.columnconfigure(0, weight=1)
         # self.viewer.columnconfigure(1, weight=1)
         #
+        # setup menubar
+        self.menu = tk.Menu(self)
+        filemenu = tk.Menu(self.menu, tearoff=0)
+        filemenu.add_command(label="Open 3D", command=self.select_3d_data_popup)
+        filemenu.add_command(label="Export 3D", command=lambda: self.apply_correction_to_h5("TPS"))
+        filemenu.add_command(label="Open 2D", command=self.select_2d_data_popup)
+        filemenu.add_command(label="Export 2D", command=lambda: self.apply_correction_to_tif("TPS"))
+        filemenu.add_command(label="Easy start", command=self._easy_start)
+        self.menu.add_cascade(label="File", menu=filemenu)
+        self.config(menu=self.menu)
         # setup top
         self.show_points = tk.IntVar()
         self.show_points.set(1)
@@ -69,7 +78,9 @@ class App(tk.Tk):
             command=self._show_points,
         )
         view_pts.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
-        self.slice_options = np.arange(self.slice_min, self.slice_max + 1)
+        self.slice_num = tk.IntVar()
+        self.slice_options = np.arange(0, 2, 1)
+        self.slice_num.set(self.slice_options[0])
         self.slice_picker = ttk.Combobox(
             self.top,
             textvariable=self.slice_num,
@@ -77,9 +88,12 @@ class App(tk.Tk):
             height=10,
             width=5,
         )
-        self.slice_picker["state"] = "readonly"
+        self.slice_picker["state"] = "disabled"
         self.slice_picker.bind("<<ComboboxSelected>>", self._update_viewers)
         self.slice_picker.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        self.ebsd_mode = tk.StringVar()
+        self.ebsd_mode_options = ["Intensity"]
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
         self.ebsd_picker = ttk.Combobox(
             self.top,
             textvariable=self.ebsd_mode,
@@ -87,7 +101,7 @@ class App(tk.Tk):
             height=10,
             width=20,
         )
-        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker["state"] = "disabled"
         self.ebsd_picker.bind("<<ComboboxSelected>>", self._update_viewers)
         self.ebsd_picker.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
         ex_ctr_pt_ims = ttk.Button(
@@ -117,27 +131,25 @@ class App(tk.Tk):
         # handle points
         self.all_points = {}
         self.current_points = {"ebsd": [], "bse": []}
-        self._read_points()
-        # Update viewers
-        self._update_viewers()
         #
         # setup bot
         tps_l = ttk.Label(self.bot, text="Thin-Plate Spline Correction:")
         tps_l.grid(row=0, column=0, sticky="e", padx=5, pady=5)
         tps = ttk.Button(self.bot, text="View slice", command=lambda: self.apply("TPS"))
         tps.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        tps_stack = ttk.Button(
+        self.tps_stack = ttk.Button(
             self.bot,
             text="Apply to stack",
             command=lambda: self.apply_3D("TPS"),
+            state="disabled",
         )
-        tps_stack.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
-        fixh5TPS = ttk.Button(
-            self.bot,
-            text="Save TPS correction in DREAM3D file",
-            command=lambda: self.apply_correction_to_h5("TPS"),
-        )
-        fixh5TPS.grid(row=0, column=5, columnspan=2, sticky='ew', padx=5, pady=5)
+        self.tps_stack.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
+        # fixh5TPS = ttk.Button(
+        #     self.bot,
+        #     text="Save TPS correction in DREAM3D file",
+        #     command=lambda: self.apply_correction_to_h5("TPS"),
+        # )
+        # fixh5TPS.grid(row=0, column=5, columnspan=2, sticky='ew', padx=5, pady=5)
         # lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
         # lr_l.grid(row=1, column=0, sticky="e")
         # lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
@@ -161,7 +173,7 @@ class App(tk.Tk):
         # )
         # fixh5LR.grid(row=1, column=5, columnspan=2)
 
-    def select_folder_popup(self):
+    def select_3d_data_popup(self):
         self.w = tk.Toplevel(self)
         self.w.rowconfigure(0, weight=1)
         self.w.columnconfigure(0, weight=1)
@@ -200,6 +212,28 @@ class App(tk.Tk):
         self.w.close["state"] = "disabled"
         self.w.close.grid(row=4, column=0, sticky="nsew", padx=5, pady=5)
         self.wait_window(self.w)
+    
+    def select_2d_data_popup(self):
+        bse_path = filedialog.askopenfilename(title="Select control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=self.folder)
+        bse_path_folder = os.path.dirname(bse_path)
+        ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=bse_path_folder)
+        bse_im = io.imread(bse_path, as_gray=True)
+        self.ebsd_im = io.imread(ebsd_path, as_gray=True)
+        self.ebsd_mode_options = ["Intensity"]
+        self.ebsd_mode = tk.StringVar()
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.slice_min = 0
+        self.slice_max = 0
+        self.slice_num = tk.IntVar()
+        self.slice_num.set(self.slice_min)
+        self.bse_imgs = np.array(bse_im).reshape(1, bse_im.shape[0], bse_im.shape[1])
+        self.ebsd_data = {"Intensity": np.array(self.ebsd_im).reshape(1, self.ebsd_im.shape[0], self.ebsd_im.shape[1], 1)}
+        # Configure UI
+        self.tps_stack["state"] = "disabled"
+        self.slice_picker["state"] = "disabled"
+        self.ebsd_picker["state"] = "disabled"
+        # Update the viewers
+        self._update_viewers()
 
     def coords(self, pos, event):
         """Responds to a click on an image. Redraws the images after the click. Also saves the click location in a file."""
@@ -280,6 +314,24 @@ class App(tk.Tk):
             # Write new stack to the h5
             h5["DataContainers/ImageDataContainer/CellData/" + key][...] = ebsd_stack
         h5.close()
+        print("[bold green]Correction complete![/bold green]")
+
+    def apply_correction_to_tif(self, algo):
+        # Get the control points
+        referencePoints = np.array(self.current_points["bse"])
+        distortedPoints = np.array(self.current_points["ebsd"])
+        align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
+        # Create the output filename
+        EBSD_DIR_CORRECTED = (w := os.path.splitext(self.EBSD_DIR))[0] + "_corrected" + w[1]
+        if algo == "TPS":
+            # Align the image
+            aligned = align.TPS(self.bse_im.shape)
+            # Correct dtype
+            if aligned.dtype != np.uint16:
+                aligned = (aligned / aligned.max() * 65535).astype(np.uint16)
+        elif algo == "LR":
+            raise ValueError("algo must be TPS at this time. LR is not supported")
+        imageio.mimsave(EBSD_DIR_CORRECTED, aligned)
         print("[bold green]Correction complete![/bold green]")
 
     def export_CP_imgs(self):
@@ -400,13 +452,20 @@ class App(tk.Tk):
         self._open_BSE_stack(self.BSE_DIR)
         self._read_h5(self.EBSD_DIR)
         self.ebsd_mode_options = list(self.ebsd_data.keys())
-        self.ebsd_mode = tk.StringVar()
         self.ebsd_mode.set(self.ebsd_mode_options[0])
         self.slice_min = 0
         self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
-        self.slice_num = tk.IntVar()
         self.slice_num.set(self.slice_min)
         self.w.destroy()
+        # Configure UI
+        self.tps_stack["state"] = "enabled"
+        self.slice_picker["state"] = "readonly"
+        self.slice_picker["values"] = np.arange(self.slice_min, self.slice_max + 1)
+        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker["values"] = self.ebsd_mode_options
+        # Read points and setuyp viewers
+        self._read_points()
+        self._update_viewers()
         print("Startup complete")
 
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):

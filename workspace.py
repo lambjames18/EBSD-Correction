@@ -11,9 +11,9 @@ import numpy as np
 
 ####
 # Create the control points
-folder = "Alumina/"  # Folder where to save everything, can be empty ""
-bse = "BSE_Raw"  # The name of the reference image (should be tif) without the extension
-ebsd = "SEM-EDS_Raw"  # The name of the distorted image (should be tif) without the extension
+folder = "D:/Research/DMREF/EDS-slices/488/"  # Folder where to save everything, can be empty ""
+bse = "BSE488"  # The name of the reference image (should be tif) without the extension
+ebsd = "EDS488"  # The name of the distorted image (should be tif) without the extension
 algorithm = "TPS"  # Select the algorithm, either LR or TPS
 view_overlay = True  # Overlays the corrected distortion over the control image with sliders
 ####
@@ -42,7 +42,7 @@ bse_ctr_pts = np.loadtxt(bse_ctr_path)
 ebsd_ctr_pts = np.loadtxt(ebsd_ctr_path)
 align = core.Alignment(bse_ctr_pts, ebsd_ctr_pts, algorithm=algorithm)
 loop = True
-kwargs = {"l": bse_im.shape}
+kwargs = dict(size=bse_im.shape)
 # kwargs = {}
 while loop:
     # pick = input("Find alignment solution? (y/n) ")
@@ -61,20 +61,24 @@ while loop:
     else:
         loop = True
 
-# align.apply(ebsd_im, f"{folder}{algorithm}_out.tif")
-im = io.imread(f"{folder}Al-EDS_Raw.tif", as_gray=True)
-im = np.around(255*im/im.max(), 0).astype(np.uint8)
-align.apply(im, f"{folder}Al-EDS_Corrected.tif")
+# correct intensity signal
+im = io.imread(f"{folder}{ebsd}.tif", as_gray=True)
+im = np.around(2**16 * im / im.max(), 0).astype(np.uint16)
+align.apply(im, f"{folder}{ebsd}_Corrected.tif")
+# Correct aluminium signal 
+im = io.imread(f"{folder}Al{ebsd[-3:]}.tif", as_gray=True)
+im = np.around(2**16 * im / im.max(), 0).astype(np.uint16)
+align.apply(im, f"{folder}Al{ebsd[-3:]}_Corrected.tif")
 
 # View in the slider
 from matplotlib.widgets import Slider
 
 # Read in images
-im0 = io.imread(folder + f"{algorithm}_out.tif")
-im1 = io.imread(folder + bse + ".tif")
+im0 = io.imread(f"{folder}{ebsd}_Corrected.tif")[400:3800, 1000:5000]
+im1 = io.imread(folder + bse + ".tif")[400:3800, 1000:5000]
 
 # Setup figure
-fig = plt.figure(figsize=(14, 10))
+fig = plt.figure(figsize=(12, 8))
 ax = fig.add_subplot(111)
 ax.set_title(f"{algorithm.upper()} Output")
 

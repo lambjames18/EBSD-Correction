@@ -37,11 +37,12 @@ class SelectCoords:
         self.txt_path = f"{self.save_folder}ctr_pts_{self.name}.txt"
         self.im_path = f"{self.save_folder}{self.name}.{ext}"
         self.check_txt_file()
-        self.im = exposure.equalize_hist(io.imread(self.im_path), nbins=512)
+        # self.im = exposure.equalize_hist(io.imread(self.im_path), nbins=512)
+        self.im = io.imread(self.im_path)
         self.get_coords()
 
     def get_coords(self):
-        self.fig1 = plt.figure(1, figsize=(12, 8))
+        self.fig1 = plt.figure(1, figsize=(14, 10))
         ax1 = self.fig1.add_subplot(111)
         ax1.imshow(self.im, cmap=self.cmap)
         self.cid1 = self.fig1.canvas.mpl_connect("button_press_event", self.onclick)
