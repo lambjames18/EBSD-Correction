@@ -11,9 +11,9 @@ import numpy as np
 
 ####
 # Create the control points
-folder = "D:/Research/DMREF/EDS-slices/488/"  # Folder where to save everything, can be empty ""
-bse = "BSE488"  # The name of the reference image (should be tif) without the extension
-ebsd = "EDS488"  # The name of the distorted image (should be tif) without the extension
+folder = "D:/Research/DMREF/EDS-slices/484/"  # Folder where to save everything, can be empty ""
+bse = "BSE484"  # The name of the reference image (should be tif) without the extension
+ebsd = "EDS484"  # The name of the distorted image (should be tif) without the extension
 algorithm = "TPS"  # Select the algorithm, either LR or TPS
 view_overlay = True  # Overlays the corrected distortion over the control image with sliders
 ####
@@ -74,8 +74,8 @@ align.apply(im, f"{folder}Al{ebsd[-3:]}_Corrected.tif")
 from matplotlib.widgets import Slider
 
 # Read in images
-im0 = io.imread(f"{folder}{ebsd}_Corrected.tif")[400:3800, 1000:5000]
-im1 = io.imread(folder + bse + ".tif")[400:3800, 1000:5000]
+im0 = io.imread(f"{folder}{ebsd}_Corrected.tif")
+im1 = io.imread(folder + bse + ".tif")
 
 # Setup figure
 fig = plt.figure(figsize=(12, 8))

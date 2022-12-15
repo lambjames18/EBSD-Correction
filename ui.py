@@ -108,14 +108,34 @@ class App(tk.Tk):
             self.top, text="Export control point images", command=self.export_CP_imgs
         )
         ex_ctr_pt_ims.grid(row=0, column=3, sticky="ew", padx=5, pady=5)
+        inherit_label = ttk.Label(self.top, text="Inherit from slice:")
+        inherit_label.grid(row=0, column=5, sticky="ew", padx=5, pady=5)
+        self.inherit_select = tk.StringVar()
+        self.inherit_select_options = ["None"]
+        self.inherit_select.set(self.inherit_select_options[0])
+        self.inherit_picker = ttk.Combobox(
+            self.top,
+            textvariable=self.inherit_select,
+            values=self.inherit_select_options,
+            height=10,
+            width=10)
+        self.inherit_picker["state"] = "disabled"
+        self.inherit_picker.bind("<<ComboboxSelected>>", self.inherit_action)
+        self.inherit_picker.grid(row=0, column=6, sticky="ew", padx=5, pady=5)
         #
+        # setup dragging
+        self._drag_data = {"item": None}
         # setup viewer_left
         self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.ebsd.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        # self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
+        self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
+        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.move_point("start", "ebsd", arg))
+        self.ebsd.bind("<ButtonRelease-1>", lambda arg: self.move_point("stop", "ebsd", arg))
+        self.ebsd.bind("<B1-Motion>", lambda arg: self.move_point("move", "ebsd", arg))
         """
         self.ebsd = Zoom.CanvasImage(self.viewer_left, self.ebsd_img)
         """
-        # self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
         # self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
         # self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
         # self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
@@ -123,7 +143,11 @@ class App(tk.Tk):
         # setup viewer right
         self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.bse.grid(row=0, column=1, pady=20, padx=20, sticky="nsew")
-        self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
+        # self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
+        self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
+        self.bse.bind("<ButtonPress-1>", lambda arg: self.move_point("start", "bse", arg))
+        self.bse.bind("<ButtonRelease-1>", lambda arg: self.move_point("stop", "bse", arg))
+        self.bse.bind("<B1-Motion>", lambda arg: self.move_point("move", "bse", arg))
         # self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
         # self.bse.bind("<ButtonPress-3>", lambda event: self.bse.scan_mark(event.x, event.y))
         # self.bse.bind("<B3-Motion>", lambda event: self.bse.scan_dragto(event.x, event.y, gain=1))
@@ -243,7 +267,89 @@ class App(tk.Tk):
         path = os.path.join(self.folder, f"ctr_pts_{i}_{pos}.txt")
         with open(path, "a", encoding="utf8") as output:
             output.write(f"{event.x} {event.y}\n")
+        self._update_inherit_options()
         self._show_points()
+    
+    def remove_coords(self, pos, event):
+        """Remove the point closes to the clicked location, the point should be removed from both images"""
+        if pos == 'bse':
+            closest = self.bse.find_closest(event.x, event.y)[0]
+            tag = self.bse.itemcget(closest, "tags")
+        elif pos == 'ebsd':
+            closest = self.ebsd.find_closest(event.x, event.y)[0]
+            tag = self.ebsd.itemcget(closest, "tags")
+        if "current" in tag:
+            tag = tag.replace("current", "").strip()
+        if tag == "":
+            print("No point to remove")
+            return
+        self.current_points[pos].pop(int(tag))
+        self.all_points[self.slice_num.get()] = self.current_points
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_{pos}.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points[pos])):
+                x, y = self.current_points[pos][i]
+                output.write(f"{int(x)} {int(y)}\n")
+        self._update_inherit_options()
+        self._update_viewers()
+
+    def move_point(self, state, pos, event):
+        if pos == 'ebsd':
+            alias = self.ebsd
+        elif pos == 'bse':
+            alias = self.bse
+        if event.state % 2 == 1:
+            alias.config(cursor="fleur")
+            if state == 'start':
+                print("Starting movement")
+                closest = alias.find_closest(event.x, event.y, halo=10)[0]
+                tag = alias.itemcget(closest, "tags")
+                if "current" in tag:
+                    tag = tag.replace("current", "").strip()
+                if tag == "": return
+                self._drag_data["item"] = tag
+            elif state == 'stop':
+                print("Stopping movement")
+                self._drag_data["item"] = None
+                alias.config(cursor="tcross")
+                self._update_inherit_options()
+            elif state == 'move':
+                if self._drag_data["item"] is None: return
+                self.current_points[pos][int(self._drag_data["item"])][0] = event.x
+                self.current_points[pos][int(self._drag_data["item"])][1] = event.y
+                self._update_viewers()
+        else:
+            alias.config(cursor="tcross")
+            if state == 'start':
+                self.coords(pos, event)
+
+    def inherit_action(self, *args):
+        i = self.slice_num.get()
+        selection = self.inherit_select.get()
+        if selection == "None":
+            return
+        self.current_points = {"ebsd": self.all_points[int(selection)]["ebsd"].copy(),
+                               "bse": self.all_points[int(selection)]["bse"].copy()}
+        self.all_points[i] = self.current_points
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_ebsd.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points['ebsd'])):
+                x, y = self.current_points['ebsd'][i]
+                output.write(f"{int(x)} {int(y)}\n")
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_bse.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points['bse'])):
+                x, y = self.current_points['bse'][i]
+                output.write(f"{int(x)} {int(y)}\n")
+        self._update_inherit_options()
+        self._update_viewers()
+
+    def _update_inherit_options(self):
+        i = self.slice_num.get()
+        if i not in self.inherit_select_options:
+            self.inherit_select_options.append(i)
+            self.inherit_select_options[1:] = sorted(self.inherit_select_options[1:])
+            self.inherit_picker['values'] = self.inherit_select_options
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
@@ -281,7 +387,23 @@ class App(tk.Tk):
         plt.close("all")
 
     def apply_correction_to_h5(self, algo):
+        dtypes = {b"DataArray<uint8_t>": np.uint8,
+                  b"DataArray<int8_t>": np.int8,
+                  b"DataArray<uint16_t>": np.uint16,
+                  b"DataArray<int16_t>": np.int16,
+                  b"DataArray<uint32_t>": np.uint32,
+                  b"DataArray<int32_t>": np.int32,
+                  b"DataArray<uint64_t>": np.uint64,
+                  b"DataArray<int64_t>": np.int64,
+                  b"DataArray<float>": np.float32,
+                  b"DataArray<double>": np.float64,
+                  b"DataArray<bool>": bool}
         points = self.all_points
+        if len(points.keys()) == 0:
+            print("[bold red]Error:[/bold red] No points have been selected!")
+            return
+        elif len(points.keys()) == 1:
+            print("[bold Orange]Warning:[/bold orange] Only one slice has been selected! Applying it to all slices...")
         referencePoints = np.array(self.current_points["bse"])
         distortedPoints = np.array(self.current_points["ebsd"])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
@@ -295,9 +417,10 @@ class App(tk.Tk):
         print(f"[bold green]Success![/bold green] Applying to volume ({len(keys)} modes)")
         for key in keys:
             # Get stack of one mode and determine characteristics
-            ebsd_stack = np.array(h5.get("DataContainers/ImageDataContainer/CellData/" + key))
+            ebsd_stack = h5["DataContainers/ImageDataContainer/CellData/" + key]
+            dtype = dtypes[ebsd_stack.attrs["ObjectType"]]
+            ebsd_stack = np.array(ebsd_stack[...])
             n_dims = ebsd_stack.shape[-1]
-            dtype = ebsd_stack.dtype
             # Loop over all dimensions
             print(f"  -> Correcting {key} ({n_dims} components of type {dtype})")
             for i in range(ebsd_stack.shape[-1]):
@@ -307,6 +430,15 @@ class App(tk.Tk):
                     c_stack = align.TPS_apply_3D(points, stack)
                     if dtype == np.uint8:
                         c_stack = np.around(255 * c_stack / c_stack.max(), 0).astype(np.uint8)
+                    elif dtype == np.uint16:
+                        c_stack = np.around(65535 * c_stack / c_stack.max(), 0).astype(np.uint16)
+                    elif dtype == np.uint32:
+                        c_stack = np.around(4294967295 * c_stack / c_stack.max(), 0).astype(np.uint32)
+                    elif dtype == np.uint64:
+                        c_stack = np.around(18446744073709551615 * c_stack / c_stack.max(), 0).astype(np.uint64)
+                    else:
+                        c_stack = c_stack.astype(dtype)
+                    
                     # Fill original stack
                     ebsd_stack[:, :, :, i] = c_stack
                 elif algo == "LR":
@@ -360,6 +492,7 @@ class App(tk.Tk):
         key = self.ebsd_mode.get()
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
+        self.inherit_select.set(self.inherit_select_options[0])
         if ebsd_im.shape[-1] == 1:
             ebsd_im = ebsd_im[:, :, 0]
         else:
@@ -387,15 +520,15 @@ class App(tk.Tk):
         if self.show_points.get() == 1:
             pc = "#FEBC11"
             for i, p in enumerate(self.current_points["ebsd"]):
-                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc)
+                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc, tags=str(i))
                 self.ebsd.create_text(
-                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold")
+                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold"), tags=str(i)
                 )
             pc = "#EF5645"
             for i, p in enumerate(self.current_points["bse"]):
-                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc)
+                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc, tags=str(i))
                 self.bse.create_text(
-                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold")
+                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold"), tags=str(i)
                 )
         else:
             self.ebsd.delete("all")
@@ -438,14 +571,17 @@ class App(tk.Tk):
         for i in range(len(bse_files)):
             base = os.path.splitext(os.path.basename(bse_files[i]))[0]
             key = int(base.split("_")[-2])
-            bse_pts = list(np.loadtxt(bse_files[i]))
-            ebsd_pts = list(np.loadtxt(ebsd_files[i]))
+            bse_pts = list(np.loadtxt(bse_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
+            ebsd_pts = list(np.loadtxt(ebsd_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
             self.all_points[key] = {"ebsd": ebsd_pts, "bse": bse_pts}
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
         else:
             self.current_points = {"ebsd": [], "bse": []}
-        self._show_points()
+        self.inherit_select_options = list(self.all_points.keys())
+        self.inherit_select_options.insert(0, "None")
+        self.inherit_picker["values"] = self.inherit_select_options
+        self.inherit_picker["state"] = "enabled"
 
     def _startup_items(self):
         print("Running startup")
@@ -456,14 +592,17 @@ class App(tk.Tk):
         self.slice_min = 0
         self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
         self.slice_num.set(self.slice_min)
-        self.w.destroy()
+        try:
+            self.w.destroy()
+        except AttributeError:
+            pass
         # Configure UI
         self.tps_stack["state"] = "enabled"
         self.slice_picker["state"] = "readonly"
-        self.slice_picker["values"] = np.arange(self.slice_min, self.slice_max + 1)
+        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
         self.ebsd_picker["state"] = "readonly"
         self.ebsd_picker["values"] = self.ebsd_mode_options
-        # Read points and setuyp viewers
+        # Read points and setup viewers
         self._read_points()
         self._update_viewers()
         print("Startup complete")
@@ -643,21 +782,14 @@ class App(tk.Tk):
             s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
 
     def _easy_start(self):
+        print("Running easy start...")
         self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
         # self.BSE_DIR = "D:/Research/Ta_AM-Spalled/Data/3D/BSE/small/"
-        self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/new/CoNi16_aligned.dream3d"
+        self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
         # self.EBSD_DIR = "D:/Research/ta_AM-Spalled/Data/3D/Ta_AM-Spalled_aligned.dream3d"
-        self.folder = "D:/Research/scripts/Alignment/CoNi16_Rerun/"
+        self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
         # self.folder = "D:/Research/scripts/Alignment/Ta_AM-Spalled_3D/"
-        self._open_BSE_stack(self.BSE_DIR)
-        self._read_h5(self.EBSD_DIR)
-        self.ebsd_mode_options = list(self.ebsd_data.keys())
-        self.ebsd_mode = tk.StringVar()
-        self.ebsd_mode.set(self.ebsd_mode_options[0])
-        self.slice_min = 0
-        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
-        self.slice_num = tk.IntVar()
-        self.slice_num.set(self.slice_min)
+        self._startup_items()
 
 
 if __name__ == "__main__":
