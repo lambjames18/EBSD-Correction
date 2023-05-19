@@ -15,7 +15,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
-from skimage import io
+from skimage import io, exposure
 from rich import print
 import imageio
 
@@ -122,6 +122,9 @@ class App(tk.Tk):
         self.inherit_picker["state"] = "disabled"
         self.inherit_picker.bind("<<ComboboxSelected>>", self.inherit_action)
         self.inherit_picker.grid(row=0, column=6, sticky="ew", padx=5, pady=5)
+        self.clahe_active = False
+        self.clahe_b = ttk.Button(self.top, text="Apply CLAHE to BSE", command=self.clahe)
+        self.clahe_b.grid(row=0, column=7, sticky="ew", padx=5, pady=5)
         #
         # setup dragging
         self._drag_data = {"item": None}
@@ -293,6 +296,17 @@ class App(tk.Tk):
         self._update_inherit_options()
         self._update_viewers()
 
+    def clahe(self):
+        if self.clahe_active:
+            self.clahe_active = False
+            self.clahe_b["text"] = "Apply CLAHE to BSE"
+            self._update_viewers()
+        else:
+            self.clahe_active = True
+            self.clahe_b["text"] = "Remove CLAHE from BSE"
+            self._update_viewers()
+        
+    
     def move_point(self, state, pos, event):
         if pos == 'ebsd':
             alias = self.ebsd
@@ -372,6 +386,7 @@ class App(tk.Tk):
 
     def apply_3D(self, algo="LR"):
         """Applies the correction algorithm and calls the interactive view"""
+        self.config(cursor="watch")
         points = self.all_points
         ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
         referencePoints = np.array(self.current_points["bse"])
@@ -379,10 +394,12 @@ class App(tk.Tk):
         print("Aligning the full ESBSD stack in mode {}".format(self.ebsd_mode.get()))
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         if algo == "TPS":
-            self.ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack)
+            self.ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack, self.bse_imgs)
         elif algo == "LR":
-            self.ebsd_cStack = align.LR_3D_Apply(points, ebsd_stack, deg=3)
+            raise NotImplementedError
+            # self.ebsd_cStack = align.LR_3D_Apply(points, ebsd_stack, deg=3)
         print("Creating interactive view")
+        self.config(cursor="tcross")
         self._interactive_view(algo, self.ebsd_cStack, True)
         plt.close("all")
 
@@ -427,7 +444,7 @@ class App(tk.Tk):
                 if algo == "TPS":
                     # Isolate one dimension and correct
                     stack = np.copy(ebsd_stack[:, :, :, i])
-                    c_stack = align.TPS_apply_3D(points, stack)
+                    c_stack = align.TPS_apply_3D(points, stack, self.bse_imgs)
                     if dtype == np.uint8:
                         c_stack = np.around(255 * c_stack / c_stack.max(), 0).astype(np.uint8)
                     elif dtype == np.uint16:
@@ -454,16 +471,41 @@ class App(tk.Tk):
         distortedPoints = np.array(self.current_points["ebsd"])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Create the output filename
-        EBSD_DIR_CORRECTED = (w := os.path.splitext(self.EBSD_DIR))[0] + "_corrected" + w[1]
+        if self.slice_max == 1:
+            extension = os.path.splitext(self.EBSD_DIR)[1]
+        else:
+            extension = ".tiff"
+        SAVE_PATH_BSE = os.path.splitext(self.EBSD_DIR)[0] + "_BSE-out" + extension
+        SAVE_PATH_EBSD = os.path.splitext(self.EBSD_DIR)[0] + "_EBSD-out" + extension
         if algo == "TPS":
             # Align the image
-            aligned = align.TPS(self.bse_im.shape)
+            align.TPS(self.bse_im.shape)
+            aligned = align.TPS_apply(self.ebsd_im, out="array")
             # Correct dtype
             if aligned.dtype != np.uint16:
                 aligned = (aligned / aligned.max() * 65535).astype(np.uint16)
+            # Save the image
+            self._mask = (slice(None), slice(None))
+            size_diff = np.array(self.bse_imgs.shape) - np.array(self.ebsd_cStack.shape[:3])
+            if size_diff[1] > 0:
+                print(f"{size_diff[1]=}")
+                start = size_diff[1] // 2
+                end = -(size_diff[1] - start)
+                self._mask = (slice(start, end), self._mask[1])
+            if size_diff[2] > 0:
+                print(f"{size_diff[2]=}")
+                start = size_diff[2] // 2
+                end = -(size_diff[2] - start)
+                self._mask = (self._mask[0], slice(start, end))
+            imageio.imwrite(SAVE_PATH_EBSD, aligned[self._mask])
+            if self.clahe_active:
+                im = exposure.equalize_adapthist(self.bse_imgs[0][self._mask], clip_limit=0.03)
+            else:
+                im = self.bse_imgs[0][self._mask]
+            im = ((im - im.min()) / (im.max() - im.min()) * 65535).astype(np.uint16)
+            imageio.imwrite(SAVE_PATH_BSE, im)
         elif algo == "LR":
             raise ValueError("algo must be TPS at this time. LR is not supported")
-        imageio.mimsave(EBSD_DIR_CORRECTED, aligned)
         print("[bold green]Correction complete![/bold green]")
 
     def export_CP_imgs(self):
@@ -492,20 +534,31 @@ class App(tk.Tk):
         key = self.ebsd_mode.get()
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
+        if self.clahe_active:
+            bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)
         self.inherit_select.set(self.inherit_select_options[0])
-        if ebsd_im.shape[-1] == 1:
-            ebsd_im = ebsd_im[:, :, 0]
-        else:
-            ebsd_im = np.sqrt(np.sum(ebsd_im ** 2, axis=2))
 
+        # Check if there are 3 dimensions in which the last one is not needed
+        if len(ebsd_im.shape) == 3 and ebsd_im.shape[-1] == 1:
+            ebsd_im = ebsd_im[:, :, 0]
+        if len(bse_im.shape) == 3 and bse_im.shape[-1] == 1:
+            bse_im = bse_im[:, :, 0]
+        # Check if there are 4 dimensions in which we just take the sum of the squares               
+        if len(ebsd_im.shape) == 4:
+            ebsd_im = np.sum(ebsd_im ** 2, axis=-1)
+        # Check the dtype of the EBSD image, if they are a float, convert to uint8
         if ebsd_im.dtype == np.uint8:
             self.ebsd_im = ebsd_im
         else:
+            ebsd_im = ebsd_im - ebsd_im.min()
             self.ebsd_im = np.around(255 * ebsd_im / ebsd_im.max(), 0).astype(np.uint8)
+        # Check the dtype of the BSE image, if they are a float, convert to uint8
+        if bse_im.dtype == np.uint8:
+            self.bse_im = bse_im
+        else:
+            bse_im = bse_im - bse_im.min()
+            self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
 
-        if bse_im.dtype != np.uint8:
-            bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
-        self.bse_im = bse_im
         # Change current points dict by either reading in one or creating a new one
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
@@ -542,18 +595,24 @@ class App(tk.Tk):
         # BSE
         self.bse["width"] = self.bse_im.shape[1]
         self.bse["height"] = self.bse_im.shape[0]
-        self.bse_im_ppm = self._photo_image(self.bse_im)
+        self.bse_im_ppm = self._photo_image(self.bse_im, channels=1)
         self.bse.create_image(0, 0, anchor="nw", image=self.bse_im_ppm)
         # EBSD
         self.ebsd["width"] = self.ebsd_im.shape[1]
         self.ebsd["height"] = self.ebsd_im.shape[0]
-        self.ebsd_im_ppm = self._photo_image(self.ebsd_im)
+        channels = 3 if self.ebsd_im.ndim == 3 else 1
+        self.ebsd_im_ppm = self._photo_image(self.ebsd_im, channels=channels)
         self.ebsd.create_image(0, 0, anchor="nw", image=self.ebsd_im_ppm)
 
-    def _photo_image(self, image: np.ndarray):
+    def _photo_image(self, image: np.ndarray, channels: int = 1):
         """Creates a PhotoImage object that plays nicely with a tkinter canvas for viewing purposes."""
-        height, width = image.shape
-        data = f"P5 {width} {height} 255 ".encode() + image.astype(np.uint8).tobytes()
+        if channels == 1:
+            height, width = image.shape
+            data = f"P5 {width} {height} 255 ".encode() + image.astype(np.uint8).tobytes()
+        else:
+            height, width = image.shape[:2]
+            ppm_header = f"P6 {width} {height} 255 ".encode()
+            data = ppm_header + image.tobytes()
         return tk.PhotoImage(width=width, height=height, data=data, format="PPM")
 
     def _read_points(self):
@@ -573,6 +632,7 @@ class App(tk.Tk):
             key = int(base.split("_")[-2])
             bse_pts = list(np.loadtxt(bse_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
             ebsd_pts = list(np.loadtxt(ebsd_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
+            print(key, len(bse_pts), len(ebsd_pts))
             self.all_points[key] = {"ebsd": ebsd_pts, "bse": bse_pts}
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
@@ -677,9 +737,25 @@ class App(tk.Tk):
             im1 = self.ebsd_cStack[self.slice_num.get()]
         elif len(im1.shape) > 3:
             raise IOError("im1 must be a 3D volume or a 2D image.")
+        # Correct for cropped EBSD data
+        self._bse_mask = (slice(None), slice(None))
+        size_diff = np.array(self.bse_imgs.shape) - np.array(self.ebsd_cStack.shape[:3])
+        if size_diff[1] > 0:
+            print(f"{size_diff[1]=}")
+            start = size_diff[1] // 2
+            end = -(size_diff[1] - start)
+            self._bse_mask = (slice(start, end), self._bse_mask[1])
+        if size_diff[2] > 0:
+            print(f"{size_diff[2]=}")
+            start = size_diff[2] // 2
+            end = -(size_diff[2] - start)
+            self._bse_mask = (self._bse_mask[0], slice(start, end))
+        if not stack:
+            im1 = im1[self._bse_mask]
+        # Generate the figure
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
-        im0 = self.bse_imgs[self.slice_num.get()]
+        im0 = self.bse_imgs[self.slice_num.get()][self._bse_mask]
         max_r = im0.shape[0]
         max_c = im0.shape[1]
         max_s = self.slice_max
@@ -733,7 +809,7 @@ class App(tk.Tk):
         def change_image(val):
             val = int(np.around(val, 0))
             im1 = self.ebsd_cStack[val]
-            im0 = self.bse_imgs[val]
+            im0 = self.bse_imgs[val][self._bse_mask]
             im.set_data(im0)
             im_ebsd.set_data(im1)
             ax.set_title(f"{algo} Output (Slice {val})")
@@ -783,12 +859,12 @@ class App(tk.Tk):
 
     def _easy_start(self):
         print("Running easy start...")
-        self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
-        # self.BSE_DIR = "D:/Research/Ta_AM-Spalled/Data/3D/BSE/small/"
-        self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
-        # self.EBSD_DIR = "D:/Research/ta_AM-Spalled/Data/3D/Ta_AM-Spalled_aligned.dream3d"
-        self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
-        # self.folder = "D:/Research/scripts/Alignment/Ta_AM-Spalled_3D/"
+        # self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
+        self.BSE_DIR = "D:/Research/Ta/Data/3D/AMSpall/BSE/small/"
+        # self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
+        self.EBSD_DIR = "D:/Research/Ta/Data/3D/AMSpall/TaAMS_Stripped.dream3d"
+        # self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
+        self.folder = "D:/Research/scripts/Alignment/TaAMSpalled/"
         self._startup_items()
 
 

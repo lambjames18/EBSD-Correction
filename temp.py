@@ -3,19 +3,12 @@ import h5py
 import matplotlib.pyplot as plt
 import imageio
 from skimage import transform, io
+import core
 
-bb = ["0001", "0002", "0004", "0008", "0010", "0080", "0100", "0200", "0400"]
-options = {4: "Ctrl",
-           1: "Shift",
-           8: "NumLock",
-           10: "CapsLock",
-           1024: "RightClick",
-           256: "LeftClick",
-           512: "MiddleClick",
-           131072: "Alt"}
+im = io.imread("D:/Research/Ta/Data/3D/AMSpall/BSE/small/0.tiff", as_gray=True)
 
-print(hex(1 + 8))
+im = im[54:-53, 99:-99]
+print(im.shape)
 
-for option in options.items():
-    print(option)
-    print(hex(option[0]))
+plt.imshow(im, cmap='Blues')
+plt.show()

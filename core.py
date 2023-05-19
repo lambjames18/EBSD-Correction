@@ -280,7 +280,7 @@ class Alignment:
     #         aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
     #     return aligned_dataset
 
-    def TPS_apply_3D(self, points, dataset):
+    def TPS_apply_3D(self, points, dataset, bse):
         # Linear function for interpolation
         def linear(x, m, b):
             return x * m + b
@@ -293,9 +293,11 @@ class Alignment:
             key = slice_numbers[0]
             self.source = np.array(points[key]["bse"])
             self.distorted = np.array(points[key]["ebsd"])
-            self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+            ### self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+            self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
             # Create transform object for each slice and warp
-            aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+            ### aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+            aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
                 aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
             return aligned_dataset
@@ -303,14 +305,16 @@ class Alignment:
             for key in slice_numbers:
                 self.source = np.array(points[key]["bse"])
                 self.distorted = np.array(points[key]["ebsd"])
-                self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+                ### self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+                self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
                 params[key] = self.TPS_solution
             # Interpolate the solutions
             interpolations = {}
             for i in range(len(slice_numbers) - 1):
                 f = interpolate.interp1d([slice_numbers[i], slice_numbers[i + 1]], [params[slice_numbers[i]], params[slice_numbers[i + 1]]], axis=0)
                 interpolations[f"{slice_numbers[i]} {slice_numbers[i + 1]}"] = {index: f(index) for index in range(slice_numbers[i] + 1, slice_numbers[i + 1])}
-            solutions = np.zeros((dataset.shape[0], * self.TPS_solution.shape))
+            ### solutions = np.zeros((dataset.shape[0], * self.TPS_solution.shape))
+            solutions = np.zeros((bse.shape[0], * self.TPS_solution.shape))
             # Get the solution for each slice
             for i in range(solutions.shape[0]):
                 found_match = False
@@ -340,11 +344,29 @@ class Alignment:
                 else:
                     raise RuntimeError("Something went wrong while generating solutions")
             # Create transform object for each slice and warp
-            aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+            ### aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
+            aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
                 sol = solutions[i]
                 self.TPS_solution = sol
                 aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
+            size_diff = np.array(bse.shape) - np.array(dataset.shape)
+            if size_diff[1] > 0:
+                start = size_diff[1] // 2
+                end = -(size_diff[1] - start)
+                aligned_dataset = aligned_dataset[:, start: end, :]
+            elif size_diff[1] == 0:
+                print("Dimensions are the same")
+            else:
+                raise RuntimeError("Something went wrong while aligning the dataset." + f"{size_diff[1]=}")
+            if size_diff[2] > 0:
+                start = size_diff[2] // 2
+                end = -(size_diff[2] - start)
+                aligned_dataset = aligned_dataset[:, :, start: end]
+            elif size_diff[2] == 0:
+                print("Dimensions are the same")
+            else:
+                raise RuntimeError("Something went wrong while aligning the dataset." + f"{size_diff[2]=}")
             return aligned_dataset
 
     def _TPS_makeL(self, cp):
