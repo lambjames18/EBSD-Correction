@@ -241,10 +241,14 @@ class App(tk.Tk):
         self.wait_window(self.w)
     
     def select_2d_data_popup(self):
-        bse_path = filedialog.askopenfilename(title="Select control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=self.folder)
-        bse_path_folder = os.path.dirname(bse_path)
-        ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=bse_path_folder)
+        bse_path = filedialog.askopenfilename(title="Select control image", filetypes=[("PNG", "*.png"),("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=self.folder)
+        self.BSE_DIR = os.path.dirname(bse_path)
+        ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("PNG", "*.png"), ("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=self.BSE_DIR)
+        self.EBSD_DIR = os.path.dirname(ebsd_path)
+        if bse_path == "" or ebsd_path == "":
+            return
         bse_im = io.imread(bse_path, as_gray=True)
+        bse_im = (bse_im - np.min(bse_im)) / (np.max(bse_im) - np.min(bse_im))
         self.ebsd_im = io.imread(ebsd_path, as_gray=True)
         self.ebsd_mode_options = ["Intensity"]
         self.ebsd_mode = tk.StringVar()
@@ -486,7 +490,8 @@ class App(tk.Tk):
                 aligned = (aligned / aligned.max() * 65535).astype(np.uint16)
             # Save the image
             self._mask = (slice(None), slice(None))
-            size_diff = np.array(self.bse_imgs.shape) - np.array(self.ebsd_cStack.shape[:3])
+            _ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
+            size_diff = np.array(self.bse_imgs.shape) - np.array(_ebsd_stack.shape[:3])
             if size_diff[1] > 0:
                 print(f"{size_diff[1]=}")
                 start = size_diff[1] // 2
@@ -739,7 +744,8 @@ class App(tk.Tk):
             raise IOError("im1 must be a 3D volume or a 2D image.")
         # Correct for cropped EBSD data
         self._bse_mask = (slice(None), slice(None))
-        size_diff = np.array(self.bse_imgs.shape) - np.array(self.ebsd_cStack.shape[:3])
+        _ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
+        size_diff = np.array(self.bse_imgs.shape) - np.array(_ebsd_stack.shape[:3])
         if size_diff[1] > 0:
             print(f"{size_diff[1]=}")
             start = size_diff[1] // 2
