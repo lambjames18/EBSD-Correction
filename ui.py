@@ -132,7 +132,10 @@ class App(tk.Tk):
         self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.ebsd.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
         # self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
-        self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
+        if os.name == 'posix':
+            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
+        else:
+            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
         self.ebsd.bind("<ButtonPress-1>", lambda arg: self.move_point("start", "ebsd", arg))
         self.ebsd.bind("<ButtonRelease-1>", lambda arg: self.move_point("stop", "ebsd", arg))
         self.ebsd.bind("<B1-Motion>", lambda arg: self.move_point("move", "ebsd", arg))
@@ -147,7 +150,11 @@ class App(tk.Tk):
         self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.bse.grid(row=0, column=1, pady=20, padx=20, sticky="nsew")
         # self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
-        self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
+        # Set button 3 for unix/windows to be remove coords, button 2 for mac
+        if os.name == 'posix':
+            self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
+        else:
+            self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
         self.bse.bind("<ButtonPress-1>", lambda arg: self.move_point("start", "bse", arg))
         self.bse.bind("<ButtonRelease-1>", lambda arg: self.move_point("stop", "bse", arg))
         self.bse.bind("<B1-Motion>", lambda arg: self.move_point("move", "bse", arg))
@@ -277,6 +284,19 @@ class App(tk.Tk):
         self._update_inherit_options()
         self._show_points()
     
+    def write_coords(self):
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_ebsd.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points['ebsd'])):
+                x, y = self.current_points['ebsd'][i]
+                output.write(f"{int(x)} {int(y)}\n")
+        
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_bse.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points['bse'])):
+                x, y = self.current_points['bse'][i]
+                output.write(f"{int(x)} {int(y)}\n")
+    
     def remove_coords(self, pos, event):
         """Remove the point closes to the clicked location, the point should be removed from both images"""
         if pos == 'bse':
@@ -331,6 +351,7 @@ class App(tk.Tk):
                 self._drag_data["item"] = None
                 alias.config(cursor="tcross")
                 self._update_inherit_options()
+                self.write_coords()
             elif state == 'move':
                 if self._drag_data["item"] is None: return
                 self.current_points[pos][int(self._drag_data["item"])][0] = event.x
@@ -866,11 +887,14 @@ class App(tk.Tk):
     def _easy_start(self):
         print("Running easy start...")
         # self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
-        self.BSE_DIR = "D:/Research/Ta/Data/3D/AMSpall/BSE/small/"
+        # self.BSE_DIR = "D:/Research/Ta/Data/3D/AMSpall/BSE/small/"
+        self.BSE_DIR = "/Users/jameslamb/Downloads/BSE/"
         # self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
-        self.EBSD_DIR = "D:/Research/Ta/Data/3D/AMSpall/TaAMS_Stripped.dream3d"
+        # self.EBSD_DIR = "D:/Research/Ta/Data/3D/AMSpall/TaAMS_Stripped.dream3d"
+        self.EBSD_DIR = "/Users/jameslamb/Downloads/5842WCu_basic.dream3d"
         # self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
-        self.folder = "D:/Research/scripts/Alignment/TaAMSpalled/"
+        # self.folder = "D:/Research/scripts/Alignment/TaAMSpalled/"
+        self.folder = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/WCu/"
         self._startup_items()
 
 
