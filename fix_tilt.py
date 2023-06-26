@@ -17,26 +17,24 @@ def evalBoundary(image):
     return image[:rowMax, -colMax:]
 
 
-root = "./../NiAlMo_APS/Data/EMSphInx_Output/img_TiltON/"
-params = np.load("paramsEBSD.npy")
+root = "D:/Research/NiAlMo_APS/Data/EMSphInx_Output/img_TiltON/"
 
-transform = tf._geometric.PolynomialTransform(params)
+ref = "D:/Research/NiAlMo_APS/Data/EMSphInx_Output/img/EMSphInx_30.png"
+ref_img = imread(ref)
 
-rnge = np.arange(31, 63, 1, dtype=int)
 names = []
 imgs = []
-for i in range(len(rnge)):
-    names.append(f"EMSphInx_{rnge[i]}.png")
-    imgs.append(imread(f"{root}{names[i]}"))
+for i in range(31, 63):
+    names.append(f"EMSphInx_{i}.png")
+    imgs.append(imread(f"{root}{names[-1]}"))
 
 for i in range(len(imgs)):
     imgs[i] = np.where(imgs[i] == 0, 1, imgs[i])
-    featmap_align = tf.warp(
-        imgs[i],
-        transform,
-        cval=0,  # new pixels are black pixel
-        order=0,  # k-neighbour
-        preserve_range=True,
-    )
-    featmap_align = evalBoundary(featmap_align)
-    sp.saveim(featmap_align, name=f"{root}../img/{names[i]}", cmap="gray")
+    img_resized = tf.resize(imgs[i], (imgs[i].shape[0] - 82, imgs[i].shape[1]))
+    img_resized = np.around(255 * img_resized/img_resized.max()).astype(np.uint8)
+    # fig, ax = plt.subplots(1, 1)
+    # ax.imshow(ref_img, cmap="gray")
+    # ax.imshow(np.roll(img_resized, 8, axis=0), alpha=0.5, cmap="inferno")
+    # ax.set_title("Overlay")
+    # plt.show()
+    sp.saveim(img_resized, name=f"{root}../img/{names[i]}", cmap="gray")

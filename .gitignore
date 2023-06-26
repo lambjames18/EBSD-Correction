@@ -5,3 +5,11 @@ __pycache__/*
 __pycache__/masking.cpython-38.pyc
 __pycache__/core.cpython-38.pyc
 __pycache__/core.cpython-38.pyc
+TaAMSpalled/
+TPS_out.tif
+TPS_mapping.npy
+CoNi16_3D/
+CoNi16_Rerun/
+CoNi16_Rerun2/
+CoNi90_3D/
+Alumina/
