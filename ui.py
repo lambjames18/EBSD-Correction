@@ -248,29 +248,56 @@ class App(tk.Tk):
         self.wait_window(self.w)
     
     def select_2d_data_popup(self):
-        bse_path = filedialog.askopenfilename(title="Select control image", filetypes=[("PNG", "*.png"),("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=self.folder)
+        bse_path = filedialog.askopenfilename(title="Select control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("PNG", "*.png"), ("All files", "*.*")], initialdir=self.folder)
         self.BSE_DIR = os.path.dirname(bse_path)
-        ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("PNG", "*.png"), ("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], initialdir=self.BSE_DIR)
+        ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("ANG", "*.ang"), ("TIF", "*.tif"), ("TIFF", "*.tiff"), ("PNG", "*.png"), ("All files", "*.*")], initialdir=self.BSE_DIR)
         self.EBSD_DIR = os.path.dirname(ebsd_path)
+        # Get control points if they exist
+        bse_pts_path = filedialog.askopenfilename(title="Select control points (control/BSE/source)", filetypes=[("txt", "*.txt"), ("All files", "*.*")], initialdir=self.EBSD_DIR)
+        if bse_pts_path != "":
+            ebsd_pts_path = filedialog.askopenfilename(title="Select control points (distorted/EBSD/target)", filetypes=[("txt", "*.txt"), ("All files", "*.*")], initialdir=self.EBSD_DIR)
+        # Handle empty paths
         if bse_path == "" or ebsd_path == "":
             return
+        # Handle BSE data
         bse_im = io.imread(bse_path, as_gray=True)
         bse_im = (bse_im - np.min(bse_im)) / (np.max(bse_im) - np.min(bse_im))
-        self.ebsd_im = io.imread(ebsd_path, as_gray=True)
-        self.ebsd_mode_options = ["Intensity"]
-        self.ebsd_mode = tk.StringVar()
-        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.bse_imgs = np.array(bse_im).reshape(1, bse_im.shape[0], bse_im.shape[1])
+        # Handle EBSD data
+        if ebsd_path.endswith(".ang"):
+            print("Reading in EBSD data (ang)...")
+            out_dict = self._open_ang(ebsd_path)
+            self.ebsd_data = {}
+            for key, val in out_dict.items():
+                if len(val.shape) == 2:
+                    self.ebsd_data[key] = np.array(val).reshape(1, val.shape[0], val.shape[1], 1)
+                else:
+                    self.ebsd_data[key] = np.array(val).reshape(1, val.shape[0], val.shape[1], val.shape[2])
+            self.ebsd_mode_options = list(self.ebsd_data.keys())
+            self.ebsd_mode.set(self.ebsd_mode_options[0])
+            self.ebsd_picker["state"] = "enabled"
+        else:
+            print("Reading in EBSD data (image)...")
+            self.ebsd_im = io.imread(ebsd_path, as_gray=True)
+            self.ebsd_mode_options = ["Intensity"]
+            self.ebsd_data = {"Intensity": np.array(self.ebsd_im).reshape(1, self.ebsd_im.shape[0], self.ebsd_im.shape[1], 1)}
+            self.ebsd_picker["state"] = "disabled"
+            self.ebsd_mode.set(self.ebsd_mode_options[0])
         self.slice_min = 0
         self.slice_max = 0
         self.slice_num = tk.IntVar()
         self.slice_num.set(self.slice_min)
-        self.bse_imgs = np.array(bse_im).reshape(1, bse_im.shape[0], bse_im.shape[1])
-        self.ebsd_data = {"Intensity": np.array(self.ebsd_im).reshape(1, self.ebsd_im.shape[0], self.ebsd_im.shape[1], 1)}
         # Configure UI
         self.tps_stack["state"] = "disabled"
         self.slice_picker["state"] = "disabled"
-        self.ebsd_picker["state"] = "disabled"
+        self.slice_picker["values"] = [self.slice_min]
+        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker["values"] = self.ebsd_mode_options
         # Update the viewers
+        print(f"{len(self.ebsd_mode_options)} EBSD modalities identified: {self.ebsd_mode_options}")
+        # Configure UI
+        if bse_pts_path != "":
+            self._read_points(bse_path=bse_pts_path, ebsd_path=ebsd_pts_path)
         self._update_viewers()
 
     def coords(self, pos, event):
@@ -558,6 +585,8 @@ class App(tk.Tk):
     def _update_viewers(self, *args):
         i = self.slice_num.get()
         key = self.ebsd_mode.get()
+        print(self.ebsd_mode_options, self.ebsd_picker["values"])
+        print(f"Updating viewers for slice {i} and mode {key}")
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
         if self.clahe_active:
@@ -641,18 +670,26 @@ class App(tk.Tk):
             data = ppm_header + image.tobytes()
         return tk.PhotoImage(width=width, height=height, data=data, format="PPM")
 
-    def _read_points(self):
+    def _read_points(self, bse_path=None, ebsd_path=None):
         """Reads a set of control points"""
-        ebsd_files = [
-            os.path.join(self.folder, f)
-            for f in os.listdir(self.folder)
-            if "ebsd" in f and "txt" in f
-        ]
-        bse_files = [
-            os.path.join(self.folder, f)
-            for f in os.listdir(self.folder)
-            if "bse" in f and "txt" in f
-        ]
+        if bse_path is None and ebsd_path is None:
+            bse_files = [bse_path]
+            ebsd_files = [ebsd_path]
+        elif bse_path is None and ebsd_path is not None:
+            raise ValueError("Must provide both BSE and EBSD paths")
+        elif bse_path is not None and ebsd_path is None:
+            raise ValueError("Must provide both BSE and EBSD paths")
+        else:
+            ebsd_files = [
+                os.path.join(self.folder, f)
+                for f in os.listdir(self.folder)
+                if "ebsd" in f and "txt" in f
+            ]
+            bse_files = [
+                os.path.join(self.folder, f)
+                for f in os.listdir(self.folder)
+                if "bse" in f and "txt" in f
+            ]
         for i in range(len(bse_files)):
             base = os.path.splitext(os.path.basename(bse_files[i]))[0]
             key = int(base.split("_")[-2])
@@ -756,6 +793,57 @@ class App(tk.Tk):
             bse_imgs.append(im)
         self.bse_imgs = np.array(bse_imgs, dtype=np.uint8)
         print(f"{self.bse_imgs.shape[0]} BSE images imported!")
+    
+    def _open_ang(self, ang_path: str):
+        """Reads an ang file into a numpy array"""
+        num_header_lines = 0
+        with open(ang_path, "r") as f:
+            for line in f:
+                if line[0] == "#":
+                    num_header_lines += 1
+                    if "NCOLS_ODD" in line:
+                        ncols = int(line.split(": ")[1].strip())
+                    elif "NROWS" in line:
+                        nrows = int(line.split(": ")[1].strip())
+                    elif "COLUMN_HEADERS" in line:
+                        col_names = line.split(": ")[1].strip().split(", ")
+                else:
+                    break
+        raw_data = np.genfromtxt(ang_path, skip_header=num_header_lines)
+        n_entries = raw_data.shape[-1]
+        if raw_data.shape[0] == ncols * nrows:
+            data = raw_data.reshape((nrows, ncols, n_entries))
+        elif raw_data.shape[0] == ncols * (nrows - 1):
+            data = raw_data.reshape((nrows - 1, ncols, n_entries))
+            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows - 1, ncols).")
+        elif raw_data.shape[0] == ncols * (nrows + 1):
+            data = raw_data.reshape((nrows + 1, ncols, n_entries))
+            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows + 1, ncols).")
+        elif raw_data.shape[0] == (ncols - 1) * nrows:
+            data = raw_data.reshape((nrows, ncols - 1, n_entries))
+            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows, ncols - 1).")
+        elif raw_data.shape[0] == (ncols + 1) * nrows:
+            data = raw_data.reshape((nrows, ncols + 1, n_entries))
+            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows, ncols + 1).")
+        else:
+            raise ValueError("The number of data points does not match number of rows and columns. Automatic adjustments failed (tried +-1 for both rows and columns).")
+            
+        out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
+        out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
+        out["Phase"] = out["Phase index"].astype(np.int32)
+        out["XPos"] = out["x"].astype(float)
+        out["YPos"] = out["y"].astype(float)
+        out["IQ"] = out["IQ"].astype(float)
+        out["CI"] = out["CI"].astype(float)
+        for key in ["phi1", "PHI", "phi2", "Phase index", "PRIAS Bottom Strip", "PRIAS Top Strip", "PRIAS Center Square", "SEM", "Fit", "x", "y"]:
+            try:
+                del out[key]
+            except KeyError:
+                pass
+        for key in out.keys():
+            if key != "EulerAngles":
+                out[key] = np.fliplr(np.rot90(out[key], k=3))
+        return out
 
     def _interactive_view(self, algo, im1, stack=False):
         """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
