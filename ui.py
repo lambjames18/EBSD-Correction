@@ -22,6 +22,7 @@ import imageio
 # Local files
 import core
 import ZoomWidget as Zoom
+import IO
 
 
 class App(tk.Tk):
@@ -208,7 +209,17 @@ class App(tk.Tk):
         # fixh5LR.grid(row=1, column=5, columnspan=2)
 
     def select_3d_data_popup(self):
-        self.w = tk.Toplevel(self)
+        self.w = IO.Data3D(self)
+        self.wait_window(self.w.w)
+        if self.w.clean_exit:
+            self.EBSD_DIR = self.w.ebsd_path
+            self.BSE_DIR = self.w.bse_path
+            self.EBSD_POINTS = self.w.ebsd_points_path
+            self.BSE_POINTS = self.w.bse_points_path
+            if not os.path.exists(self.EBSD_POINTS):
+                
+            self._startup_items_new()
+        return
         self.w.rowconfigure(0, weight=1)
         self.w.columnconfigure(0, weight=1)
         master = ttk.Frame(self.w)
@@ -727,6 +738,30 @@ class App(tk.Tk):
         self.ebsd_picker["values"] = self.ebsd_mode_options
         # Read points and setup viewers
         self._read_points()
+        self._update_viewers()
+        print("Startup complete")
+    
+    def _startup_items_new(self):
+        print("Running startup")
+        self._open_BSE_stack(self.BSE_DIR)
+        self._read_h5(self.EBSD_DIR)
+        self.ebsd_mode_options = list(self.ebsd_data.keys())
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.slice_min = 0
+        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
+        self.slice_num.set(self.slice_min)
+        try:
+            self.w.destroy()
+        except AttributeError:
+            pass
+        # Configure UI
+        self.tps_stack["state"] = "enabled"
+        self.slice_picker["state"] = "readonly"
+        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
+        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker["values"] = self.ebsd_mode_options
+        # Read points and setup viewers
+        self._read_points(self.BSE_POINTS, self.EBSD_POINTS)
         self._update_viewers()
         print("Startup complete")
 
