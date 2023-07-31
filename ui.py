@@ -209,7 +209,7 @@ class App(tk.Tk):
         # fixh5LR.grid(row=1, column=5, columnspan=2)
 
     def select_3d_data_popup(self):
-        self.w = IO.Data3D(self)
+        self.w = IO.DataInput(self)
         self.wait_window(self.w.w)
         if self.w.clean_exit:
             self.EBSD_DIR = self.w.ebsd_path
