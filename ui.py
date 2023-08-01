@@ -34,6 +34,7 @@ class App(tk.Tk):
         self.withdraw()
         self.folder = os.getcwd()
         self.deiconify()
+        self.title("Distortion Correction")
         # Setup structure of window
         # frames
         # frame_w = 1920
@@ -60,9 +61,9 @@ class App(tk.Tk):
         # setup menubar
         self.menu = tk.Menu(self)
         filemenu = tk.Menu(self.menu, tearoff=0)
-        filemenu.add_command(label="Open 3D", command=self.select_3d_data_popup)
+        filemenu.add_command(label="Open 3D", command=lambda: self.select_data_popup("3D"))
         filemenu.add_command(label="Export 3D", command=lambda: self.apply_correction_to_h5("TPS"))
-        filemenu.add_command(label="Open 2D", command=self.select_2d_data_popup)
+        filemenu.add_command(label="Open 2D", command=lambda: self.select_data_popup("2D"))
         filemenu.add_command(label="Export 2D", command=lambda: self.apply_correction_to_tif("TPS"))
         filemenu.add_command(label="Easy start", command=self._easy_start)
         self.menu.add_cascade(label="File", menu=filemenu)
@@ -132,40 +133,21 @@ class App(tk.Tk):
         # setup viewer_left
         self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.ebsd.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
-        # self.ebsd.bind("<Button 1>", lambda arg: self.coords("ebsd", arg))
         if os.name == 'posix':
             self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
         else:
             self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
-        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.move_point("start", "ebsd", arg))
-        self.ebsd.bind("<ButtonRelease-1>", lambda arg: self.move_point("stop", "ebsd", arg))
-        self.ebsd.bind("<B1-Motion>", lambda arg: self.move_point("move", "ebsd", arg))
-        """
-        self.ebsd = Zoom.CanvasImage(self.viewer_left, self.ebsd_img)
-        """
-        # self.ebsd.bind("<MouseWheel>", lambda event: self._zoom(event, "ebsd"))
-        # self.ebsd.bind("<ButtonPress-3>", lambda event: self.ebsd.scan_mark(event.x, event.y))
-        # self.ebsd.bind("<B3-Motion>", lambda event: self.ebsd.scan_dragto(event.x, event.y, gain=1))
+        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
         #
         # setup viewer right
         self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.fg, bg=self.fg, bd=1, highlightthickness=0.2, cursor='tcross')
         self.bse.grid(row=0, column=1, pady=20, padx=20, sticky="nsew")
-        # self.bse.bind("<Button 1>", lambda arg: self.coords("bse", arg))
         # Set button 3 for unix/windows to be remove coords, button 2 for mac
         if os.name == 'posix':
             self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
         else:
             self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
-        self.bse.bind("<ButtonPress-1>", lambda arg: self.move_point("start", "bse", arg))
-        self.bse.bind("<ButtonRelease-1>", lambda arg: self.move_point("stop", "bse", arg))
-        self.bse.bind("<B1-Motion>", lambda arg: self.move_point("move", "bse", arg))
-        # self.bse.bind("<MouseWheel>", lambda event: self._zoom(event, "bse"))
-        # self.bse.bind("<ButtonPress-3>", lambda event: self.bse.scan_mark(event.x, event.y))
-        # self.bse.bind("<B3-Motion>", lambda event: self.bse.scan_dragto(event.x, event.y, gain=1))
-        #
-        # handle points
-        self.all_points = {}
-        self.current_points = {"ebsd": [], "bse": []}
+        self.bse.bind("<ButtonPress-1>", lambda arg: self.add_coords("bse", arg))
         #
         # setup bot
         tps_l = ttk.Label(self.bot, text="Thin-Plate Spline Correction:")
@@ -179,164 +161,95 @@ class App(tk.Tk):
             state="disabled",
         )
         self.tps_stack.grid(row=0, column=2, sticky="ew", padx=5, pady=5)
-        # fixh5TPS = ttk.Button(
-        #     self.bot,
-        #     text="Save TPS correction in DREAM3D file",
-        #     command=lambda: self.apply_correction_to_h5("TPS"),
-        # )
-        # fixh5TPS.grid(row=0, column=5, columnspan=2, sticky='ew', padx=5, pady=5)
-        # lr_l = tk.Label(self.bot, text="Linear Regression Correction:")
-        # lr_l.grid(row=1, column=0, sticky="e")
-        # lr = tk.Button(self.bot, text="View slice", command=lambda: self.apply("LR"), fg="black")
-        # lr.grid(row=1, column=1, sticky="ew")
-        # lr_stack = tk.Button(
-        #     self.bot,
-        #     text="Apply to stack",
-        #     fg="black",
-        #     command=lambda: self.apply_3D("LR"),
-        # )
-        # lr_stack.grid(row=1, column=2, sticky="ew")
-        # lr_deg_l = tk.Label(self.bot, text="Polynomial order:")
-        # lr_deg_l.grid(row=1, column=3, sticky="e")
-        # self.lr_degree = tk.Entry(self.bot)
-        # self.lr_degree.insert(0, "3")
-        # self.lr_degree.grid(row=1, column=4, sticky="ew")
-        # fixh5LR = tk.Button(
-        #     self.bot,
-        #     text="Save LR correction in DREAM3D file",
-        #     command=lambda: self.apply_correction_to_h5("LR"),
-        # )
-        # fixh5LR.grid(row=1, column=5, columnspan=2)
 
-    def select_3d_data_popup(self):
-        self.w = IO.DataInput(self)
+        ### TODO: Add remove all points button
+        ### TODO: Test 3D IO and everything else
+        ### TODO: Fix 2D and 3D output stuff (prompt for file save, saving options, etc.)
+        ### Additional things added
+        self.points = {"ebsd": [], "bse": []}
+        self.points_path = {"ebsd": "", "bse": ""}
+
+    ### IO
+    def select_data_popup(self, mode):
+        self.w = IO.DataInput(self, mode)
         self.wait_window(self.w.w)
         if self.w.clean_exit:
-            self.EBSD_DIR = self.w.ebsd_path
-            self.BSE_DIR = self.w.bse_path
-            self.EBSD_POINTS = self.w.ebsd_points_path
-            self.BSE_POINTS = self.w.bse_points_path
-            if not os.path.exists(self.EBSD_POINTS):
-                
-            self._startup_items_new()
-        return
-        self.w.rowconfigure(0, weight=1)
-        self.w.columnconfigure(0, weight=1)
-        master = ttk.Frame(self.w)
-        master.grid(row=0, column=0, sticky="nsew")
-        frame_w = 1920 // 6
-        frame_h = 1080 // 5
-        self.w.geometry(f"{frame_w}x{frame_h}")
-        self.resizable(False, False)
-        for i in range(5):
-            master.rowconfigure(i, weight=1)
-        master.columnconfigure(0, weight=1)
-        des = ttk.Label(master, text="Select relevant folders/files", justify='center')
-        des.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        folder = ttk.Button(
-            master,
-            text="Select folder for control points",
-            command=self._get_FOLDER_dir,
-        )
-        folder.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-        self.w.d3d = ttk.Button(
-            master, text="Select Dream3d file", command=self._get_EBSD_dir,
-        )
-        self.w.d3d.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
-        self.w.d3d["state"] = "disabled"
-        self.w.bse = ttk.Button(
-            master, text="Select BSE folder", command=self._get_BSE_dir,
-        )
-        self.w.bse.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
-        self.w.bse["state"] = "disabled"
-        self.w.close = ttk.Button(
-            master,
-            text="Close (reading in data will take a few moments)",
-            command=self._startup_items,
-        )
-        self.w.close["state"] = "disabled"
-        self.w.close.grid(row=4, column=0, sticky="nsew", padx=5, pady=5)
-        self.wait_window(self.w)
-    
-    def select_2d_data_popup(self):
-        bse_path = filedialog.askopenfilename(title="Select control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("PNG", "*.png"), ("All files", "*.*")], initialdir=self.folder)
-        self.BSE_DIR = os.path.dirname(bse_path)
-        ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("ANG", "*.ang"), ("TIF", "*.tif"), ("TIFF", "*.tiff"), ("PNG", "*.png"), ("All files", "*.*")], initialdir=self.BSE_DIR)
-        self.EBSD_DIR = os.path.dirname(ebsd_path)
-        # Get control points if they exist
-        bse_pts_path = filedialog.askopenfilename(title="Select control points (control/BSE/source)", filetypes=[("txt", "*.txt"), ("All files", "*.*")], initialdir=self.EBSD_DIR)
-        if bse_pts_path != "":
-            ebsd_pts_path = filedialog.askopenfilename(title="Select control points (distorted/EBSD/target)", filetypes=[("txt", "*.txt"), ("All files", "*.*")], initialdir=self.EBSD_DIR)
-        # Handle empty paths
-        if bse_path == "" or ebsd_path == "":
-            return
-        # Handle BSE data
-        bse_im = io.imread(bse_path, as_gray=True)
-        bse_im = (bse_im - np.min(bse_im)) / (np.max(bse_im) - np.min(bse_im))
-        self.bse_imgs = np.array(bse_im).reshape(1, bse_im.shape[0], bse_im.shape[1])
-        # Handle EBSD data
-        if ebsd_path.endswith(".ang"):
-            print("Reading in EBSD data (ang)...")
-            out_dict = self._open_ang(ebsd_path)
-            self.ebsd_data = {}
-            for key, val in out_dict.items():
-                if len(val.shape) == 2:
-                    self.ebsd_data[key] = np.array(val).reshape(1, val.shape[0], val.shape[1], 1)
-                else:
-                    self.ebsd_data[key] = np.array(val).reshape(1, val.shape[0], val.shape[1], val.shape[2])
+            ebsd_path, bse_path = self.w.ebsd_path, self.w.bse_path
+            ebsd_points_path, bse_points_path = self.w.ebsd_points_path, self.w.bse_points_path
+            ebsd_res, bse_res = self.w.ebsd_res, self.w.bse_res
+            e_d, b_d, e_pts, b_pts = IO.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+            self.w = IO.DataSummary(self, e_d, b_d, e_pts, b_pts, ebsd_res, bse_res)
+            self.wait_window(self.w.w)
+            if self.w.clean_exit:
+                if e_pts is None:
+                    e_pts = {0: []}
+                    ebsd_points_path = os.path.dirname(ebsd_path) + "/distorted_pts.txt"
+                    with open(ebsd_points_path, "w", encoding="utf8") as output:
+                        output.write("")
+                if b_pts is None:
+                    b_pts = {0: []}
+                    bse_points_path = os.path.dirname(bse_path) + "/control_pts.txt"
+                    with open(bse_points_path, "w", encoding="utf8") as output:
+                        output.write("")
+                if self.w.rescale:
+                    b_d = IO.rescale_control(b_d, bse_res, ebsd_res)
+                if self.w.flip:
+                    b_d = np.flip(b_d, axis=1).copy(order='C')
+                if self.w.crop:
+                    self.w = IO.CropControl(self, b_d[0, :, :, 0])
+                    self.wait_window(self.w.w)
+                    if self.w.clean_exit:
+                        s, e = self.w.start, self.w.end
+                        b_d = b_d[:, s[0]:e[0], s[1]:e[1], :]
+            else:
+                return
+            # Set the data
+            self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
+            self.ebsd_data, self.bse_imgs = e_d, b_d
+            self.ebsd_res, self.bse_res = ebsd_res, bse_res
+            self.points["ebsd"], self.points["bse"] = e_pts, b_pts
+            # Set the UI stuff
             self.ebsd_mode_options = list(self.ebsd_data.keys())
             self.ebsd_mode.set(self.ebsd_mode_options[0])
-            self.ebsd_picker["state"] = "enabled"
-        else:
-            print("Reading in EBSD data (image)...")
-            self.ebsd_im = io.imread(ebsd_path, as_gray=True)
-            self.ebsd_mode_options = ["Intensity"]
-            self.ebsd_data = {"Intensity": np.array(self.ebsd_im).reshape(1, self.ebsd_im.shape[0], self.ebsd_im.shape[1], 1)}
-            self.ebsd_picker["state"] = "disabled"
-            self.ebsd_mode.set(self.ebsd_mode_options[0])
-        self.slice_min = 0
-        self.slice_max = 0
-        self.slice_num = tk.IntVar()
-        self.slice_num.set(self.slice_min)
-        # Configure UI
-        self.tps_stack["state"] = "disabled"
-        self.slice_picker["state"] = "disabled"
-        self.slice_picker["values"] = [self.slice_min]
-        self.ebsd_picker["state"] = "readonly"
-        self.ebsd_picker["values"] = self.ebsd_mode_options
-        # Update the viewers
-        print(f"{len(self.ebsd_mode_options)} EBSD modalities identified: {self.ebsd_mode_options}")
-        # Configure UI
-        if bse_pts_path != "":
-            self._read_points(bse_path=bse_pts_path, ebsd_path=ebsd_pts_path)
-        self._update_viewers()
-
-    def coords(self, pos, event):
+            self.slice_min = 0
+            self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
+            self.slice_num.set(self.slice_min)
+            self.ebsd_cStack = np.zeros(self.ebsd_data[self.ebsd_mode_options[0]].shape)
+            # Configure UI
+            self.tps_stack["state"] = "enabled"
+            self.slice_picker["state"] = "readonly"
+            self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
+            self.ebsd_picker["state"] = "readonly"
+            self.ebsd_picker["values"] = self.ebsd_mode_options
+            # Finish
+            self.folder = os.path.dirname(ebsd_path)
+            self._update_viewers()
+    
+    ### Coords stuff
+    def add_coords(self, pos, event):
         """Responds to a click on an image. Redraws the images after the click. Also saves the click location in a file."""
         i = self.slice_num.get()
-        self.current_points[pos].append([event.x, event.y])
-        self.all_points[i] = self.current_points
-        path = os.path.join(self.folder, f"ctr_pts_{i}_{pos}.txt")
+        self.points[pos][i].append([event.x, event.y])
+        path = self.points_path[pos]
         with open(path, "a", encoding="utf8") as output:
-            output.write(f"{event.x} {event.y}\n")
+            output.write(f"{i} {event.x} {event.y}\n")
         self._update_inherit_options()
         self._show_points()
     
     def write_coords(self):
-        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_ebsd.txt")
-        with open(path, "w", encoding="utf8") as output:
-            for i in range(len(self.current_points['ebsd'])):
-                x, y = self.current_points['ebsd'][i]
-                output.write(f"{int(x)} {int(y)}\n")
-        
-        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_bse.txt")
-        with open(path, "w", encoding="utf8") as output:
-            for i in range(len(self.current_points['bse'])):
-                x, y = self.current_points['bse'][i]
-                output.write(f"{int(x)} {int(y)}\n")
+        for mode in ["ebsd", "bse"]:
+            path = self.points_path[mode]
+            data = []
+            pts = self.points[mode]
+            for key in pts.keys():
+                s = np.hstack((np.ones((len(pts[key]), 1)) * key, pts[key]))
+                data.append(s)
+            data = np.vstack(data)
+            np.savetxt(path, data, fmt="%i", delimiter=" ")
     
     def remove_coords(self, pos, event):
         """Remove the point closes to the clicked location, the point should be removed from both images"""
+        ### TODO: Fix this to use new coords convention
         if pos == 'bse':
             closest = self.bse.find_closest(event.x, event.y)[0]
             tag = self.bse.itemcget(closest, "tags")
@@ -348,8 +261,7 @@ class App(tk.Tk):
         if tag == "":
             print("No point to remove")
             return
-        self.current_points[pos].pop(int(tag))
-        self.all_points[self.slice_num.get()] = self.current_points
+        base_tag = tag.split(" ")[0]
         path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_{pos}.txt")
         with open(path, "w", encoding="utf8") as output:
             for i in range(len(self.current_points[pos])):
@@ -358,78 +270,32 @@ class App(tk.Tk):
         self._update_inherit_options()
         self._update_viewers()
 
-    def clahe(self):
-        if self.clahe_active:
-            self.clahe_active = False
-            self.clahe_b["text"] = "Apply CLAHE to BSE"
-            self._update_viewers()
+    def _show_points(self):
+        """Either turns on or turns off control point viewing"""
+        if self.show_points.get() == 1:
+            j = self.slice_num.get()
+            pc = {"ebsd": "#FEBC11", "bse": "#EF5645"}
+            viewers = {"ebsd": self.ebsd, "bse": self.bse}
+            for mode in ["ebsd", "bse"]:
+                print(mode, j, self.points[mode])
+                pts = np.array(self.points[mode][j])
+                for i, p in enumerate(pts):
+                    o_item = viewers[mode].create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc[mode], tags=str(i))
+                    t_item = viewers[mode].create_text(
+                        p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc[mode], font=("", 10, "bold"), tags=str(i) + "text"
+                    )
+                    bbox = viewers[mode].bbox(t_item)
+                    r_item = viewers[mode].create_rectangle(bbox, fill="#FFFFFF", outline=pc[mode], tags=str(i) + "bbox")
+                    viewers[mode].tag_raise(t_item, r_item)
         else:
-            self.clahe_active = True
-            self.clahe_b["text"] = "Remove CLAHE from BSE"
-            self._update_viewers()
-        
-    
-    def move_point(self, state, pos, event):
-        if pos == 'ebsd':
-            alias = self.ebsd
-        elif pos == 'bse':
-            alias = self.bse
-        if event.state % 2 == 1:
-            alias.config(cursor="fleur")
-            if state == 'start':
-                print("Starting movement")
-                closest = alias.find_closest(event.x, event.y, halo=10)[0]
-                tag = alias.itemcget(closest, "tags")
-                if "current" in tag:
-                    tag = tag.replace("current", "").strip()
-                if tag == "": return
-                self._drag_data["item"] = tag
-            elif state == 'stop':
-                print("Stopping movement")
-                self._drag_data["item"] = None
-                alias.config(cursor="tcross")
-                self._update_inherit_options()
-                self.write_coords()
-            elif state == 'move':
-                if self._drag_data["item"] is None: return
-                self.current_points[pos][int(self._drag_data["item"])][0] = event.x
-                self.current_points[pos][int(self._drag_data["item"])][1] = event.y
-                self._update_viewers()
-        else:
-            alias.config(cursor="tcross")
-            if state == 'start':
-                self.coords(pos, event)
+            self.ebsd.delete("all")
+            self.bse.delete("all")
+            self._update_imgs()
 
-    def inherit_action(self, *args):
-        i = self.slice_num.get()
-        selection = self.inherit_select.get()
-        if selection == "None":
-            return
-        self.current_points = {"ebsd": self.all_points[int(selection)]["ebsd"].copy(),
-                               "bse": self.all_points[int(selection)]["bse"].copy()}
-        self.all_points[i] = self.current_points
-        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_ebsd.txt")
-        with open(path, "w", encoding="utf8") as output:
-            for i in range(len(self.current_points['ebsd'])):
-                x, y = self.current_points['ebsd'][i]
-                output.write(f"{int(x)} {int(y)}\n")
-        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_bse.txt")
-        with open(path, "w", encoding="utf8") as output:
-            for i in range(len(self.current_points['bse'])):
-                x, y = self.current_points['bse'][i]
-                output.write(f"{int(x)} {int(y)}\n")
-        self._update_inherit_options()
-        self._update_viewers()
-
-    def _update_inherit_options(self):
-        i = self.slice_num.get()
-        if i not in self.inherit_select_options:
-            self.inherit_select_options.append(i)
-            self.inherit_select_options[1:] = sorted(self.inherit_select_options[1:])
-            self.inherit_picker['values'] = self.inherit_select_options
-
+    ### Apply stuff
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
+        ### TODO: Fix this to use new coords convention
         referencePoints = np.array(self.current_points["bse"])
         distortedPoints = np.array(self.current_points["ebsd"])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
@@ -449,6 +315,7 @@ class App(tk.Tk):
 
     def apply_3D(self, algo="LR"):
         """Applies the correction algorithm and calls the interactive view"""
+        ### TODO: Fix this to use new coords convention
         self.config(cursor="watch")
         points = self.all_points
         ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
@@ -467,6 +334,7 @@ class App(tk.Tk):
         plt.close("all")
 
     def apply_correction_to_h5(self, algo):
+        ### TODO: Fix this to use new coords convention
         dtypes = {b"DataArray<uint8_t>": np.uint8,
                   b"DataArray<int8_t>": np.int8,
                   b"DataArray<uint16_t>": np.uint16,
@@ -529,6 +397,7 @@ class App(tk.Tk):
         print("[bold green]Correction complete![/bold green]")
 
     def apply_correction_to_tif(self, algo):
+        ### TODO: Fix this to use new coords convention
         # Get the control points
         referencePoints = np.array(self.current_points["bse"])
         distortedPoints = np.array(self.current_points["ebsd"])
@@ -574,11 +443,50 @@ class App(tk.Tk):
 
     def export_CP_imgs(self):
         i = self.slice_num.get()
-        pts = np.array(self.current_points["ebsd"])
+        pts = np.array(self.points["ebsd"][i])
         self._save_CP_img(f"{i}_ebsd", self.ebsd_im, pts, "gray", "#c2344e")
-        pts = np.array(self.current_points["bse"])
+        pts = np.array(self.points["bse"][i])
         self._save_CP_img(f"{i}_bse", self.bse_im, pts, "gray", "#34c295")
         print("Control point images exported successfully.")
+
+    def clahe(self):
+        if self.clahe_active:
+            self.clahe_active = False
+            self.clahe_b["text"] = "Apply CLAHE to BSE"
+            self._update_viewers()
+        else:
+            self.clahe_active = True
+            self.clahe_b["text"] = "Remove CLAHE from BSE"
+            self._update_viewers()
+
+    ### UI stuff
+    def inherit_action(self, *args):
+        i = self.slice_num.get()
+        selection = self.inherit_select.get()
+        if selection == "None":
+            return
+        self.current_points = {"ebsd": self.all_points[int(selection)]["ebsd"].copy(),
+                               "bse": self.all_points[int(selection)]["bse"].copy()}
+        self.all_points[i] = self.current_points
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_ebsd.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points['ebsd'])):
+                x, y = self.current_points['ebsd'][i]
+                output.write(f"{int(x)} {int(y)}\n")
+        path = os.path.join(self.folder, f"ctr_pts_{self.slice_num.get()}_bse.txt")
+        with open(path, "w", encoding="utf8") as output:
+            for i in range(len(self.current_points['bse'])):
+                x, y = self.current_points['bse'][i]
+                output.write(f"{int(x)} {int(y)}\n")
+        self._update_inherit_options()
+        self._update_viewers()
+
+    def _update_inherit_options(self):
+        i = self.slice_num.get()
+        if i not in self.inherit_select_options:
+            self.inherit_select_options.append(i)
+            self.inherit_select_options[1:] = sorted(self.inherit_select_options[1:])
+            self.inherit_picker['values'] = self.inherit_select_options
 
     def _zoom(self, event, view):
         """Zooms in or out on the image in the specified view"""
@@ -596,7 +504,6 @@ class App(tk.Tk):
     def _update_viewers(self, *args):
         i = self.slice_num.get()
         key = self.ebsd_mode.get()
-        print(self.ebsd_mode_options, self.ebsd_picker["values"])
         print(f"Updating viewers for slice {i} and mode {key}")
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
@@ -626,33 +533,9 @@ class App(tk.Tk):
             self.bse_im = np.around(255 * bse_im / bse_im.max(), 0).astype(np.uint8)
 
         # Change current points dict by either reading in one or creating a new one
-        if self.slice_num.get() in self.all_points.keys():
-            self.current_points = self.all_points[self.slice_num.get()]
-        else:
-            self.current_points = {"ebsd": [], "bse": []}
         # Update the images and draw points
         self._update_imgs()
         self._show_points()
-
-    def _show_points(self):
-        """Either turns on or turns off control point viewing"""
-        if self.show_points.get() == 1:
-            pc = "#FEBC11"
-            for i, p in enumerate(self.current_points["ebsd"]):
-                self.ebsd.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc, tags=str(i))
-                self.ebsd.create_text(
-                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold"), tags=str(i)
-                )
-            pc = "#EF5645"
-            for i, p in enumerate(self.current_points["bse"]):
-                self.bse.create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc, tags=str(i))
-                self.bse.create_text(
-                    p[0] + 3, p[1] + 3, anchor=tk.NW, text=i, fill=pc, font=("", 10, "bold"), tags=str(i)
-                )
-        else:
-            self.ebsd.delete("all")
-            self.bse.delete("all")
-            self._update_imgs()
 
     def _update_imgs(self):
         """Updates the images in the viewers"""
@@ -672,6 +555,7 @@ class App(tk.Tk):
 
     def _photo_image(self, image: np.ndarray, channels: int = 1):
         """Creates a PhotoImage object that plays nicely with a tkinter canvas for viewing purposes."""
+        ### TODO: There is an error here with rgb data, not sure why "truncated PPM data", probably need to scale values
         if channels == 1:
             height, width = image.shape
             data = f"P5 {width} {height} 255 ".encode() + image.astype(np.uint8).tobytes()
@@ -741,30 +625,6 @@ class App(tk.Tk):
         self._update_viewers()
         print("Startup complete")
     
-    def _startup_items_new(self):
-        print("Running startup")
-        self._open_BSE_stack(self.BSE_DIR)
-        self._read_h5(self.EBSD_DIR)
-        self.ebsd_mode_options = list(self.ebsd_data.keys())
-        self.ebsd_mode.set(self.ebsd_mode_options[0])
-        self.slice_min = 0
-        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
-        self.slice_num.set(self.slice_min)
-        try:
-            self.w.destroy()
-        except AttributeError:
-            pass
-        # Configure UI
-        self.tps_stack["state"] = "enabled"
-        self.slice_picker["state"] = "readonly"
-        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
-        self.ebsd_picker["state"] = "readonly"
-        self.ebsd_picker["values"] = self.ebsd_mode_options
-        # Read points and setup viewers
-        self._read_points(self.BSE_POINTS, self.EBSD_POINTS)
-        self._update_viewers()
-        print("Startup complete")
-
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
         fig = plt.figure(2)
         ax = fig.add_subplot(111)
@@ -996,6 +856,8 @@ class App(tk.Tk):
             s.configure("TFrame", background=self.bg)
             s.configure("TLabel", background=self.bg, foreground=self.fg)
             s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
+            s.configure("TLabelframe", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
+            s.configure("TLabelframe.Label", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
         elif style == 'light':
             self.bg = "#ffffff"
             self.fg = "#000000"
@@ -1006,6 +868,8 @@ class App(tk.Tk):
             s.configure("TFrame", background=self.bg)
             s.configure("TLabel", background=self.bg, foreground=self.fg)
             s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
+            s.configure("TLabelframe", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
+            s.configure("TLabelframe.Label", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
 
     def _easy_start(self):
         print("Running easy start...")
