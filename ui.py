@@ -468,10 +468,10 @@ class App(tk.Tk):
                   b"DataArray<bool>": bool}
         points = self.all_points
         if len(points.keys()) == 0:
-            print("[bold red]Error:[/bold red] No points have been selected!")
+            print("Error: No points have been selected!")
             return
         elif len(points.keys()) == 1:
-            print("[bold Orange]Warning:[/bold orange] Only one slice has been selected! Applying it to all slices...")
+            print("Warning: Only one slice has been selected! Applying it to all slices...")
         referencePoints = np.array(self.current_points["bse"])
         distortedPoints = np.array(self.current_points["ebsd"])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
@@ -482,7 +482,7 @@ class App(tk.Tk):
         h5 = h5py.File(EBSD_DIR_CORRECTED, "r+")
         # Actually apply it here
         keys = list(h5["DataContainers/ImageDataContainer/CellData"])
-        print(f"[bold green]Success![/bold green] Applying to volume ({len(keys)} modes)")
+        print(f"Success! Applying to volume ({len(keys)} modes)")
         for key in keys:
             # Get stack of one mode and determine characteristics
             ebsd_stack = h5["DataContainers/ImageDataContainer/CellData/" + key]
@@ -514,7 +514,7 @@ class App(tk.Tk):
             # Write new stack to the h5
             h5["DataContainers/ImageDataContainer/CellData/" + key][...] = ebsd_stack
         h5.close()
-        print("[bold green]Correction complete![/bold green]")
+        print("Correction complete!")
 
     def apply_correction_to_tif(self, algo):
         # Get the control points
@@ -558,7 +558,7 @@ class App(tk.Tk):
             imageio.imwrite(SAVE_PATH_BSE, im)
         elif algo == "LR":
             raise ValueError("algo must be TPS at this time. LR is not supported")
-        print("[bold green]Correction complete![/bold green]")
+        print("Correction complete!")
 
     def export_CP_imgs(self):
         i = self.slice_num.get()

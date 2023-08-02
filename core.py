@@ -13,8 +13,6 @@ import imageio
 from skimage import io, exposure
 from skimage import transform as tf
 
-from rich import print
-
 # TPS Stuff
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
@@ -396,7 +394,7 @@ class Alignment:
         # coord_ebsd = np.loadtxt(open(self.distortedPoints, "rb"), delimiter=" ").astype(int)
         # coord_bse = np.loadtxt(open(self.referencePoints, "rb"), delimiter=" ").astype(int)
 
-        # check to make sure each control point is paired
+        # check to make sure each control point is paieed
         if len(coord_ebsd) == len(coord_bse):
             print("Given {} points...".format(coord_bse.shape[0]))
         else:
@@ -526,7 +524,7 @@ def resize_imgs(bse_path, size):
             im = io.imread(bse_path[i])
             resized = tf.resize(im, size, anti_aliasing=True)
             matplotlib.image.imsave(basename[i] + "_resized" + ext, resized, cmap="gray", dpi=1)
-    print("Resized {} images (ext: [green]{}[/], size: [magenta]{}[/])\n".format(i + 1, ext, size))
+    print("Resized {} images (ext: {}, size: {})\n".format(i + 1, ext, size))
 
 
 def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=None):
@@ -539,7 +537,7 @@ def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=
     if format == "sum":
         im = np.sum(data, axis=2)
     io.imsave(fname, im)
-    print("Saved the [red]{}[/] image to [blue]{}[/]".format(view, fname))
+    print("Saved the {} image to {}".format(view, fname))
 
 
 def interactive_overlay(im0, im1):
