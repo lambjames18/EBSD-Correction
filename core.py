@@ -598,3 +598,28 @@ def interactive_overlay(im0, im1):
     row_slider.on_changed(update_row)
     col_slider.on_changed(update_col)
     plt.show()
+
+
+def handle_dtype(data, dtype):
+    if dtype == np.uint8:
+        data = np.around(255 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
+    elif dtype == np.uint16:
+        data = np.around(65535 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
+    elif dtype == np.uint32:
+        data = np.around(4294967295 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
+    elif dtype == np.uint64:
+        data = np.around(18446744073709551615 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
+    elif dtype == np.int8:
+        data = np.around(255 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 128).astype(dtype)
+    elif dtype == np.int16:
+        data = np.around(65535 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 32768).astype(dtype)
+    elif dtype == np.int32:
+        data = np.around(4294967295 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 2147483648).astype(dtype)
+    elif dtype == np.int64:
+        data = np.around(18446744073709551615 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 9223372036854775808).astype(dtype)
+    elif dtype == np.float32 or dtype == np.float64 or dtype == np.float128 or dtype == np.float16:
+        data = data.astype(np.float32)
+    elif dtype == bool:
+        data = (data != 0).astype(dtype)
+    else:
+        raise RuntimeError("Unknown dtype")

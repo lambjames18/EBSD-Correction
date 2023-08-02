@@ -7,9 +7,9 @@ import imageio
 #### USER INPUTS ####
 lower_resolution = 2.5
 higher_resolution = 1.3
-higher_res_image_path = 'test_data/BSE.tif'
+higher_res_image_path = 'test_data/SE.tif'
 image_dtype = np.uint8
-flip_image = False
+flip_image = True
 #### END USER INPUTS ####
 
 folder = os.path.dirname(higher_res_image_path)

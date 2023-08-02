@@ -8,7 +8,7 @@ UI for running distortion correction
 import os
 import shutil
 import tkinter as tk
-from tkinter import filedialog, ttk, ALL, EventType
+from tkinter import filedialog, ttk
 
 # 3rd party packages
 import h5py
@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io, exposure
 import imageio
+import tifffile
 
 # Local files
 import core
@@ -298,6 +299,11 @@ class App(tk.Tk):
         # Configure UI
         if bse_pts_path != "":
             self._read_points(bse_path=bse_pts_path, ebsd_path=ebsd_pts_path)
+        else:
+            with open(os.path.join(self.folder, "ctr_pts_0_ebsd.txt"), "w", encoding="utf8") as output:
+                output.write("")
+            with open(os.path.join(self.folder, "ctr_pts_0_bse.txt"), "w", encoding="utf8") as output:
+                output.write("")
         self._update_viewers()
 
     def coords(self, pos, event):
@@ -522,43 +528,47 @@ class App(tk.Tk):
         referencePoints = np.array(self.current_points["bse"])
         distortedPoints = np.array(self.current_points["ebsd"])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
-        # Create the output filename
-        if self.slice_max == 1:
-            extension = os.path.splitext(self.EBSD_DIR)[1]
+        # Get BSE
+        if self.clahe_active:
+            bse_im = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
         else:
-            extension = ".tiff"
-        SAVE_PATH_BSE = os.path.splitext(self.EBSD_DIR)[0] + "_BSE-out" + extension
-        SAVE_PATH_EBSD = os.path.splitext(self.EBSD_DIR)[0] + "_EBSD-out" + extension
-        if algo == "TPS":
+            bse_im = self.bse_imgs[int(self.slice_num.get())]
+        # Create the output filename
+        extension = ".tiff"
+        SAVE_PATH_EBSD = filedialog.asksaveasfilename(initialdir=self.EBSD_DIR, title="Save corrected (from distorted) image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
+        if SAVE_PATH_EBSD != "":
+            if "." not in SAVE_PATH_EBSD:
+                SAVE_PATH_EBSD += extension
+            # Get the images
+            ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
+            print("Shape:", ebsd_im.shape)
+            print("RAW dtype:", ebsd_im.dtype)
             # Align the image
-            align.TPS(self.bse_im.shape)
-            aligned = align.TPS_apply(self.ebsd_im, out="array")
-            # Correct dtype
-            if aligned.dtype != np.uint16:
-                aligned = (aligned / aligned.max() * 65535).astype(np.uint16)
-            # Save the image
-            self._mask = (slice(None), slice(None))
-            _ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
-            size_diff = np.array(self.bse_imgs.shape) - np.array(_ebsd_stack.shape[:3])
-            if size_diff[1] > 0:
-                print(f"{size_diff[1]=}")
-                start = size_diff[1] // 2
-                end = -(size_diff[1] - start)
-                # self._mask = (slice(start, end), self._mask[1])
-            if size_diff[2] > 0:
-                print(f"{size_diff[2]=}")
-                start = size_diff[2] // 2
-                end = -(size_diff[2] - start)
-                # self._mask = (self._mask[0], slice(start, end))
-            imageio.imwrite(SAVE_PATH_EBSD, aligned)
-            if self.clahe_active:
-                im = exposure.equalize_adapthist(self.bse_imgs[0], clip_limit=0.03)
+            align.TPS(bse_im.shape)
+            if len(ebsd_im.shape) == 3:
+                aligned = []
+                for i in range(ebsd_im.shape[-1]):
+                    aligned.append(align.TPS_apply(ebsd_im[:, :, i], out="array"))
+                aligned = np.moveaxis(np.array(aligned), 0, -1)
             else:
-                im = self.bse_imgs[0][self._mask]
-            im = ((im - im.min()) / (im.max() - im.min()) * 65535).astype(np.uint16)
-            imageio.imwrite(SAVE_PATH_BSE, im)
-        elif algo == "LR":
-            raise ValueError("algo must be TPS at this time. LR is not supported")
+                aligned = align.TPS_apply(ebsd_im, out="array")
+            print("Aligned shape:", aligned.shape)
+            print("Aligned dtype:", aligned.dtype)
+            # Correct dtype
+            if aligned.dtype != ebsd_im.dtype:
+                aligned = core.handle_dtype(aligned, ebsd_im.dtype)
+            print("Corrected dtype:", aligned.dtype)
+            # Save the image
+            io.imsave(SAVE_PATH_EBSD, aligned)
+            d_read = io.imread(SAVE_PATH_EBSD)
+            print("Shape:", d_read.shape)
+            print(d_read.dtype, aligned.dtype, np.allclose(d_read, aligned))
+
+        SAVE_PATH_BSE = filedialog.asksaveasfilename(initialdir=self.EBSD_DIR, title="Save control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
+        if SAVE_PATH_BSE != "":
+            if "." not in SAVE_PATH_BSE:
+                SAVE_PATH_BSE += extension
+            io.imsave(SAVE_PATH_BSE, bse_im)
         print("Correction complete!")
 
     def export_CP_imgs(self):
@@ -832,12 +842,12 @@ class App(tk.Tk):
             raise ValueError("The number of data points does not match number of rows and columns. Automatic adjustments failed (tried +-1 for both rows and columns).")
             
         out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
-        out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
+        out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(np.float32)
         out["Phase"] = out["Phase index"].astype(np.int32)
-        out["XPos"] = out["x"].astype(float)
-        out["YPos"] = out["y"].astype(float)
-        out["IQ"] = out["IQ"].astype(float)
-        out["CI"] = out["CI"].astype(float)
+        out["XPos"] = out["x"].astype(np.float32)
+        out["YPos"] = out["y"].astype(np.float32)
+        out["IQ"] = out["IQ"].astype(np.float32)
+        out["CI"] = out["CI"].astype(np.float32)
         for key in ["phi1", "PHI", "phi2", "Phase index", "PRIAS Bottom Strip", "PRIAS Top Strip", "PRIAS Center Square", "SEM", "Fit", "x", "y"]:
             try:
                 del out[key]
