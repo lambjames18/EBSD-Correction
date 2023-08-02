@@ -281,9 +281,6 @@ class Alignment:
     #     return aligned_dataset
 
     def TPS_apply_3D(self, points, dataset, bse):
-        # Linear function for interpolation
-        def linear(x, m, b):
-            return x * m + b
         # Get slice numbers
         slice_numbers = list(points.keys())
         # Get the solution for each set of control points
