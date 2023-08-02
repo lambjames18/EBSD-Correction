@@ -46,6 +46,14 @@ Under the "File" tab, "Export 2D" will compute the alignment solution and save t
 **NOTE**: The distorted file is only saved as an image currently. In the future, writing an .ang or .h5 file with the corrected data will be supported, but the current state is only to output individual images. Therefore, if one wanted to apply alignment to Confidence Index and Image Quality, one would have to run "Export 2D" twice, each time with a different EBSD mode selected from the dropdown. **The data type is preserved in the saved image, this means that the preview of the image might look wrong, but reading in the data (python, FIJI, etc.) will show the correct data.** For integer data types, the alignemt requires that they go to a float, so the output transforms the float back into the target data type.
 
 
+## Other files
+
+- `SIFT.py` is for future plans.
+- `core.py` this is the core of the alignment algorithms and is called from `ui.py`.
+- `put_BSE_in_h5.py` this is used to put control images into a Dream3D file.
+- `scratch.py` this is my own scratch file for testing random things. It can be ignored.
+
+
 ## Future plans
 
 Currently overhauling the UI to be more user friendly...
