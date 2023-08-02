@@ -544,15 +544,15 @@ class App(tk.Tk):
                 print(f"{size_diff[1]=}")
                 start = size_diff[1] // 2
                 end = -(size_diff[1] - start)
-                self._mask = (slice(start, end), self._mask[1])
+                # self._mask = (slice(start, end), self._mask[1])
             if size_diff[2] > 0:
                 print(f"{size_diff[2]=}")
                 start = size_diff[2] // 2
                 end = -(size_diff[2] - start)
-                self._mask = (self._mask[0], slice(start, end))
-            imageio.imwrite(SAVE_PATH_EBSD, aligned[self._mask])
+                # self._mask = (self._mask[0], slice(start, end))
+            imageio.imwrite(SAVE_PATH_EBSD, aligned)
             if self.clahe_active:
-                im = exposure.equalize_adapthist(self.bse_imgs[0][self._mask], clip_limit=0.03)
+                im = exposure.equalize_adapthist(self.bse_imgs[0], clip_limit=0.03)
             else:
                 im = self.bse_imgs[0][self._mask]
             im = ((im - im.min()) / (im.max() - im.min()) * 65535).astype(np.uint16)
@@ -857,25 +857,23 @@ class App(tk.Tk):
         elif len(im1.shape) > 3:
             raise IOError("im1 must be a 3D volume or a 2D image.")
         # Correct for cropped EBSD data
-        self._bse_mask = (slice(None), slice(None))
+        # self._bse_mask = (slice(None), slice(None))
         _ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
         size_diff = np.array(self.bse_imgs.shape) - np.array(_ebsd_stack.shape[:3])
         if size_diff[1] > 0:
             print(f"{size_diff[1]=}")
             start = size_diff[1] // 2
             end = -(size_diff[1] - start)
-            self._bse_mask = (slice(start, end), self._bse_mask[1])
+            # self._bse_mask = (slice(start, end), self._bse_mask[1])
         if size_diff[2] > 0:
             print(f"{size_diff[2]=}")
             start = size_diff[2] // 2
             end = -(size_diff[2] - start)
-            self._bse_mask = (self._bse_mask[0], slice(start, end))
-        if not stack:
-            im1 = im1[self._bse_mask]
+            # self._bse_mask = (self._bse_mask[0], slice(start, end))
         # Generate the figure
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
-        im0 = self.bse_imgs[self.slice_num.get()][self._bse_mask]
+        im0 = self.bse_imgs[self.slice_num.get()]
         max_r = im0.shape[0]
         max_c = im0.shape[1]
         max_s = self.slice_max
@@ -929,7 +927,7 @@ class App(tk.Tk):
         def change_image(val):
             val = int(np.around(val, 0))
             im1 = self.ebsd_cStack[val]
-            im0 = self.bse_imgs[val][self._bse_mask]
+            im0 = self.bse_imgs[val]
             im.set_data(im0)
             im_ebsd.set_data(im1)
             ax.set_title(f"{algo} Output (Slice {val})")
