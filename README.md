@@ -52,7 +52,9 @@ Under the "File" tab, "Export 2D" will compute the alignment solution and save t
 - `core.py` this is the core of the alignment algorithms and is called from `ui.py`.
 - `put_BSE_in_h5.py` this is used to put control images into a Dream3D file.
 - `scratch.py` this is my own scratch file for testing random things. It can be ignored.
-
+- "original" this folder contains older scripts that are kept for potential updates.
+- "test_data" contains data one can use to test the UI.
+- "theme" this contains images and style files for the tkinter GUI and the README file.
 
 ## Future plans
 
