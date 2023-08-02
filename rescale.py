@@ -9,6 +9,7 @@ lower_resolution = 2.5
 higher_resolution = 1.3
 higher_res_image_path = 'test_data/BSE.tif'
 image_dtype = np.uint8
+flip_image = False
 #### END USER INPUTS ####
 
 folder = os.path.dirname(higher_res_image_path)
@@ -31,4 +32,6 @@ else:
 print('Original image shape: {}'.format(higher_res_image.shape))
 print('Rescaled image shape: {}'.format(lower_res_image.shape))
 print('Saving rescaled image to: {}'.format(save_name))
+if flip_image:
+    lower_res_image = np.flip(lower_res_image, axis=0)
 imageio.imwrite(save_name, lower_res_image)

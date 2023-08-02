@@ -251,6 +251,7 @@ class App(tk.Tk):
         self.BSE_DIR = os.path.dirname(bse_path)
         ebsd_path = filedialog.askopenfilename(title="Select distorted image", filetypes=[("ANG", "*.ang"), ("TIF", "*.tif"), ("TIFF", "*.tiff"), ("PNG", "*.png"), ("All files", "*.*")], initialdir=self.BSE_DIR)
         self.EBSD_DIR = os.path.dirname(ebsd_path)
+        self.folder = self.EBSD_DIR
         # Get control points if they exist
         bse_pts_path = filedialog.askopenfilename(title="Select control points (control/BSE/source)", filetypes=[("txt", "*.txt"), ("All files", "*.*")], initialdir=self.EBSD_DIR)
         if bse_pts_path != "":
@@ -810,7 +811,7 @@ class App(tk.Tk):
                 else:
                     break
         if col_names is None:
-            col_names = ["phi1", "PHI", "phi2", "y", "IQ", "CI", "Phase index"]
+            col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
         raw_data = np.genfromtxt(ang_path, skip_header=num_header_lines)
         n_entries = raw_data.shape[-1]
         if raw_data.shape[0] == ncols * nrows:
@@ -844,7 +845,9 @@ class App(tk.Tk):
                 pass
         for key in out.keys():
             if key != "EulerAngles":
-                out[key] = np.fliplr(np.rot90(out[key], k=3))
+                out[key] = np.fliplr(np.rot90(out[key], k=3)).T
+            else:
+                out[key] = out[key].transpose((1, 0, 2))
         return out
 
     def _interactive_view(self, algo, im1, stack=False):
