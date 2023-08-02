@@ -24,7 +24,8 @@ import core
 import ZoomWidget as Zoom
 import IO
 
-
+### TODO: Fix cropping in output
+### TODO: Test 3D output
 class App(tk.Tk):
     def __init__(self, screenName=None, baseName=None):
         super().__init__(screenName, baseName)
