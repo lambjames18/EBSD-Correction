@@ -207,6 +207,7 @@ class App(tk.Tk):
                 return
             # Set the data
             self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
+            self.ebsd_path, self.bse_path = ebsd_path, bse_path
             self.ebsd_data, self.bse_imgs = e_d, b_d
             self.ebsd_res, self.bse_res = ebsd_res, bse_res
             self.points["ebsd"], self.points["bse"] = e_pts, b_pts
