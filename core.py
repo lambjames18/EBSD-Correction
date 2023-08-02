@@ -291,8 +291,8 @@ class Alignment:
         if len(slice_numbers) == 1:
             print("Only one slice has control points, only calculating one solution.")
             key = slice_numbers[0]
-            self.source = np.array(points[key]["bse"])
-            self.distorted = np.array(points[key]["ebsd"])
+            self.source = np.array(points["bse"][key])
+            self.distorted = np.array(points["ebsd"][key])
             ### self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
             self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
             # Create transform object for each slice and warp
@@ -303,8 +303,8 @@ class Alignment:
             return aligned_dataset
         else:
             for key in slice_numbers:
-                self.source = np.array(points[key]["bse"])
-                self.distorted = np.array(points[key]["ebsd"])
+                self.source = np.array(points["bse"][key])
+                self.distorted = np.array(points["ebsd"][key])
                 ### self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
                 self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
                 params[key] = self.TPS_solution

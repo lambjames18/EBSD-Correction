@@ -90,14 +90,14 @@ class DataInput(object):
         self.separator = ttk.Separator(self.bot, orient="horizontal")
         self.separator.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         if self.mode == "3D":
-            self.info1 = ttk.Label(self.bot, text="Note: The distorted data must be a .dream3d FILE.")
-            self.info2 = ttk.Label(self.bot, text="Note: The control data must be a DIRECTORY contains the control images (png, tif, tiff).")
+            self.info1 = ttk.Label(self.bot, text="Note: The distorted data must be a .dream3d file.")
+            self.info2 = ttk.Label(self.bot, text="Note: The control data must be a single image. It needs to be the first of all control images (png, tif, tiff).")
             self.info3 = ttk.Label(self.bot, text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.")
             self.info4 = ttk.Label(self.bot, text="Note: If a points file is passed that does not exist, a new file will be created with the given name.")
             self.info5 = ttk.Label(self.bot, text="Note: If a points file is passed that does exist, the point data will be read in.")
         elif self.mode == "2D":
-            self.info1 = ttk.Label(self.bot, text="Note: The distorted data can be an ang, h5, or image FILE (tif, tiff, png, jpg).")
-            self.info2 = ttk.Label(self.bot, text="Note: The control data must be an image FILE (tif, tiff, png, jpg).")
+            self.info1 = ttk.Label(self.bot, text="Note: The distorted data can be an ang, h5, or image file (tif, tiff, png, jpg).")
+            self.info2 = ttk.Label(self.bot, text="Note: The control data must be an image file (tif, tiff, png, jpg).")
             self.info3 = ttk.Label(self.bot, text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.")
             self.info4 = ttk.Label(self.bot, text="Note: If a points file is passed that does not exist, a new file will be created with the given name.")
             self.info5 = ttk.Label(self.bot, text="Note: If a points file is passed that does exist, the point data will be read in.")
@@ -124,6 +124,7 @@ class DataInput(object):
         if self.mode == "3D":
             path = filedialog.askopenfilename(initialdir=self.directory, title="Select the first control image", filetypes=(("png files", "*.png"), ("tif files", "*.tif"), ("tiff files", "*.tiff"), ("all files", "*.*")))
             if path == "": return
+            path = os.path.dirname(path) + "/*" + os.path.splitext(path)[1]
             self.directory = os.path.dirname(path)
             self.bse_entry.delete(0, tk.END)
             self.bse_entry.insert(0, path)
@@ -506,7 +507,7 @@ def read_dream3d(path):
     h5 = h5py.File(path, "r")
     if "DataStructure" in h5.keys():
         ebsd_data = h5["DataStructure/DataContainer/CellData"]
-        res = np.asarray(h5["DataStructure/DataContainer"].attr.get("_SPACING"))[1]
+        res = np.asarray(h5["DataStructure/DataContainer"].attrs.get("_SPACING"))[1]
     elif "DataContainers" in h5.keys():
         ebsd_data = h5["DataContainers/ImageDataContainer/CellData"]
         res = h5["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...][1]
@@ -518,22 +519,20 @@ def read_dream3d(path):
     return ebsd_data, res
 
 def read_many_images(path, ext):
-    ext = os.path.splitext(path)[1]
-    path = os.path.dirname(path)
+    ### TODO: Add multiple control images
     paths = sorted(
-        [path for path in os.listdir(path) if os.path.splitext(path)[1] == ext],
+        [p for p in os.listdir(path) if os.path.splitext(p)[1] == ext],
         key=lambda x: int(x.replace(ext, "")),
     )
     imgs = []
     print(paths)
     for i in range(len(paths)):
-        p = os.path.join(imgs, paths[i])
+        p = os.path.join(path, paths[i])
         im = io.imread(p, as_gray=True).astype(np.float32)
         im = np.around(255 * (im - im.min()) / (im.max() - im.min()), 0).astype(np.uint8)
         imgs.append(im)
     imgs = np.array(imgs, dtype=np.uint8)
-    imgs = imgs.reshape(imgs.shape + (1,))
-    print(imgs.shape)
+    imgs = imgs.reshape(imgs.shape)
     return imgs
 
 def read_points(path):
@@ -548,7 +547,7 @@ def read_image(path):
         print("Warning: The image is not grayscale. The image will be converted to grayscale.")
     im = io.imread(path, as_gray=True).astype(np.float32)
     im = np.around((im - np.min(im)) / (np.max(im) - np.min(im)) * 255, 0).astype(np.uint8)
-    return im.reshape((1,) + im.shape + (1,))
+    return im.reshape((1,) + im.shape)
 
 
 ##########
@@ -561,9 +560,11 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         ebsd_data = read_dream3d(ebsd_path)[0]
     else:
         raise ValueError(f"Unknown file type: {ebsd_path}")
-    if os.path.isdir(bse_path):
-        bse_data = read_many_images(bse_path)
-        if bse_data.shape[0] != ebsd_data[ebsd_data.keys()[0]].shape[0]:
+    if "*" in bse_path:
+        ext = os.path.splitext(bse_path)[1]
+        folder = os.path.dirname(bse_path)
+        bse_data = read_many_images(folder, ext)
+        if bse_data.shape[0] != ebsd_data[list(ebsd_data.keys())[0]].shape[0]:
             raise ValueError("The number of BSE images does not match the number of EBSD images.")
     else:
         bse_data = read_image(bse_path)
@@ -581,11 +582,7 @@ def rescale_control(bse_data, bse_res, ebsd_res):
     downscale = bse_res / ebsd_res
     print("Current BSE resolution:", bse_res, "Target EBSD resolution:", ebsd_res)
     print("BSE needs to be downscaled by a factor of", downscale, "to match EBSD resolution.")
-    rescaled_bse = []
-    for j in range(bse_data.shape[-1]):
-        bse = np.array([tf.rescale(bse_data[i, :, :, j], downscale, anti_aliasing=True) for i in range(bse_data.shape[0])])
-        rescaled_bse.append(bse)
-    rescaled_bse = np.stack(rescaled_bse, axis=-1)
+    rescaled_bse = np.array([tf.rescale(bse_data[i], downscale, anti_aliasing=True) for i in range(bse_data.shape[0])])
     rescaled_bse = np.around(255 * (rescaled_bse - rescaled_bse.min()) / (rescaled_bse.max() - rescaled_bse.min()), 0).astype(np.uint8)
     return rescaled_bse
 

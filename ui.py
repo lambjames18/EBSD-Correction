@@ -188,7 +188,7 @@ class App(tk.Tk):
                         output.write("")
                 if b_pts is None:
                     b_pts = {0: []}
-                    bse_points_path = os.path.dirname(bse_path) + "/control_pts.txt"
+                    bse_points_path = os.path.dirname(ebsd_path) + "/control_pts.txt"
                     with open(bse_points_path, "w", encoding="utf8") as output:
                         output.write("")
                 if self.w.rescale:
@@ -196,11 +196,13 @@ class App(tk.Tk):
                 if self.w.flip:
                     b_d = np.flip(b_d, axis=1).copy(order='C')
                 if self.w.crop:
-                    self.w = IO.CropControl(self, b_d[0, :, :, 0])
+                    ### TODO: Add multiple control images
+                    self.w = IO.CropControl(self, b_d[0, :, :])
                     self.wait_window(self.w.w)
                     if self.w.clean_exit:
                         s, e = self.w.start, self.w.end
-                        b_d = b_d[:, s[0]:e[0], s[1]:e[1], :]
+                        ### TODO: Add multiple control images
+                        b_d = b_d[:, s[0]:e[0], s[1]:e[1]]
             else:
                 return
             # Set the data
@@ -277,7 +279,6 @@ class App(tk.Tk):
             pc = {"ebsd": "#FEBC11", "bse": "#EF5645"}
             viewers = {"ebsd": self.ebsd, "bse": self.bse}
             for mode in ["ebsd", "bse"]:
-                print(mode, j, self.points[mode])
                 pts = np.array(self.points[mode][j])
                 for i, p in enumerate(pts):
                     o_item = viewers[mode].create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc[mode], tags=str(i))
@@ -296,18 +297,16 @@ class App(tk.Tk):
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
         ### TODO: Fix this to use new coords convention
-        referencePoints = np.array(self.current_points["bse"])
-        distortedPoints = np.array(self.current_points["ebsd"])
+        i = self.slice_num.get()
+        referencePoints = np.array(self.points["bse"][i])
+        distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         if algo == "TPS":
-            save_name = os.path.join(self.folder, "TPS_mapping.npy")
+            save_name = os.path.join(self.folder, "TPS_solution.npy")
             align.get_solution(size=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
         elif algo == "LR":
-            save_name = os.path.join(self.folder, "LR_mapping.npy")
-            align.get_solution(
-                degree=int(self.lr_degree.get()), solutionFile=save_name, saveSolution=False
-            )
-        save_name = os.path.join(self.folder, f"{algo}_out.tif")
+            raise NotImplementedError
+        # save_name = os.path.join(self.folder, f"{algo}_out.tif")
         im1 = align.apply(self.ebsd_im, out="array")
         print("Creating interactive view")
         self._interactive_view(algo, im1)
@@ -317,7 +316,7 @@ class App(tk.Tk):
         """Applies the correction algorithm and calls the interactive view"""
         ### TODO: Fix this to use new coords convention
         self.config(cursor="watch")
-        points = self.all_points
+        points = self.points
         ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
         referencePoints = np.array(self.current_points["bse"])
         distortedPoints = np.array(self.current_points["ebsd"])
@@ -327,7 +326,6 @@ class App(tk.Tk):
             self.ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack, self.bse_imgs)
         elif algo == "LR":
             raise NotImplementedError
-            # self.ebsd_cStack = align.LR_3D_Apply(points, ebsd_stack, deg=3)
         print("Creating interactive view")
         self.config(cursor="tcross")
         self._interactive_view(algo, self.ebsd_cStack, True)
@@ -346,19 +344,20 @@ class App(tk.Tk):
                   b"DataArray<float>": np.float32,
                   b"DataArray<double>": np.float64,
                   b"DataArray<bool>": bool}
-        points = self.all_points
-        if len(points.keys()) == 0:
+        points = self.points
+        if len(points["ebsd"].keys()) == 0:
             print("[bold red]Error:[/bold red] No points have been selected!")
             return
-        elif len(points.keys()) == 1:
+        elif len(points["ebsd"].keys()) == 1:
             print("[bold Orange]Warning:[/bold orange] Only one slice has been selected! Applying it to all slices...")
-        referencePoints = np.array(self.current_points["bse"])
-        distortedPoints = np.array(self.current_points["ebsd"])
+        i = self.slice_num.get()
+        referencePoints = np.array(self.points["bse"][i])
+        distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Grab the h5 file
         print("Generating a new DREAM3D file...")
-        EBSD_DIR_CORRECTED = (w := os.path.splitext(self.EBSD_DIR))[0] + "_corrected" + w[1]
-        shutil.copyfile(self.EBSD_DIR, EBSD_DIR_CORRECTED)
+        EBSD_DIR_CORRECTED = (w := os.path.splitext(self.ebsd_path))[0] + "_corrected" + w[1]
+        shutil.copyfile(self.ebsd_path, EBSD_DIR_CORRECTED)
         h5 = h5py.File(EBSD_DIR_CORRECTED, "r+")
         # Actually apply it here
         keys = list(h5["DataContainers/ImageDataContainer/CellData"])
@@ -399,16 +398,17 @@ class App(tk.Tk):
     def apply_correction_to_tif(self, algo):
         ### TODO: Fix this to use new coords convention
         # Get the control points
-        referencePoints = np.array(self.current_points["bse"])
-        distortedPoints = np.array(self.current_points["ebsd"])
+        i = self.slice_num.get()
+        referencePoints = np.array(self.points["bse"][i])
+        distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Create the output filename
         if self.slice_max == 1:
-            extension = os.path.splitext(self.EBSD_DIR)[1]
+            extension = os.path.splitext(self.ebsd_path)[1]
         else:
             extension = ".tiff"
-        SAVE_PATH_BSE = os.path.splitext(self.EBSD_DIR)[0] + "_BSE-out" + extension
-        SAVE_PATH_EBSD = os.path.splitext(self.EBSD_DIR)[0] + "_EBSD-out" + extension
+        SAVE_PATH_BSE = os.path.splitext(self.ebsd_path)[0] + "_BSE-out" + extension
+        SAVE_PATH_EBSD = os.path.splitext(self.ebsd_path)[0] + "_EBSD-out" + extension
         if algo == "TPS":
             # Align the image
             align.TPS(self.bse_im.shape)
@@ -601,30 +601,6 @@ class App(tk.Tk):
         self.inherit_picker["values"] = self.inherit_select_options
         self.inherit_picker["state"] = "enabled"
 
-    def _startup_items(self):
-        print("Running startup")
-        self._open_BSE_stack(self.BSE_DIR)
-        self._read_h5(self.EBSD_DIR)
-        self.ebsd_mode_options = list(self.ebsd_data.keys())
-        self.ebsd_mode.set(self.ebsd_mode_options[0])
-        self.slice_min = 0
-        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
-        self.slice_num.set(self.slice_min)
-        try:
-            self.w.destroy()
-        except AttributeError:
-            pass
-        # Configure UI
-        self.tps_stack["state"] = "enabled"
-        self.slice_picker["state"] = "readonly"
-        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
-        self.ebsd_picker["state"] = "readonly"
-        self.ebsd_picker["values"] = self.ebsd_mode_options
-        # Read points and setup viewers
-        self._read_points()
-        self._update_viewers()
-        print("Startup complete")
-    
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
         fig = plt.figure(2)
         ax = fig.add_subplot(111)
@@ -637,108 +613,6 @@ class App(tk.Tk):
         plt.tight_layout()
         fig.savefig(f"{os.path.join(self.folder,name)}_points.png")
         plt.close()
-
-    def _get_FOLDER_dir(self):
-        """Gets the folder where all control points and other images will be saved."""
-        self.folder = filedialog.askdirectory(
-            initialdir=self.folder, title="Select control points folder"
-        )
-        self.w.d3d["state"] = "active"
-
-    def _get_EBSD_dir(self):
-        """Gets the H5 file and saves its location"""
-        self.EBSD_DIR = filedialog.askopenfilename(
-            initialdir=self.folder, title="Select Dream3D file"
-        )
-        self.w.bse["state"] = "active"
-
-    def _get_BSE_dir(self):
-        """Gets the folder containing the BSE images and saves the location"""
-        self.BSE_DIR = filedialog.askdirectory(initialdir=self.EBSD_DIR, title="Select BSE folder")
-        self.w.close["state"] = "active"
-
-    def _read_h5(self, path: str):
-        """Reads a Dream3D file"""
-        h5 = h5py.File(path, "r")
-        self.ebsd_data = h5["DataContainers/ImageDataContainer/CellData"]
-        key = list(self.ebsd_data.keys())[0]
-        self.ebsd_cStack = np.zeros(self.ebsd_data[key].shape)
-
-    def _open_BSE_stack(self, imgs_path: str):
-        """Reads a stack of BSE images into one numpy array"""
-        paths_tiff = sorted(
-            [path for path in os.listdir(imgs_path) if os.path.splitext(path)[1] == ".tiff"],
-            key=lambda x: int(x.replace(".tiff", "")),
-        )
-        paths_tif = sorted(
-            [path for path in os.listdir(imgs_path) if os.path.splitext(path)[1] == ".tif"],
-            key=lambda x: int(x.replace(".tif", "")),
-        )
-        paths = []
-        for p in [paths_tiff, paths_tif]:
-            if len(p) > len(paths):
-                paths = p
-        if len(paths) == 0:
-            raise ValueError("BSE images must be either tiff or tif. No other format is supported.")
-        bse_imgs = []
-        for i in range(len(paths)):
-            p = os.path.join(imgs_path, paths[i])
-            im = io.imread(p, as_gray=True).astype(np.float32)
-            im = np.around(255 * im / im.max(), 0).astype(np.uint8)
-            bse_imgs.append(im)
-        self.bse_imgs = np.array(bse_imgs, dtype=np.uint8)
-        print(f"{self.bse_imgs.shape[0]} BSE images imported!")
-    
-    def _open_ang(self, ang_path: str):
-        """Reads an ang file into a numpy array"""
-        num_header_lines = 0
-        with open(ang_path, "r") as f:
-            for line in f:
-                if line[0] == "#":
-                    num_header_lines += 1
-                    if "NCOLS_ODD" in line:
-                        ncols = int(line.split(": ")[1].strip())
-                    elif "NROWS" in line:
-                        nrows = int(line.split(": ")[1].strip())
-                    elif "COLUMN_HEADERS" in line:
-                        col_names = line.split(": ")[1].strip().split(", ")
-                else:
-                    break
-        raw_data = np.genfromtxt(ang_path, skip_header=num_header_lines)
-        n_entries = raw_data.shape[-1]
-        if raw_data.shape[0] == ncols * nrows:
-            data = raw_data.reshape((nrows, ncols, n_entries))
-        elif raw_data.shape[0] == ncols * (nrows - 1):
-            data = raw_data.reshape((nrows - 1, ncols, n_entries))
-            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows - 1, ncols).")
-        elif raw_data.shape[0] == ncols * (nrows + 1):
-            data = raw_data.reshape((nrows + 1, ncols, n_entries))
-            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows + 1, ncols).")
-        elif raw_data.shape[0] == (ncols - 1) * nrows:
-            data = raw_data.reshape((nrows, ncols - 1, n_entries))
-            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows, ncols - 1).")
-        elif raw_data.shape[0] == (ncols + 1) * nrows:
-            data = raw_data.reshape((nrows, ncols + 1, n_entries))
-            print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows, ncols + 1).")
-        else:
-            raise ValueError("The number of data points does not match number of rows and columns. Automatic adjustments failed (tried +-1 for both rows and columns).")
-            
-        out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
-        out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-        out["Phase"] = out["Phase index"].astype(np.int32)
-        out["XPos"] = out["x"].astype(float)
-        out["YPos"] = out["y"].astype(float)
-        out["IQ"] = out["IQ"].astype(float)
-        out["CI"] = out["CI"].astype(float)
-        for key in ["phi1", "PHI", "phi2", "Phase index", "PRIAS Bottom Strip", "PRIAS Top Strip", "PRIAS Center Square", "SEM", "Fit", "x", "y"]:
-            try:
-                del out[key]
-            except KeyError:
-                pass
-        for key in out.keys():
-            if key != "EulerAngles":
-                out[key] = np.fliplr(np.rot90(out[key], k=3))
-        return out
 
     def _interactive_view(self, algo, im1, stack=False):
         """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
@@ -754,18 +628,16 @@ class App(tk.Tk):
             print(f"{size_diff[1]=}")
             start = size_diff[1] // 2
             end = -(size_diff[1] - start)
-            self._bse_mask = (slice(start, end), self._bse_mask[1])
         if size_diff[2] > 0:
             print(f"{size_diff[2]=}")
             start = size_diff[2] // 2
             end = -(size_diff[2] - start)
-            self._bse_mask = (self._bse_mask[0], slice(start, end))
         if not stack:
             im1 = im1[self._bse_mask]
         # Generate the figure
         fig = plt.figure(figsize=(12, 8))
         ax = fig.add_subplot(111)
-        im0 = self.bse_imgs[self.slice_num.get()][self._bse_mask]
+        im0 = self.bse_imgs[self.slice_num.get()]
         max_r = im0.shape[0]
         max_c = im0.shape[1]
         max_s = self.slice_max
@@ -819,7 +691,7 @@ class App(tk.Tk):
         def change_image(val):
             val = int(np.around(val, 0))
             im1 = self.ebsd_cStack[val]
-            im0 = self.bse_imgs[val][self._bse_mask]
+            im0 = self.bse_imgs[val]
             im.set_data(im0)
             im_ebsd.set_data(im1)
             ax.set_title(f"{algo} Output (Slice {val})")
