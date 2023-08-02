@@ -796,6 +796,7 @@ class App(tk.Tk):
     def _open_ang(self, ang_path: str):
         """Reads an ang file into a numpy array"""
         num_header_lines = 0
+        col_names = None
         with open(ang_path, "r") as f:
             for line in f:
                 if line[0] == "#":
@@ -808,6 +809,8 @@ class App(tk.Tk):
                         col_names = line.split(": ")[1].strip().split(", ")
                 else:
                     break
+        if col_names is None:
+            col_names = ["phi1", "PHI", "phi2", "y", "IQ", "CI", "Phase index"]
         raw_data = np.genfromtxt(ang_path, skip_header=num_header_lines)
         n_entries = raw_data.shape[-1]
         if raw_data.shape[0] == ncols * nrows:
