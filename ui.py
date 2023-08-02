@@ -16,12 +16,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from skimage import io, exposure
-from rich import print
 import imageio
 
 # Local files
 import core
-import ZoomWidget as Zoom
+# import ZoomWidget as Zoom
 
 
 class App(tk.Tk):
