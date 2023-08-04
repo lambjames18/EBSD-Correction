@@ -348,23 +348,6 @@ class Alignment:
                 sol = solutions[i]
                 self.TPS_solution = sol
                 aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
-            size_diff = np.array(bse.shape) - np.array(dataset.shape)
-            if size_diff[1] > 0:
-                start = size_diff[1] // 2
-                end = -(size_diff[1] - start)
-                aligned_dataset = aligned_dataset[:, start: end, :]
-            elif size_diff[1] == 0:
-                print("Dimensions are the same")
-            else:
-                raise RuntimeError("Something went wrong while aligning the dataset." + f"{size_diff[1]=}")
-            if size_diff[2] > 0:
-                start = size_diff[2] // 2
-                end = -(size_diff[2] - start)
-                aligned_dataset = aligned_dataset[:, :, start: end]
-            elif size_diff[2] == 0:
-                print("Dimensions are the same")
-            else:
-                raise RuntimeError("Something went wrong while aligning the dataset." + f"{size_diff[2]=}")
             return aligned_dataset
 
     def _TPS_makeL(self, cp):

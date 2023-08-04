@@ -39,6 +39,7 @@ class App(tk.Tk):
         # frame_h = 1080
         # self.geometry(f"{frame_w}x{frame_h}")
         # self.resizable(False, False)
+        self.title("Distortion Correction")
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
@@ -206,6 +207,7 @@ class App(tk.Tk):
         #     command=lambda: self.apply_correction_to_h5("LR"),
         # )
         # fixh5LR.grid(row=1, column=5, columnspan=2)
+        self.read_in_points = False
 
     def select_3d_data_popup(self):
         self.w = tk.Toplevel(self)
@@ -489,6 +491,19 @@ class App(tk.Tk):
         h5 = h5py.File(EBSD_DIR_CORRECTED, "r+")
         # Actually apply it here
         keys = list(h5["DataContainers/ImageDataContainer/CellData"])
+        # Create a dummy solution
+        dummy_vol = np.ones(h5["DataContainers/ImageDataContainer/CellData" + keys[0]].shape[:-1])
+        print(dummy_vol.shape)
+        dummy_vol_corrected = align.TPS_apply_3D(points, dummy_vol, self.bse_imgs)
+        print(dummy_vol_corrected.shape)
+        dummy_col_locs = np.where(dummy_vol_corrected.sum(axis=(0, 1)) > 0)[0]
+        dummy_row_locs = np.where(dummy_vol_corrected.sum(axis=(0, 2)) > 0)[0]
+        print("Col", dummy_col_locs.min(), dummy_col_locs.max())
+        print("Row", dummy_row_locs.min(), dummy_row_locs.max())
+        print(dummy_vol_corrected[:, dummy_row_locs.min():dummy_row_locs.max(), dummy_col_locs.min():dummy_col_locs.max()].shape, dummy_vol.shape)
+        plt.imshow(dummy_vol_corrected[0])
+        plt.show()
+        return
         print(f"Success! Applying to volume ({len(keys)} modes)")
         for key in keys:
             # Get stack of one mode and determine characteristics
@@ -515,6 +530,9 @@ class App(tk.Tk):
                         c_stack = c_stack.astype(dtype)
                     
                     # Fill original stack
+                    print(c_stack.shape, ebsd_stack[:, :, :, i])
+                    plt.imshow(c_stack)
+                    plt.show()
                     ebsd_stack[:, :, :, i] = c_stack
                 elif algo == "LR":
                     raise ValueError("algo must be TPS at this time. LR is not supported")
@@ -682,31 +700,27 @@ class App(tk.Tk):
 
     def _read_points(self, bse_path=None, ebsd_path=None):
         """Reads a set of control points"""
-        if bse_path is None and ebsd_path is None:
-            bse_files = [bse_path]
-            ebsd_files = [ebsd_path]
-        elif bse_path is None and ebsd_path is not None:
-            raise ValueError("Must provide both BSE and EBSD paths")
-        elif bse_path is not None and ebsd_path is None:
-            raise ValueError("Must provide both BSE and EBSD paths")
+        if not self.read_in_points:
+            self.all_points = {}
+            return
         else:
-            ebsd_files = [
+            ebsd_files = sorted([
                 os.path.join(self.folder, f)
                 for f in os.listdir(self.folder)
                 if "ebsd" in f and "txt" in f
-            ]
-            bse_files = [
+            ], key=lambda x: int(x.replace("ctr_pts_", "").replace("_bse.txt", "")))
+            bse_files = sorted([
                 os.path.join(self.folder, f)
                 for f in os.listdir(self.folder)
                 if "bse" in f and "txt" in f
-            ]
-        for i in range(len(bse_files)):
-            base = os.path.splitext(os.path.basename(bse_files[i]))[0]
-            key = int(base.split("_")[-2])
-            bse_pts = list(np.loadtxt(bse_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
-            ebsd_pts = list(np.loadtxt(ebsd_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
-            print(key, len(bse_pts), len(ebsd_pts))
-            self.all_points[key] = {"ebsd": ebsd_pts, "bse": bse_pts}
+            ], key=lambda x: int(x.replace("ctr_pts_", "").replace("_bse.txt", "")))
+            for i in range(len(bse_files)):
+                base = os.path.splitext(os.path.basename(bse_files[i]))[0]
+                key = int(base.split("_")[-2])
+                bse_pts = list(np.loadtxt(bse_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
+                ebsd_pts = list(np.loadtxt(ebsd_files[i], dtype=int, delimiter=' ').reshape(-1, 2))
+                print(key, len(bse_pts), len(ebsd_pts))
+                self.all_points[key] = {"ebsd": ebsd_pts, "bse": bse_pts}
         if self.slice_num.get() in self.all_points.keys():
             self.current_points = self.all_points[self.slice_num.get()]
         else:
@@ -736,7 +750,7 @@ class App(tk.Tk):
         self.ebsd_picker["state"] = "readonly"
         self.ebsd_picker["values"] = self.ebsd_mode_options
         # Read points and setup viewers
-        self._read_points()
+        self._read_points(self.folder, self.folder)
         self._update_viewers()
         print("Startup complete")
 
@@ -759,6 +773,9 @@ class App(tk.Tk):
             initialdir=self.folder, title="Select control points folder"
         )
         self.w.d3d["state"] = "active"
+        txt_files_in_folder = [f for f in os.listdir(self.folder) if ".txt" in f]
+        if len(txt_files_in_folder) > 0:
+            self.read_in_points = True
 
     def _get_EBSD_dir(self):
         """Gets the H5 file and saves its location"""
