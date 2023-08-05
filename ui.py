@@ -695,3 +695,4 @@ if __name__ == "__main__":
     # root.tk.call("set_theme", "dark")
     app = App()
     app.mainloop()
+

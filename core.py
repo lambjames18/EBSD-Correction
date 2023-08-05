@@ -286,7 +286,7 @@ def resize_imgs(bse_path, size):
             im = io.imread(bse_path[i])
             resized = tf.resize(im, size, anti_aliasing=True)
             matplotlib.image.imsave(basename[i] + "_resized" + ext, resized, cmap="gray", dpi=1)
-    print("Resized {} images (ext: [green]{}[/], size: [magenta]{}[/])\n".format(i + 1, ext, size))
+    print("Resized {} images (ext: {}, size: {})\n".format(i + 1, ext, size))
 
 
 def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=None):
@@ -299,7 +299,7 @@ def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=
     if format == "sum":
         im = np.sum(data, axis=2)
     io.imsave(fname, im)
-    print("Saved the [red]{}[/] image to [blue]{}[/]".format(view, fname))
+    print("Saved the {} image to {}".format(view, fname))
 
 def handle_dtype(data, dtype):
     if dtype == np.uint8:
@@ -324,3 +324,4 @@ def handle_dtype(data, dtype):
         data = (data != 0).astype(dtype)
     else:
         raise RuntimeError("Unknown dtype")
+    return data
