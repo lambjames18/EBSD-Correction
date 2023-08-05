@@ -1,77 +1,49 @@
+import os
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
-import imageio.v3 as iio
+import imageio
 from skimage import transform, io
 import core
-import tifffile
 
 
-def _open_ang(ang_path: str):
-    """Reads an ang file into a numpy array"""
-    num_header_lines = 0
-    col_names = None
-    with open(ang_path, "r") as f:
-        for line in f:
-            if line[0] == "#":
-                num_header_lines += 1
-                if "NCOLS_ODD" in line:
-                    ncols = int(line.split(": ")[1].strip())
-                elif "NROWS" in line:
-                    nrows = int(line.split(": ")[1].strip())
-                elif "COLUMN_HEADERS" in line:
-                    col_names = line.split(": ")[1].strip().split(", ")
-            else:
-                break
-    if col_names is None:
-        col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
-    raw_data = np.genfromtxt(ang_path, skip_header=num_header_lines)
-    n_entries = raw_data.shape[-1]
-    if raw_data.shape[0] == ncols * nrows:
-        data = raw_data.reshape((nrows, ncols, n_entries))
-    elif raw_data.shape[0] == ncols * (nrows - 1):
-        data = raw_data.reshape((nrows - 1, ncols, n_entries))
-        print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows - 1, ncols).")
-    elif raw_data.shape[0] == ncols * (nrows + 1):
-        data = raw_data.reshape((nrows + 1, ncols, n_entries))
-        print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows + 1, ncols).")
-    elif raw_data.shape[0] == (ncols - 1) * nrows:
-        data = raw_data.reshape((nrows, ncols - 1, n_entries))
-        print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows, ncols - 1).")
-    elif raw_data.shape[0] == (ncols + 1) * nrows:
-        data = raw_data.reshape((nrows, ncols + 1, n_entries))
-        print("Warning: The number of data points does not match number of rows and columns. Automatic adjustments succeeded with (nrows, ncols + 1).")
+### Apply stuff for visualizing
+def _get_corrected_centroid(im):
+    rows = np.any(im, axis=1)
+    cols = np.any(im, axis=0)
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    return (rmin + rmax) // 2, (cmin + cmax) // 2
+
+def _get_cropping_slice(centroid, target_shape, current_shape):
+    """Returns a slice object that can be used to crop an image"""
+    rstart, rend = centroid[0] - target_shape[0] // 2, centroid[0] + target_shape[0] // 2 + 1
+    if rstart < 0:
+        print('rstart < 0')
+        r_slice = slice(0, target_shape[0])
+    elif rend > current_shape[0]:
+        print('rend > current_shape[0]')
+        r_slice = slice(current_shape[0] - target_shape[0], current_shape[0])
     else:
-        raise ValueError("The number of data points does not match number of rows and columns. Automatic adjustments failed (tried +-1 for both rows and columns).")
-        
-    out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
-    out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(np.float32)
-    out["Phase"] = out["Phase index"].astype(np.int32)
-    out["XPos"] = out["x"].astype(np.float32)
-    out["YPos"] = out["y"].astype(np.float32)
-    out["IQ"] = out["IQ"].astype(np.float32)
-    out["CI"] = out["CI"].astype(np.float32)
-    for key in ["phi1", "PHI", "phi2", "Phase index", "PRIAS Bottom Strip", "PRIAS Top Strip", "PRIAS Center Square", "SEM", "Fit", "x", "y"]:
-        try:
-            del out[key]
-        except KeyError:
-            pass
-    for key in out.keys():
-        if key != "EulerAngles":
-            out[key] = np.fliplr(np.rot90(out[key], k=3)).T
-        else:
-            out[key] = out[key].transpose((1, 0, 2))
-    return out
+        print('else')
+        r_slice = slice(rstart, rend)
 
+    cstart, cend = centroid[1] - target_shape[1] // 2, centroid[1] + target_shape[1] // 2 + 1
+    if cstart < 0:
+        print('cstart < 0')
+        c_slice = slice(0, target_shape[1])
+    elif cend > current_shape[1]:
+        print('cend > current_shape[1]')
+        c_slice = slice(current_shape[1] - target_shape[1], current_shape[1])
+    else:
+        print('else')
+        c_slice = slice(cstart, cend)
+    return r_slice, c_slice
 
-d = _open_ang("test_data/EBSD.ang")
+rc, cc = (69, 431)
+target = (501, 501)
+current = (540, 630)
+im = np.zeros(current)
+rslc, cslc = _get_cropping_slice((rc, cc), target, current)
 
-io.imsave("test_data/EBSD.tif", d["Phase"])
-d_read = io.imread("test_data/EBSD.tif")
-print(np.all(d_read == d["Phase"]), d_read.dtype, d["Phase"].dtype)
-tifffile.imwrite("test_data/EBSD2.tif", d["Phase"])
-d_read = tifffile.imread("test_data/EBSD2.tif")
-print(np.all(d_read == d["Phase"]), d_read.dtype, d["Phase"].dtype)
-iio.imwrite("test_data/EBSD3.tif", d["Phase"])
-d_read = iio.imread("test_data/EBSD3.tif")
-print(np.all(d_read == d["Phase"]), d_read.dtype, d["Phase"].dtype)
+print(im.shape, im[rslc, cslc].shape)

@@ -6,87 +6,14 @@ import os
 
 import numpy as np
 import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 import h5py
 import imageio
-from skimage import io, exposure
+from skimage import io
 from skimage import transform as tf
 
-# TPS Stuff
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
-
-# LR Stuff
-from sklearn.preprocessing import PolynomialFeatures as PF
-from sklearn.linear_model import LinearRegression as LR
-from sklearn.pipeline import Pipeline
 from scipy import interpolate
-
-
-# Matplotlib window that records clicked locations and stores them in txt file
-# Prints the point number and the (x,y) of the point on each click
-# Designed to be ran twice on the bse and the ebsd
-class SelectCoords:
-    def __init__(self, name, save_folder="", ext="tif", cmap="cividis"):
-        self.save_folder = save_folder
-        self.name = name
-        self.cmap = cmap
-        self.txt_path = f"{self.save_folder}ctr_pts_{self.name}.txt"
-        self.im_path = f"{self.save_folder}{self.name}.{ext}"
-        self.check_txt_file()
-        # self.im = exposure.equalize_hist(io.imread(self.im_path), nbins=512)
-        self.im = io.imread(self.im_path)
-        self.get_coords()
-
-    def get_coords(self):
-        self.fig1 = plt.figure(1, figsize=(14, 10))
-        ax1 = self.fig1.add_subplot(111)
-        ax1.imshow(self.im, cmap=self.cmap)
-        self.cid1 = self.fig1.canvas.mpl_connect("button_press_event", self.onclick)
-        self.qid1 = self.fig1.canvas.mpl_connect("close_event", self.close)
-        plt.tight_layout()
-        plt.show()
-
-    def onclick(self, event):
-        ix, iy = event.xdata, event.ydata
-        x = np.around(ix, 0).astype(np.uint32)
-        y = np.around(iy, 0).astype(np.uint32)
-        with open(self.txt_path, "a", encoding="utf8") as output:
-            output.write(f"{x} {y}\n")
-        points = np.loadtxt(self.txt_path, delimiter=" ")
-        if len(points.shape) < 2:
-            points = [points]
-        print(f"Point #{len(points)-1} -> {tuple(points[-1].astype(int))}")
-
-    def close(self, event):
-        self.fig1.canvas.mpl_disconnect(self.cid1)
-        self.fig1.canvas.mpl_disconnect(self.qid1)
-        plt.close(1)
-        self.draw_points()
-
-    def draw_points(self):
-        pts = np.loadtxt(self.txt_path, delimiter=" ")
-        fig = plt.figure(2)
-        ax = fig.add_subplot(111)
-        ax.imshow(self.im, cmap=self.cmap)
-        for i in range(pts.shape[0]):
-            ax.scatter(pts[i, 0], pts[i, 1], c="r", s=1)
-            ax.text(pts[i, 0] + 2, pts[i, 1] + 2, i)
-        plt.tight_layout()
-        fig.savefig(f"{self.save_folder}{str(self.name)}_points.png")
-        plt.close()
-        print(f"Pts im saved - [blue]{self.save_folder}{self.name}_points.png")
-
-    def check_txt_file(self):
-        mode = input("Clear old points? (y/n) ")
-        if mode == "y":
-            try:
-                os.remove(self.txt_path)
-            except FileNotFoundError:
-                pass
-            with open(self.txt_path, "w", encoding="utf8"):
-                pass
 
 
 class Alignment:
@@ -260,50 +187,28 @@ class Alignment:
         self.TPS_grid_spacing = (ny, nx)
         self.TPS_solution = np.load(sol_path)
 
-    # def TPS_apply_3D(self, points, dataset):
-    #     slice_numbers = list(points.keys())
-    #     params = []
-    #     for key in slice_numbers:
-    #         self.source = np.array(points[key]["bse"])
-    #         self.distorted = np.array(points[key]["ebsd"])
-    #         self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
-    #         params.append(self.TPS_solution)
-    #     # Create function to interpolate coefficients
-    #     f = interpolate.interp1d(slice_numbers, params, axis=0)
-    #     # Create transform object for each slice and warp
-    #     aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
-    #     for i in range(dataset.shape[0]):
-    #         sol = f(i)
-    #         self.TPS_solution = sol
-    #         aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
-    #     return aligned_dataset
-
     def TPS_apply_3D(self, points, dataset, bse):
-        # Linear function for interpolation
-        def linear(x, m, b):
-            return x * m + b
         # Get slice numbers
-        slice_numbers = list(points.keys())
+        slice_numbers = list(points["ebsd"].keys())
+        if len(slice_numbers) != len(list(points["bse"].keys())):
+            raise RuntimeError("Number of slices with reference points in control and distorted do not match")
         # Get the solution for each set of control points
         params = {}
         if len(slice_numbers) == 1:
             print("Only one slice has control points, only calculating one solution.")
             key = slice_numbers[0]
-            self.source = np.array(points[key]["bse"])
-            self.distorted = np.array(points[key]["ebsd"])
-            ### self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+            self.source = np.array(points["bse"][key])
+            self.distorted = np.array(points["ebsd"][key])
             self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
             # Create transform object for each slice and warp
-            ### aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
                 aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
             return aligned_dataset
         else:
             for key in slice_numbers:
-                self.source = np.array(points[key]["bse"])
-                self.distorted = np.array(points[key]["ebsd"])
-                ### self.TPS(dataset.shape[1:], saveSolution=False, verbose=False)
+                self.source = np.array(points["bse"][key])
+                self.distorted = np.array(points["ebsd"][key])
                 self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
                 params[key] = self.TPS_solution
             # Interpolate the solutions
@@ -311,7 +216,6 @@ class Alignment:
             for i in range(len(slice_numbers) - 1):
                 f = interpolate.interp1d([slice_numbers[i], slice_numbers[i + 1]], [params[slice_numbers[i]], params[slice_numbers[i + 1]]], axis=0)
                 interpolations[f"{slice_numbers[i]} {slice_numbers[i + 1]}"] = {index: f(index) for index in range(slice_numbers[i] + 1, slice_numbers[i + 1])}
-            ### solutions = np.zeros((dataset.shape[0], * self.TPS_solution.shape))
             solutions = np.zeros((bse.shape[0], * self.TPS_solution.shape))
             # Get the solution for each slice
             for i in range(solutions.shape[0]):
@@ -319,7 +223,6 @@ class Alignment:
                 if i in slice_numbers:
                     solutions[i] = params[i]
                     found_match = True
-                    # print("Found match for slice {}".format(i))
                     continue
                 elif i not in slice_numbers:
                     max_lower = 0
@@ -330,19 +233,16 @@ class Alignment:
                             min_upper = slice_numbers[j + 1]
                             solutions[i] = interpolations[f"{max_lower} {min_upper}"][i]
                             found_match = True
-                            # print("Found interpolation ({} {}) match for slice {}".format(max_lower, min_upper, i))
                     if not found_match:
                         # Copy the closest slice
                         if i < slice_numbers[0]:
                             solutions[i] = params[0]
                         elif i > slice_numbers[-1]:
                             solutions[i] = params[max(list(params.keys()))]
-                        # print("Slice {} is above/below the last/first slice with control points, extrapolating the closest slice.".format(i))
                             
                 else:
                     raise RuntimeError("Something went wrong while generating solutions")
             # Create transform object for each slice and warp
-            ### aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
                 sol = solutions[i]
@@ -369,128 +269,7 @@ class Alignment:
         L[:K, :K] = U
         return L
 
-    def LR(self, degree=3, saveSolution=True, solutionFile="LR_mapping.npy"):
-        print(degree)
-        # Read in the source/distorted points
-        coord_ebsd = self.distorted
-        coord_bse = self.source
-        # coord_ebsd = np.loadtxt(open(self.distortedPoints, "rb"), delimiter=" ").astype(int)
-        # coord_bse = np.loadtxt(open(self.referencePoints, "rb"), delimiter=" ").astype(int)
-
-        # check to make sure each control point is paieed
-        if len(coord_ebsd) == len(coord_bse):
-            print("Given {} points...".format(coord_bse.shape[0]))
-        else:
-            raise ValueError("Control point arrays are not of equal length")
-
-        # check
-        dist_s = self._LR_successiveDistances(coord_ebsd)
-        dist_t = self._LR_successiveDistances(coord_bse)
-        ratio = self._LR_findRatio(dist_t, dist_s)
-
-        # Convert control point coords into same reference frame
-        coord_bse_rescaled = coord_bse / ratio
-        src = coord_bse_rescaled
-        dst = coord_ebsd
-
-        # Define polymomial regression
-        model_i = Pipeline(
-            [
-                ("poly", PF(degree=degree, include_bias=True)),
-                ("linear", LR(fit_intercept=False, normalize=False)),
-            ]
-        )
-
-        model_j = Pipeline(
-            [
-                ("poly", PF(degree=degree, include_bias=True)),
-                ("linear", LR(fit_intercept=False, normalize=False)),
-            ]
-        )
-
-        # Solve regression
-        model_i.fit(src, dst[:, 0])
-        model_j.fit(src, dst[:, 1])
-
-        # Define the image transformation
-        self.params = np.stack(
-            [model_i.named_steps["linear"].coef_, model_j.named_steps["linear"].coef_], axis=0
-        )
-        if saveSolution:
-            np.save(solutionFile, self.params)
-            print("Point-wise solution save to {}\n".format(solutionFile))
-        # Get transform
-        self.transform = tf._geometric.PolynomialTransform(self.params)
-
-    def LR_apply(self, im_array, save_name="LR_out.tif", out="image"):
-        if len(im_array.shape) > 2:
-            im_array = im_array[:, :, 0]
-        # Read in distorted image
-        imageArray = tf.warp(
-            im_array,
-            self.transform,
-            cval=0,  # new pixels are black pixel
-            order=0,  # k-neighbour
-            preserve_range=True,
-        )
-        # Save corrected image
-        if out == "image":
-            imageio.imsave(save_name, imageArray)
-            print("Corrected image save to {}\n".format(save_name))
-        else:
-            return imageArray
-
-    def LR_import(self, sol_path):
-        self.params = np.load(sol_path)
-        self.transform = tf._geometric.PolynomialTransform(self.params)
-
-    def _LR_successiveDistances(self, array):
-        """Calculates euclidian distance btw sets of points in an array"""
-        nb_of_points = int(np.ma.size(array) / 2)
-        diffs = np.zeros(nb_of_points - 1, dtype=float)
-        for i in range(0, nb_of_points - 1):
-            diffs[i] = (array[i][0] - array[i + 1][0]) ** 2 + (array[i][1] - array[i + 1][1]) ** 2
-        dists = np.sqrt(diffs, dtype=float)
-        return dists
-
-    def _LR_findRatio(self, array1, array2):
-        """Finds scaling ratio btw 2 arrays of reference points on their own grids"""
-        ratios = np.divide(array1, array2)
-        ratio = np.average(ratios)
-        return ratio
-
-    def LR_3D_Apply(self, points, dataset, deg=3):
-        slice_numbers = list(points.keys())
-        params = []
-        for key in slice_numbers:
-            slice_params = []
-            for i in range(2):
-                model = Pipeline(
-                    [
-                        ("poly", PF(degree=deg, include_bias=True)),
-                        ("linear", LR(fit_intercept=False)),
-                    ]
-                )
-                model.fit(np.array(points[key]["bse"]), np.array(points[key]["ebsd"])[:, i])
-                slice_params.append(model.named_steps["linear"].coef_)
-            params.append(slice_params)
-        # Create function to interpolate coefficients
-        f = interpolate.interp1d(slice_numbers, params, axis=0)
-        # Create transform object for each slice and warp
-        aligned_dataset = np.zeros(dataset.shape, dtype=dataset.dtype)
-        for i in range(dataset.shape[0]):
-            params = f(i)
-            tform = tf._geometric.PolynomialTransform(params)
-            aligned_slice = tf.warp(dataset[i], tform, cval=0, order=0, preserve_range=True).astype(
-                dataset.dtype
-            )
-            aligned_dataset[i] = aligned_slice
-        return aligned_dataset
-
-
 # Functions #
-
-
 def resize_imgs(bse_path, size):
     if "." in bse_path:
         basename = bse_path[: bse_path.index(".")]
@@ -522,67 +301,6 @@ def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=
     io.imsave(fname, im)
     print("Saved the {} image to {}".format(view, fname))
 
-
-def interactive_overlay(im0, im1):
-    """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
-    plt.close(81234)
-    fig = plt.figure(81234, figsize=(12, 8))
-    ax = fig.add_subplot(111)
-    max_r = im0.shape[0]
-    max_c = im0.shape[1]
-    ax.set_title("")
-    alphas = np.ones(im0.shape)
-    # Show images
-    ax.imshow(im1, cmap="gray")
-    im = ax.imshow(im0, alpha=alphas, cmap="gray")
-    # Put slider on
-    plt.subplots_adjust(left=0.15, bottom=0.15)
-    left = ax.get_position().x0
-    bot = ax.get_position().y0
-    width = ax.get_position().width
-    height = ax.get_position().height
-    axrow = plt.axes([left - 0.15, bot, 0.05, height])
-    axcol = plt.axes([left, bot - 0.15, width, 0.05])
-    row_slider = Slider(
-        ax=axrow,
-        label="Y pos",
-        valmin=0,
-        valmax=max_r,
-        valinit=max_r,
-        valstep=1,
-        orientation="vertical",
-    )
-    col_slider = Slider(
-        ax=axcol,
-        label="X pos",
-        valmin=0,
-        valmax=max_c,
-        valinit=max_c,
-        valstep=1,
-        orientation="horizontal",
-    )
-
-    # Define update functions
-    def update_row(val):
-        val = int(np.around(val, 0))
-        new_alphas = np.copy(alphas)
-        new_alphas[:val, :] = 0
-        im.set(alpha=new_alphas[::-1])
-        fig.canvas.draw_idle()
-
-    def update_col(val):
-        val = int(np.around(val, 0))
-        new_alphas = np.copy(alphas)
-        new_alphas[:, :val] = 0
-        im.set(alpha=new_alphas)
-        fig.canvas.draw_idle()
-
-    # Enable update functions
-    row_slider.on_changed(update_row)
-    col_slider.on_changed(update_col)
-    plt.show()
-
-
 def handle_dtype(data, dtype):
     if dtype == np.uint8:
         data = np.around(255 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
@@ -606,3 +324,4 @@ def handle_dtype(data, dtype):
         data = (data != 0).astype(dtype)
     else:
         raise RuntimeError("Unknown dtype")
+    return data
