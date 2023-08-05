@@ -72,7 +72,6 @@ class App(tk.Tk):
         filemenu.add_command(label="Export 3D", command=lambda: self.apply_correction_to_h5("TPS"))
         filemenu.add_command(label="Open 2D", command=lambda: self.select_data_popup("2D"))
         filemenu.add_command(label="Export 2D", command=lambda: self.apply_correction_to_tif("TPS"))
-        filemenu.add_command(label="Easy start", command=self._easy_start)
         self.menu.add_cascade(label="File", menu=filemenu)
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
@@ -279,12 +278,17 @@ class App(tk.Tk):
         i = self.slice_num.get()
         scale = int(self.resize_vars[pos].get()) / 100
         if pos == "ebsd":
-            x = int(self.ebsd.canvasx(event.x))
-            y = int(self.ebsd.canvasy(event.y))
+            x = int(self.ebsd.canvasx(event.x)) / scale
+            y = int(self.ebsd.canvasy(event.y)) / scale
         else:
-            x = int(self.bse.canvasx(event.x))
-            y = int(self.bse.canvasy(event.y))
-        self.points[pos][i].append([int(np.around(x / scale)), int(np.around(y / scale))])
+            x = int(self.bse.canvasx(event.x)) / scale
+            y = int(self.bse.canvasy(event.y)) / scale
+        if i not in self.points[pos].keys():
+            self.points[pos][i] = []
+        try:
+            self.points[pos][i] = np.append(self.points[pos][i], [[x, y]], axis=0)
+        except ValueError:
+            self.points[pos][i] = np.array([[x, y]])
         path = self.points_path[pos]
         with open(path, "a", encoding="utf8") as output:
             output.write(f"{i} {event.x} {event.y}\n")
@@ -319,7 +323,7 @@ class App(tk.Tk):
         tag = tag.replace("current", "").replace("text", "").replace("bbox", "").strip()
         if tag == "":
             return
-        self.points[pos][self.slice_num.get()].pop(int(tag))
+        self.points[pos][self.slice_num.get()] = np.delete(self.points[pos][self.slice_num.get()], int(tag), axis=0)
         path = self.points_path[pos]
         with open(path, "w", encoding="utf8") as output:
             for z in self.points[pos].keys():
@@ -338,7 +342,12 @@ class App(tk.Tk):
             viewers = {"ebsd": self.ebsd, "bse": self.bse}
             for mode in ["ebsd", "bse"]:
                 scale = int(self.resize_vars[mode].get()) / 100
-                pts = np.around(np.array(self.points[mode][j]) * scale).astype(int)
+                try:
+                    pts = np.around(np.array(self.points[mode][j]) * scale).astype(int)
+                except KeyError:
+                    continue
+                if pts.ndim == 1:
+                    pts = pts.reshape((1, 2))
                 for i, p in enumerate(pts):
                     o_item = viewers[mode].create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc[mode], tags=str(i))
                     t_item = viewers[mode].create_text(
@@ -353,23 +362,59 @@ class App(tk.Tk):
             self._update_imgs()
 
     ### Apply stuff for visualizing
+    def _get_corrected_centroid(self, im, align, points=None):
+        if points is None:
+            im = align.apply(im, out="array").astype(bool)
+        else:
+            im = align.TPS_apply_3D(points, im, self.bse_imgs)
+            im = im.sum(axis=0).astype(bool)
+        rows = np.any(im, axis=1)
+        cols = np.any(im, axis=0)
+        rmin, rmax = np.where(rows)[0][[0, -1]]
+        cmin, cmax = np.where(cols)[0][[0, -1]]
+        return (rmin + rmax) // 2, (cmin + cmax) // 2
+
+    def _get_cropping_slice(self, centroid, target_shape, current_shape):
+        """Returns a slice object that can be used to crop an image"""
+        print(centroid, target_shape, current_shape)
+        rstart, rend = centroid[0] - target_shape[0] // 2, centroid[0] + target_shape[0] // 2 + 1
+        if rstart < 0:
+            r_slice = slice(0, target_shape[0])
+        elif rend > current_shape[0]:
+            r_slice = slice(current_shape[0] - target_shape[0], current_shape[0])
+        else:
+            r_slice = slice(rstart, rend)
+
+        cstart, cend = centroid[1] - target_shape[1] // 2, centroid[1] + target_shape[1] // 2 + 1
+        if cstart < 0:
+            c_slice = slice(0, target_shape[1])
+        elif cend > current_shape[1]:
+            c_slice = slice(current_shape[1] - target_shape[1], current_shape[1])
+        else:
+            c_slice = slice(cstart, cend)
+        return r_slice, c_slice
+
+
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
         i = self.slice_num.get()
         referencePoints = np.array(self.points["bse"][i])
         distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
-        if algo == "TPS":
-            save_name = os.path.join(self.folder, "TPS_solution.npy")
-            align.get_solution(size=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
-        elif algo == "LR":
-            raise NotImplementedError
+        save_name = os.path.join(self.folder, "TPS_solution.npy")
+        align.get_solution(size=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
         # save_name = os.path.join(self.folder, f"{algo}_out.tif")
         ebsd_im = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
         im1 = align.apply(ebsd_im, out="array")
         im0 = self.bse_imgs[i, :, :]
+        # Handle croppign and centering
+        dummy = np.ones(ebsd_im.shape)
+        rc, cc = self._get_corrected_centroid(dummy, align)
+        rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, im1.shape)
+        print("Aligned data cropped from {} to {} (to match EBSD grid)".format(im1.shape, im1[rslc, cslc].shape))
+        # View
         print("Creating interactive view")
-        IV.Interactive2D(im0, im1, "2D TPS Correction".format(i))
+        IV.Interactive2D(im0[rslc, cslc], im1[rslc, cslc], "2D TPS Correction".format(i))
         # self._interactive_view(algo, im1)
         plt.close("all")
 
@@ -378,14 +423,20 @@ class App(tk.Tk):
         self.config(cursor="watch")
         points = self.points
         ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
+        ebsd_stack = np.around(255 * ((ebsd_stack - ebsd_stack.min()) / (ebsd_stack.max() - ebsd_stack.min())), 0).astype(np.uint8)
         referencePoints = np.array(self.points["bse"][self.slice_num.get()])
         distortedPoints = np.array(self.points["ebsd"][self.slice_num.get()])
         print("Aligning the full ESBSD stack in mode {}".format(self.ebsd_mode.get()))
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack, self.bse_imgs)
+        # Handle cropping and centering
+        dummy = np.ones(ebsd_cStack.shape)
+        rc, cc = self._get_corrected_centroid(dummy, align, points)
+        rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_stack.shape[1:], ebsd_cStack.shape[1:])
+        print("Aligned data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
         print("Creating interactive view")
         self.config(cursor="tcross")
-        IV.Interactive3D(self.bse_imgs, ebsd_cStack, "3D TPS Correction")
+        IV.Interactive3D(self.bse_imgs[:, rslc, cslc], ebsd_cStack[:, rslc, cslc], "3D TPS Correction")
         # self._interactive_view(algo, self.ebsd_cStack, True)
         plt.close("all")
 
@@ -406,22 +457,27 @@ class App(tk.Tk):
                   b"DataArray<bool>": bool}
         points = self.points
         if len(points["ebsd"].keys()) == 0:
-            print("[bold red]Error:[/bold red] No points have been selected!")
+            print("Error: No points have been selected!")
             return
         elif len(points["ebsd"].keys()) == 1:
-            print("[bold Orange]Warning:[/bold orange] Only one slice has been selected! Applying it to all slices...")
+            print("Warning: Only one slice has been selected! Applying it to all slices...")
         i = self.slice_num.get()
-        referencePoints = np.array(self.points["bse"][i])
-        distortedPoints = np.array(self.points["ebsd"][i])
+        referencePoints = np.array(self.points["bse"][list(self.points["bse"].keys())[0]])
+        distortedPoints = np.array(self.points["ebsd"][list(self.points["ebsd"].keys())[0]])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Grab the h5 file
         print("Generating a new DREAM3D file...")
-        EBSD_DIR_CORRECTED = (w := os.path.splitext(self.ebsd_path))[0] + "_corrected" + w[1]
+        # EBSD_DIR_CORRECTED = (w := os.path.splitext(self.ebsd_path))[0] + "_corrected" + w[1]
+        EBSD_DIR_CORRECTED = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save the corrected data in a new Dream3d file", filetypes=[("Dream3D HDF5 File", "*.dream3d"), ("All files", "*.*")], defaultextension=".dream3d")
         shutil.copyfile(self.ebsd_path, EBSD_DIR_CORRECTED)
         h5 = h5py.File(EBSD_DIR_CORRECTED, "r+")
         # Actually apply it here
         keys = list(h5["DataContainers/ImageDataContainer/CellData"])
-        print(f"[bold green]Success![/bold green] Applying to volume ({len(keys)} modes)")
+        # Get cropping and centering stuff
+        dummy = np.ones(h5["DataContainers/ImageDataContainer/CellData"][keys[0]].shape[:3])
+        rc, cc = self._get_corrected_centroid(dummy, align, points)
+        rslc, cslc = self._get_cropping_slice((rc, cc), dummy.shape[1:3], self.bse_imgs.shape[1:3])
+        print(f"Success! Applying to volume ({len(keys)} modes)")
         for key in keys:
             # Get stack of one mode and determine characteristics
             ebsd_stack = h5["DataContainers/ImageDataContainer/CellData/" + key]
@@ -431,29 +487,26 @@ class App(tk.Tk):
             # Loop over all dimensions
             print(f"  -> Correcting {key} ({n_dims} components of type {dtype})")
             for i in range(ebsd_stack.shape[-1]):
-                if algo == "TPS":
-                    # Isolate one dimension and correct
-                    stack = np.copy(ebsd_stack[:, :, :, i])
-                    c_stack = align.TPS_apply_3D(points, stack, self.bse_imgs)
-                    if dtype == np.uint8:
-                        c_stack = np.around(255 * c_stack / c_stack.max(), 0).astype(np.uint8)
-                    elif dtype == np.uint16:
-                        c_stack = np.around(65535 * c_stack / c_stack.max(), 0).astype(np.uint16)
-                    elif dtype == np.uint32:
-                        c_stack = np.around(4294967295 * c_stack / c_stack.max(), 0).astype(np.uint32)
-                    elif dtype == np.uint64:
-                        c_stack = np.around(18446744073709551615 * c_stack / c_stack.max(), 0).astype(np.uint64)
-                    else:
-                        c_stack = c_stack.astype(dtype)
-                    
-                    # Fill original stack
-                    ebsd_stack[:, :, :, i] = c_stack
-                elif algo == "LR":
-                    raise ValueError("algo must be TPS at this time. LR is not supported")
+                # Isolate one dimension and correct
+                stack = np.copy(ebsd_stack[:, :, :, i])
+                c_stack = align.TPS_apply_3D(points, stack, self.bse_imgs)
+                if dtype == np.uint8:
+                    c_stack = np.around(255 * c_stack / c_stack.max(), 0).astype(np.uint8)
+                elif dtype == np.uint16:
+                    c_stack = np.around(65535 * c_stack / c_stack.max(), 0).astype(np.uint16)
+                elif dtype == np.uint32:
+                    c_stack = np.around(4294967295 * c_stack / c_stack.max(), 0).astype(np.uint32)
+                elif dtype == np.uint64:
+                    c_stack = np.around(18446744073709551615 * c_stack / c_stack.max(), 0).astype(np.uint64)
+                else:
+                    c_stack = c_stack.astype(dtype)
+                
+                # Fill original stack
+                ebsd_stack[:, :, :, i] = c_stack[:, rslc, cslc]
             # Write new stack to the h5
             h5["DataContainers/ImageDataContainer/CellData/" + key][...] = ebsd_stack
         h5.close()
-        print("[bold green]Correction complete![/bold green]")
+        print("Correction complete!")
 
     def apply_correction_to_tif(self, algo):
         # Get the control points
@@ -461,44 +514,48 @@ class App(tk.Tk):
         referencePoints = np.array(self.points["bse"][i])
         distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
-        # Create the output filename
-        if self.slice_max == 1:
-            extension = os.path.splitext(self.ebsd_path)[1]
+        # Get BSE
+        if self.clahe_active:
+            bse_im = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
         else:
-            extension = ".tiff"
-        SAVE_PATH_BSE = os.path.splitext(self.ebsd_path)[0] + "_BSE-out" + extension
-        SAVE_PATH_EBSD = os.path.splitext(self.ebsd_path)[0] + "_EBSD-out" + extension
-        if algo == "TPS":
+            bse_im = self.bse_imgs[int(self.slice_num.get())]
+        # Create the output filename
+        extension = ".tif"
+        SAVE_PATH_EBSD = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save corrected (from distorted) image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
+        if SAVE_PATH_EBSD != "":
+            if "." not in SAVE_PATH_EBSD:
+                SAVE_PATH_EBSD += extension
+            # Get the images
+            ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
+            print("Shape:", ebsd_im.shape)
+            print("RAW dtype:", ebsd_im.dtype)
             # Align the image
-            align.TPS(self.bse_im.shape)
-            aligned = align.TPS_apply(self.ebsd_im, out="array")
-            # Correct dtype
-            if aligned.dtype != np.uint16:
-                aligned = (aligned / aligned.max() * 65535).astype(np.uint16)
-            # Save the image
-            self._mask = (slice(None), slice(None))
-            _ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
-            size_diff = np.array(self.bse_imgs.shape) - np.array(_ebsd_stack.shape[:3])
-            if size_diff[1] > 0:
-                print(f"{size_diff[1]=}")
-                start = size_diff[1] // 2
-                end = -(size_diff[1] - start)
-                self._mask = (slice(start, end), self._mask[1])
-            if size_diff[2] > 0:
-                print(f"{size_diff[2]=}")
-                start = size_diff[2] // 2
-                end = -(size_diff[2] - start)
-                self._mask = (self._mask[0], slice(start, end))
-            imageio.imwrite(SAVE_PATH_EBSD, aligned[self._mask])
-            if self.clahe_active:
-                im = exposure.equalize_adapthist(self.bse_imgs[0][self._mask], clip_limit=0.03)
+            align.TPS(bse_im.shape)
+            if len(ebsd_im.shape) == 3:
+                aligned = []
+                for i in range(ebsd_im.shape[-1]):
+                    aligned.append(align.TPS_apply(ebsd_im[:, :, i], out="array"))
+                aligned = np.moveaxis(np.array(aligned), 0, -1)
             else:
-                im = self.bse_imgs[0][self._mask]
-            im = ((im - im.min()) / (im.max() - im.min()) * 65535).astype(np.uint16)
-            imageio.imwrite(SAVE_PATH_BSE, im)
-        elif algo == "LR":
-            raise ValueError("algo must be TPS at this time. LR is not supported")
-        print("[bold green]Correction complete![/bold green]")
+                aligned = align.TPS_apply(ebsd_im, out="array")
+            print("Aligned shape:", aligned.shape)
+            print("Aligned dtype:", aligned.dtype)
+            # Correct dtype
+            if aligned.dtype != ebsd_im.dtype:
+                aligned = core.handle_dtype(aligned, ebsd_im.dtype)
+            print("Corrected dtype:", aligned.dtype)
+            # Save the image
+            io.imsave(SAVE_PATH_EBSD, aligned)
+            d_read = io.imread(SAVE_PATH_EBSD)
+            print("Shape:", d_read.shape)
+            print(d_read.dtype, aligned.dtype, np.allclose(d_read, aligned))
+
+            SAVE_PATH_BSE = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
+            if SAVE_PATH_BSE != "":
+                if "." not in SAVE_PATH_BSE:
+                    SAVE_PATH_BSE += extension
+                io.imsave(SAVE_PATH_BSE, bse_im)
+            print("Correction complete!")
 
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
         fig = plt.figure(2)
@@ -627,19 +684,6 @@ class App(tk.Tk):
             s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
             s.configure("TLabelframe", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
             s.configure("TLabelframe.Label", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
-
-    def _easy_start(self):
-        print("Running easy start...")
-        # self.BSE_DIR = "D:/Research/CoNi_16/Data/3D/BSE/small/"
-        # self.BSE_DIR = "D:/Research/Ta/Data/3D/AMSpall/BSE/small/"
-        self.BSE_DIR = "/Users/jameslamb/Downloads/BSE/"
-        # self.EBSD_DIR = "D:/Research/CoNi_16/Data/3D/CoNi16_aligned.dream3d"
-        # self.EBSD_DIR = "D:/Research/Ta/Data/3D/AMSpall/TaAMS_Stripped.dream3d"
-        self.EBSD_DIR = "/Users/jameslamb/Downloads/5842WCu_basic.dream3d"
-        # self.folder = "D:/Research/scripts/Alignment/CoNi16_3D/"
-        # self.folder = "D:/Research/scripts/Alignment/TaAMSpalled/"
-        self.folder = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/WCu/"
-        self._startup_items()
 
 
 if __name__ == "__main__":

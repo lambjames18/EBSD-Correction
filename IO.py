@@ -51,7 +51,7 @@ class DataInput(object):
         self.ebsd_browse.grid(row=1, column=2, sticky="ns", padx=4, pady=2)
         # BSE: "BSE File" label, Entry for file path (3 columns), "Browse" button
         if self.mode == "3D":
-            self.bse = ttk.Label(self.master, text="Control Folder")
+            self.bse = ttk.Label(self.master, text="1st Control Image")
         elif self.mode == "2D":
             self.bse = ttk.Label(self.master, text="Control File(s)")
         self.bse.grid(row=2, column=0, sticky="nse", pady=2)
@@ -95,17 +95,20 @@ class DataInput(object):
             self.info3 = ttk.Label(self.bot, text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.")
             self.info4 = ttk.Label(self.bot, text="Note: If a points file is passed that does not exist, a new file will be created with the given name.")
             self.info5 = ttk.Label(self.bot, text="Note: If a points file is passed that does exist, the point data will be read in.")
+            self.info6 = ttk.Label(self.bot, text="Note: The control/distorted resolution is only used for rescaling the control image(s). It can be left blank if no resizing is desired.")
         elif self.mode == "2D":
             self.info1 = ttk.Label(self.bot, text="Note: The distorted data can be an ang, h5, or image file (tif, tiff, png, jpg).")
             self.info2 = ttk.Label(self.bot, text="Note: The control data must be an image file (tif, tiff, png, jpg).")
             self.info3 = ttk.Label(self.bot, text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.")
             self.info4 = ttk.Label(self.bot, text="Note: If a points file is passed that does not exist, a new file will be created with the given name.")
             self.info5 = ttk.Label(self.bot, text="Note: If a points file is passed that does exist, the point data will be read in.")
+            self.info6 = ttk.Label(self.bot, text="Note: The control/distorted resolution is only used for rescaling the control image(s). It can be left blank if no resizing is desired.")
         self.info1.grid(row=3, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         self.info2.grid(row=4, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         self.info3.grid(row=5, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         self.info4.grid(row=6, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         self.info5.grid(row=7, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
+        self.info6.grid(row=8, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
 
     def ebsd_browse(self):
         # Open file dialog to select a .dream3d file
@@ -160,8 +163,14 @@ class DataInput(object):
         self.bse_path = self.bse_entry.get()
         self.ebsd_points_path = self.ebsd_points_entry.get()
         self.bse_points_path = self.bse_points_entry.get()
-        self.ebsd_res = float(self.ebsd_res.get())
-        self.bse_res = float(self.bse_res.get())
+        if self.ebsd_res.get() == "":
+            self.ebsd_res = 1
+        else:
+            self.ebsd_res = float(self.ebsd_res.get())
+        if self.bse_res.get() == "":
+            self.bse_res = 1
+        else:
+            self.bse_res = float(self.bse_res.get())
         if self.ebsd_path != "" and self.bse_path != "":
             if self.ebsd_points_path == "":
                 print("No distorted points passed, creating a file.")
@@ -221,13 +230,14 @@ class DataSummary(object):
         # EBSD data
         self.ebsd_dims = ttk.Label(self.left, text=f"{self.ebsd_dims[0]} x {self.ebsd_dims[1]} x {self.ebsd_dims[2]}")
         self.ebsd_dims.grid(row=0, column=1, sticky="nsew")
-        self.ebsd_modalities = ttk.Combobox(self.left, values=self.ebsd_modalities, state="readonly")
+        self.ebsd_modalities = ttk.Combobox(self.left, values=self.ebsd_modalities, state="readonly", width=10)
         self.ebsd_modalities.grid(row=1, column=1, sticky="nsew")
         self.ebsd_modalities.current(0)
         if self.ebsd_points is None:
             self.ebsd_points = ttk.Label(self.left, text="None")
         else:
-            self.ebsd_points = ttk.Combobox(self.left, values=self.ebsd_points, state="readonly")
+            self.ebsd_points = ttk.Combobox(self.left, values=self.ebsd_points, state="readonly", width=5)
+            self.ebsd_points.current(0)
         self.ebsd_points.grid(row=2, column=1, sticky="nsew")
         self.ebsd_res = ttk.Label(self.left, text=f"{ebsd_res}")
         self.ebsd_res.grid(row=3, column=1, sticky="nsew")
@@ -243,14 +253,15 @@ class DataSummary(object):
         # BSE data
         self.bse_dims = ttk.Label(self.right, text=f"{self.bse_dims[0]} x {self.bse_dims[1]} x {self.bse_dims[2]}")
         self.bse_dims.grid(row=0, column=1, sticky="nsew")
-        self.bse_modalities = ttk.Label(self.right, text="Intesnity")
+        self.bse_modalities = ttk.Label(self.right, text="Intensity")
         ### TODO: Add BSE modalities
-        # self.bse_modalities = ttk.Combobox(self.right, values=self.bse_modalities, state="readonly")
+        # self.bse_modalities = ttk.Combobox(self.right, values=self.bse_modalities, state="readonly", width=20)
         self.bse_modalities.grid(row=1, column=1, sticky="nsew")
         if self.bse_points is None:
             self.bse_points = ttk.Label(self.right, text="None")
         else:
-            self.bse_points = ttk.Combobox(self.right, values=self.bse_points, state="readonly")
+            self.bse_points = ttk.Combobox(self.right, values=self.bse_points, state="readonly", width=5)
+            self.bse_points.current(0)
         self.bse_points.grid(row=2, column=1, sticky="nsew")
         self.bse_res = ttk.Label(self.right, text=f"{bse_res}")
         self.bse_res.grid(row=3, column=1, sticky="nsew")
@@ -536,7 +547,7 @@ def read_many_images(path, ext):
     return imgs
 
 def read_points(path):
-    points = np.loadtxt(path, delimiter=",", dtype=int)
+    points = np.loadtxt(path, delimiter=" ", dtype=int)
     z, y, x = points[:, 0], points[:, 1], points[:, 2]
     unique_slices = np.unique(z)
     points_data = {slice_num: np.hstack((y[z == slice_num].reshape(-1, 1), x[z == slice_num].reshape(-1, 1))) for slice_num in unique_slices}
