@@ -11,37 +11,39 @@ Simply run `python ui.py` to run the GUI.
 
 ### Initial window
 
-The initial window (shown below) shows two blank image viewers (A and B). These will contiaon the distorted (left) and the control (right) images. On the top row:
-- C: a checkbutton that toggles showing the selected control points on the images or hiding them.
-- D: a slice number selection dropdown that is used for 3D data.
-- E: EBSD modality selection dropdown. If EBSD data is selected (dream3d file for 3D, ang file for 2D), this will allow one to toggle between confidence index, image quality, euler angles, etc. If just an EBSD image is selected, it will remain as "Intensity".
-- F: Export control point images upon button click. This is largely for illustrative purposes. It will save two images that have the identified control points overlaid on them.
-- G: Control point inheritance button. This is only applicable for 3D, but it allows you to copy over identified control points from another slice to the current slice.
-- H: Activate CLAHE. This will apply contrast local histogram equalization to the control image. Often useful for making it easier to identify control points.
-- I: View slice. This button will bring up a new window that allows one to view the corrected data on the current slice only. Control points must be selected before viewing the slice or else the correction algorithm doesn't know what to do. It has two slices that allows one to view both the corrected image and the control image (to inspect alignment fidelity).
-- J: View the full 3D stack. This will bring up a similar window that allows one to view the corrected data for the full 3D dataset (it is only applicable for 3D data). It has a slider that lets one scroll through the slices of the dataset in addition to the overlay slices.
+![image](./theme/UI-Landing.png "GUI")
 
-![image](./theme/UI-Annotated.png "GUI")
+The initial window (above) shows two blank image viewers. These will contiaon the distorted (left) and the control (right) images. The top row is for general functions that are applied to both viewers. The bottom row is specific operations that can be applied to the individual viewers. The top tab (not shown) has "File" and "Apply". These are discussed below.
 
 ### Importing data
 
-The "File" tab provides the ability to open data. You will be prompted to select a control file first, typically a BSE image, and a distorted file second, typically an EBSD file. The distorted file can be an image (tif, tiff) or an EBSD data file (ang). The control file needs to be an image (tif, tiff). A third window will show that allows one to select a file containing identified reference points for the control image. If one wants to start from scratch and not import any points, click "cancel". If one selects a text file of control points, a fourth window will appear for importing points for the distorted image.
+![image](./theme/Import-Data.png "GUI")
 
-**NOTE**: The reference points files are space delimited with 2 columns and N rows (N number of points). The first column is the x position and the second column is the y position. Control point files are automatically saved by the UI during point selection, so you will rarely need to make a file yourself.
+The "File" tab provides the ability to open data. You will select either 2D or 3D data to import. The differences are minor between the two, but it determines what the code expects from the inputs. Upon clicking the import button, the above interface will be displayed (the 2D version is shown). You are required to select a distorted image and a control image, but the other inputs are optional. The notes underneath the inputs provide more detail about what the code expects. **NOTE: if you have different resolutions between your two data modes (high res BSE, low res EBSD for example) you will need to specify the pixel resolutions in order to correct for the disparity.** If the resolutions are the same, these entries can be left blank.
 
-**NOTE 2**: The distorted and control images need to have the same pixel resolution. If they do not, higher resolution image will blow up in the UI (adaptive resolution and scaling in the UI is not supported yet). Therefore, it is advised to rescale the higher resolution image (ttypicaly the control image) down to the lower resolution. See the script `rescale.py` for rescaling the data.
+For 3D data, the distorted file must be a dream3d file and the control image must be the first image of all control images for the volume (no other files in the folder containing the control images, please).
+
+Once you click "Open", a new interface will pop up (below). This provides a summary of the data read in by the code. Here you can opt to flip the control images (useful for TriBeam datasets, this just rotates the control images 180 degrees) and/or crop the control images to a specific ROI. If cropping is selected, a final UI will show that allows you to drag over an ROI selection. The two continue buttons indicate whether or not rescaling should be applied. As stated above, having different resolutions of data WILL NOT WORK. By rescaling the data, the disparity in resolution is removed and the control data is downsampled to match that of the distorted resolution. This is performed automaticaaly using `skimage.transform.rescale` if selected.
+
+![image](./theme/Data-Prep.png "GUI")
+
+At this point you are ready to select control points!
 
 ### Selecting control points
 
-Simply click on either image to place a reference point. Make sure that the order of the points is consistent between the two viewers (point 1 on distorted should connect to point 1 on control). You can drag points by clicking and dragging on existing points while holding SHIFT. Remove points by right cicking on them.
+Simply click on either image to place a reference point. Make sure that the order of the points is consistent between the two viewers (point 1 on distorted should connect to point 1 on control). Remove points by right cicking on them. The points can be cleared for the current pair of images using the "Clear Points" buttons. The view of the distorted data (typically EBSD data) can be changed using the "EBSD mode" dropdown under the distorted viewer. This allows you to view confidence index, image quality, IPF, color, etc.  The "Zoom" dropdown lets you zoom into either image. The scroll bars next to the viewers allow you to move around the image. Currently the scroll bars are the only way to move around.
+
+For 3D data, the "Slice number" dropdown allows you to scroll through the volume and select control points for various slices.
+
+The "Export control point images" button will save a pair of images that show where the control points are located for the two viewers. This is largely for illustrative purposes. The "View points" checkbutton lets you turn off the point overlays in case they are distracting.
 
 ### Viewing the alignment
 
-Click "View slice" to view the correction generated using the current set of points on the current two images (applicable for both 2D and 3D). Click "Apply to stack" to view the corrections for all slices in a 3D stack (only applicable for 3D data). The popup windows let the user view both the corrected image and the control image.
+Under the "Apply" tab, TPS and TPS 3D allow you to view the corrected data in an interactive viewer either in 2D or 3D. 3D is only applicable for 3D data, obviously. A new window will appear with either 2 or 3 scrollbars that allow you to shift between corrected and control images (and the slice number if 3D).
 
 ### Saving the data
 
-Under the "File" tab, "Export 2D" will compute the alignment solution and save the corrected data. The first window will be to save the disorted data (corrected). The second window is for saving the control data (press cancel if you do not want to save either one). The outputs will match what one sees in the interaview view when "View Slice" is selected. "Export 3D" behaves similar, but it creates a new Dream3D file and applies the correction to the data within the new Dream3D file. All outputs are prenamed and will be saved in the location of the distorted data folder.
+Under the "File" tab, "Export 2D" will compute the alignment solution and save the corrected data. The first window will be to save the disorted data (corrected). The second window is for saving the control data (press cancel if you do not want to save either one). The outputs will match what one sees in the interaview view. "Export 3D" behaves similar, but it creates a new Dream3D file (based on the user input of the save location) and applies the correction to the data within the new Dream3D file.
 
 **NOTE**: The distorted file is only saved as an image currently. In the future, writing an .ang or .h5 file with the corrected data will be supported, but the current state is only to output individual images. Therefore, if one wanted to apply alignment to Confidence Index and Image Quality, one would have to run "Export 2D" twice, each time with a different EBSD mode selected from the dropdown. **The data type is preserved in the saved image, this means that the preview of the image might look wrong, but reading in the data (python, FIJI, etc.) will show the correct data.** For integer data types, the alignemt requires that they go to a float, so the output transforms the float back into the target data type.
 
@@ -50,6 +52,9 @@ Under the "File" tab, "Export 2D" will compute the alignment solution and save t
 
 - `SIFT.py` is for future plans.
 - `core.py` this is the core of the alignment algorithms and is called from `ui.py`.
+- `InteractiveView.py` this permits interactive viewing of the solutions.
+- `IO.py` this handles importing the data.
+- `rescale.py` this allows one to rescale individual images to match resolutions between two images. This is handle within the UI, but if one wants to do it separetly, this script can do that.
 - `put_BSE_in_h5.py` this is used to put control images into a Dream3D file.
 - `scratch.py` this is my own scratch file for testing random things. It can be ignored.
 - "original" this folder contains older scripts that are kept for potential updates.
