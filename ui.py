@@ -348,6 +348,8 @@ class App(tk.Tk):
                 except KeyError:
                     continue
                 if pts.ndim == 1:
+                    if pts.size == 0:
+                        continue
                     pts = pts.reshape((1, 2))
                 for i, p in enumerate(pts):
                     o_item = viewers[mode].create_oval(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1, width=2, outline=pc[mode], tags=str(i))
