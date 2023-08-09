@@ -14,3 +14,5 @@ CoNi16_Rerun2/
 CoNi90_3D/
 Alumina/
 test_data/WCu/
+test_data/control_pts.txt
+test_data/distorted_pts.txt
