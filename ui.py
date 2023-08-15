@@ -455,17 +455,28 @@ class App(tk.Tk):
         print("Col slice:", c_slice)
         return r_slice, c_slice
 
-    def _check_sizes(self, im1, im2):
+    def _check_sizes(self, im1, im2, ndims=2):
         """im1: ebsd (distorted), im2: ebsd (corrected)"""
-        if im1.shape[0] > im2.shape[0]:
-            im2_temp = np.zeros((im1.shape[0], im2.shape[1]))
-            im2_temp[:im2.shape[0], :] = im2
-            im2 = im2_temp
-        if im1.shape[1] > im2.shape[1]:
-            im2_temp = np.zeros((im2.shape[0], im1.shape[1]))
-            im2_temp[:, :im2.shape[1]] = im2
-            im2 = im2_temp
-        return im2
+        if ndims == 2:
+            if im1.shape[0] > im2.shape[0]:
+                im2_temp = np.zeros((im1.shape[0], im2.shape[1]))
+                im2_temp[:im2.shape[0], :] = im2
+                im2 = im2_temp
+            if im1.shape[1] > im2.shape[1]:
+                im2_temp = np.zeros((im2.shape[0], im1.shape[1]))
+                im2_temp[:, :im2.shape[1]] = im2
+                im2 = im2_temp
+            return im2
+        else:
+            if im1.shape[1] > im2.shape[1]:
+                im2_temp = np.zeros((im2.shape[0], im1.shape[1], im2.shape[2]))
+                im2_temp[:, :im2.shape[1], :] = im2
+                im2 = im2_temp
+            if im1.shape[2] > im2.shape[2]:
+                im2_temp = np.zeros((im2.shape[0], im2.shape[1], im1.shape[2]))
+                im2_temp[:, :, :im2.shape[2]] = im2
+                im2 = im2_temp
+            return im2
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
@@ -504,26 +515,32 @@ class App(tk.Tk):
         points = self.points
         ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
         ebsd_stack = np.around(255 * ((ebsd_stack - ebsd_stack.min()) / (ebsd_stack.max() - ebsd_stack.min())), 0).astype(np.uint8)
+        bse_stack = self.bse_imgs
         referencePoints = np.array(self.points["bse"][self.slice_num.get()])
         distortedPoints = np.array(self.points["ebsd"][self.slice_num.get()])
-        print("Aligning the full ESBSD stack in mode {}".format(self.ebsd_mode.get()))
+        print("Aligning the full EBSD stack in mode {}".format(self.ebsd_mode.get()))
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack, self.bse_imgs)
+        # Make sure there are no axes that are smaller than the EBSD data (if there is, pad that axis with zeros)
+        bse_stack = self._check_sizes(ebsd_stack, bse_stack, ndims=3)
+        ebsd_cStack = self._check_sizes(ebsd_stack, ebsd_cStack, ndims=3)
         # Handle cropping and centering
         dummy = np.ones(ebsd_cStack.shape)
         rc, cc = self._get_corrected_centroid(dummy, align, points)
         rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_stack.shape[1:], ebsd_cStack.shape[1:])
-        print("Aligned data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
+        print("Aligned/Control data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
+        ebsd_cStack = ebsd_cStack[:, rslc, cslc]
+        bse_stack = bse_stack[:, rslc, cslc]
+        # View
         print("Creating interactive view")
-        self.config(cursor="tcross")
-        IV.Interactive3D(self.bse_imgs[:, rslc, cslc], ebsd_cStack[:, rslc, cslc], "3D TPS Correction")
-        # self._interactive_view(algo, self.ebsd_cStack, True)
+        # Make the cursor normal again
+        self.config(cursor="")
+        IV.Interactive3D(bse_stack, ebsd_cStack, "3D TPS Correction")
         plt.close("all")
 
     ### Apply stuff for exporting 
 
     def apply_correction_to_h5(self, algo):
-        ### TODO: Fix this to use new coords convention
         dtypes = {b"DataArray<uint8_t>": np.uint8,
                   b"DataArray<int8_t>": np.int8,
                   b"DataArray<uint16_t>": np.uint16,
