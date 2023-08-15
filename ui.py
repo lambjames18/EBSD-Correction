@@ -33,13 +33,12 @@ class App(tk.Tk):
         self.folder = os.getcwd()
         self.deiconify()
         self.title("Distortion Correction")
-        self.attributes("-topmost", True)
         # Setup structure of window
         # frames
         # frame_w = 1920
         # frame_h = 1080
         # self.geometry(f"{frame_w}x{frame_h}")
-        # self.resizable(False, False)
+        self.resizable(False, False)
         self.columnconfigure((0, 2), weight=5)
         self.columnconfigure(1, weight=1)
         self.rowconfigure((0, 4), weight=5)
@@ -71,6 +70,7 @@ class App(tk.Tk):
         filemenu.add_command(label="Export 3D", command=lambda: self.apply_correction_to_h5("TPS"))
         filemenu.add_command(label="Open 2D", command=lambda: self.select_data_popup("2D"))
         filemenu.add_command(label="Export 2D", command=lambda: self.apply_correction_to_tif("TPS"))
+        filemenu.add_command(label="Quick start", command=self.easy_start)
         self.menu.add_cascade(label="File", menu=filemenu)
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
@@ -205,6 +205,55 @@ class App(tk.Tk):
         self.points_path = {"ebsd": "", "bse": ""}
 
     ### IO
+    def easy_start(self):
+        ebsd_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/distorted_pts.txt"
+        bse_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/control_pts.txt"
+        ebsd_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_aligned.dream3d"
+        bse_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_BSE/*.tif"
+        ebsd_res = 1.0
+        bse_res = 1.0
+        e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+        if e_pts is None:
+            e_pts = {0: []}
+            ebsd_points_path = os.path.dirname(ebsd_path) + "/distorted_pts.txt"
+            with open(ebsd_points_path, "w", encoding="utf8") as output:
+                output.write("")
+        if b_pts is None:
+            b_pts = {0: []}
+            bse_points_path = os.path.dirname(ebsd_path) + "/control_pts.txt"
+            with open(bse_points_path, "w", encoding="utf8") as output:
+                output.write("")
+        # Set the data
+        self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
+        self.ebsd_path, self.bse_path = ebsd_path, bse_path
+        self.ebsd_data, self.bse_imgs = e_d, b_d
+        self.ebsd_res, self.bse_res = ebsd_res, bse_res
+        self.points["ebsd"], self.points["bse"] = e_pts, b_pts
+        # Set the UI stuff
+        self.ebsd_mode_options = list(self.ebsd_data.keys())
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.slice_min = 0
+        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
+        self.slice_num.set(self.slice_min)
+        # self.ebsd_cStack = np.zeros(self.ebsd_data[self.ebsd_mode_options[0]].shape)
+        # Configure UI
+        self.slice_picker["state"] = "readonly"
+        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
+        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker["values"] = self.ebsd_mode_options
+        # Finish
+        self.folder = os.path.dirname(ebsd_path)
+        self._update_viewers()
+        self.menu.entryconfig("Apply", state="normal")
+        self.clear_ebsd_points["state"] = "normal"
+        self.clear_bse_points["state"] = "normal"
+        self.ebsd_resize_dropdown["state"] = "readonly"
+        self.bse_resize_dropdown["state"] = "readonly"
+        self.clahe_b["state"] = "normal"
+        self.ex_ctr_pt_ims["state"] = "normal"
+        self.view_pts["state"] = "normal"
+        self.show_points.set(1)
+    
     def select_data_popup(self, mode):
         self.w = Inputs.DataInput(self, mode)
         self.wait_window(self.w.w)
@@ -383,45 +432,70 @@ class App(tk.Tk):
 
     def _get_cropping_slice(self, centroid, target_shape, current_shape):
         """Returns a slice object that can be used to crop an image"""
+        print("Target shape: {}".format(target_shape))
+        print("Current shape: {}".format(current_shape))
         rstart, rend = centroid[0] - target_shape[0] // 2, centroid[0] + target_shape[0] // 2 + 1
+        print("Row raw:", rstart, rend)
         if rstart < 0:
             r_slice = slice(0, target_shape[0])
         elif rend > current_shape[0]:
             r_slice = slice(current_shape[0] - target_shape[0], current_shape[0])
         else:
             r_slice = slice(rstart, rend)
+        print("Row slice:", r_slice)
 
         cstart, cend = centroid[1] - target_shape[1] // 2, centroid[1] + target_shape[1] // 2 + 1
+        print("Col raw:", cstart, cend)
         if cstart < 0:
             c_slice = slice(0, target_shape[1])
         elif cend > current_shape[1]:
             c_slice = slice(current_shape[1] - target_shape[1], current_shape[1])
         else:
             c_slice = slice(cstart, cend)
+        print("Col slice:", c_slice)
         return r_slice, c_slice
 
+    def _check_sizes(self, im1, im2):
+        """im1: ebsd (distorted), im2: ebsd (corrected)"""
+        if im1.shape[0] > im2.shape[0]:
+            im2_temp = np.zeros((im1.shape[0], im2.shape[1]))
+            im2_temp[:im2.shape[0], :] = im2
+            im2 = im2_temp
+        if im1.shape[1] > im2.shape[1]:
+            im2_temp = np.zeros((im2.shape[0], im1.shape[1]))
+            im2_temp[:, :im2.shape[1]] = im2
+            im2 = im2_temp
+        return im2
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
         i = self.slice_num.get()
+        # Get the bse and ebsd images
+        im0 = self.bse_imgs[i, :, :]
+        ebsd_im = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
+        # Get the points and performa alignment
         referencePoints = np.array(self.points["bse"][i])
         distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
-        save_name = os.path.join(self.folder, "TPS_solution.npy")
-        align.get_solution(size=self.bse_im.shape, solutionFile=save_name, saveSolution=False)
-        # save_name = os.path.join(self.folder, f"{algo}_out.tif")
-        ebsd_im = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
+        align.get_solution(size=im0.shape)
         im1 = align.apply(ebsd_im, out="array")
-        im0 = self.bse_imgs[i, :, :]
-        # Handle croppign and centering
+        print("Distorted", ebsd_im.shape, "Control", im0.shape, "Corrected", im1.shape)
+        # Make sure there are no axes that are smaller than the EBSD data (if there is, pad that axis with zeros)
+        im0 = self._check_sizes(ebsd_im, im0)
+        im1 = self._check_sizes(ebsd_im, im1)
+        print("Distorted", ebsd_im.shape, "Control", im0.shape, "Corrected", im1.shape)
+        # Make sure there are no axes that are larger than the EBSD data (if there is, crop that axis, making sure to keep everything centered)
+        # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
         dummy = np.ones(ebsd_im.shape)
         rc, cc = self._get_corrected_centroid(dummy, align)
+        # Now crop the corrected image
         rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, im1.shape)
-        print("Aligned data cropped from {} to {} (to match EBSD grid)".format(im1.shape, im1[rslc, cslc].shape))
+        print("Aligned/Control data cropped from {} to {} (to match distorted grid size)".format(im1.shape, im1[rslc, cslc].shape))
+        im0 = im0[rslc, cslc]
+        im1 = im1[rslc, cslc]
         # View
         print("Creating interactive view")
-        IV.Interactive2D(im0[rslc, cslc], im1[rslc, cslc], "2D TPS Correction".format(i))
-        # self._interactive_view(algo, im1)
+        IV.Interactive2D(im0, im1, "2D TPS Correction")
         plt.close("all")
 
     def apply_3D(self, algo="LR"):

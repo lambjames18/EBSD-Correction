@@ -546,7 +546,6 @@ def read_many_images(path, ext):
         key=lambda x: int(x.replace(ext, "")),
     )
     imgs = []
-    print(paths)
     for i in range(len(paths)):
         p = os.path.join(path, paths[i])
         im = io.imread(p, as_gray=True).astype(np.float32)

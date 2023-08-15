@@ -24,13 +24,9 @@ class Alignment:
             self.get_solution = self.TPS
             self.apply = self.TPS_apply
             self.import_solution = self.TPS_import
-        elif algorithm.upper() == "LR":
-            self.get_solution = self.LR
-            self.apply = self.LR_apply
-            self.import_solution = self.LR_import
         else:
             raise IOError(
-                "Arg :algorithm: must be either 'LR' for linear regression or 'TPS' for Thin Plate Spline."
+                "Arg :algorithm: must be 'TPS' for Thin Plate Spline."
             )
 
     def TPS(
@@ -39,7 +35,7 @@ class Alignment:
         affineOnly=False,
         checkParams=False,
         saveParams=False,
-        saveSolution=True,
+        saveSolution=False,
         solutionFile="TPS_mapping.npy",
         verbose=True,
     ):
