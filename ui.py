@@ -538,8 +538,7 @@ class App(tk.Tk):
         IV.Interactive3D(bse_stack, ebsd_cStack, "3D TPS Correction")
         plt.close("all")
 
-    ### Apply stuff for exporting 
-
+    ### Apply stuff for exporting
     def apply_correction_to_h5(self, algo):
         dtypes = {b"DataArray<uint8_t>": np.uint8,
                   b"DataArray<int8_t>": np.int8,
