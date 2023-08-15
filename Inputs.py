@@ -1,5 +1,4 @@
 import os
-import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
@@ -24,6 +23,7 @@ class DataInput(object):
         self.directory = os.getcwd()
         self.clean_exit = False
         self.w = tk.Toplevel(parent)
+        self.w.attributes("-topmost", True)
         self.w.title(f"Open {self.mode} Data")
         self.w.rowconfigure(0, weight=10)
         self.w.rowconfigure(1, weight=1)
@@ -112,6 +112,7 @@ class DataInput(object):
 
     def ebsd_browse(self):
         # Open file dialog to select a .dream3d file
+        self.w.attributes("-topmost", False)
         if self.mode == "3D":
             path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .dream3d file", filetypes=(("dream3d files", "*.dream3d"), ("all files", "*.*")))
         else:
@@ -121,41 +122,48 @@ class DataInput(object):
             self.ebsd_entry.delete(0, tk.END)
             self.ebsd_entry.insert(0, path)
             self.directory = os.path.dirname(path)
+        self.w.attributes("-topmost", True)
 
     def bse_browse(self):
         # Open file dialog to select a folder containing BSE images (.png, .tif, .tiff)
+        self.w.attributes("-topmost", False)
         if self.mode == "3D":
-            path = filedialog.askopenfilename(initialdir=self.directory, title="Select the first control image", filetypes=(("png files", "*.png"), ("tif files", "*.tif"), ("tiff files", "*.tiff"), ("all files", "*.*")))
+            path = filedialog.askopenfilename(initialdir=self.directory, title="Select the first control image", filetypes=(("tif files", "*.tif"), ("tiff files", "*.tiff"), ("png files", "*.png"), ("all files", "*.*")))
             if path == "": return
             path = os.path.dirname(path) + "/*" + os.path.splitext(path)[1]
             self.directory = os.path.dirname(path)
             self.bse_entry.delete(0, tk.END)
             self.bse_entry.insert(0, path)
         else:
-            path = filedialog.askopenfilenames(initialdir=self.directory, title="Select a control image(s)", filetypes=(("png files", "*.png"), ("tif files", "*.tif"), ("tiff files", "*.tiff"), ("all files", "*.*")))
+            path = filedialog.askopenfilenames(initialdir=self.directory, title="Select a control image(s)", filetypes=(("tif files", "*.tif"), ("tiff files", "*.tiff"), ("png files", "*.png"), ("all files", "*.*")))
             if path == "": return
             self.directory = os.path.dirname(path[0])
             path = ";".join(path)
             self.bse_entry.delete(0, tk.END)
             self.bse_entry.insert(0, path)
+        self.w.attributes("-topmost", True)
 
     def ebsd_points_browse(self):
         # Open file dialog to select a .txt file containing EBSD control points
+        self.w.attributes("-topmost", False)
         path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .txt file containing distorted points", filetypes=(("txt files", "*.txt"), ("all files", "*.*")))
         # If a file is selected, update the entry box
         if path:
             self.ebsd_points_entry.delete(0, tk.END)
             self.ebsd_points_entry.insert(0, path)
             self.directory = os.path.dirname(path)
+        self.w.attributes("-topmost", True)
 
     def bse_points_browse(self):
         # Open file dialog to select a .txt file containing BSE control points
+        self.w.attributes("-topmost", False)
         path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .txt file containing control points", filetypes=(("txt files", "*.txt"), ("all files", "*.*")))
         # If a file is selected, update the entry box
         if path:
             self.bse_points_entry.delete(0, tk.END)
             self.bse_points_entry.insert(0, path)
             self.directory = os.path.dirname(path)
+        self.w.attributes("-topmost", True)
 
     def open(self):
         # Read in the selected data, clear the toplevel, and display the summary
@@ -201,6 +209,7 @@ class DataSummary(object):
         self.rescale = False
         self.parse_data(ebsd_data, bse_data, ebsd_points, bse_points)
         self.w = tk.Toplevel(parent)
+        self.w.attributes("-topmost", True)
         self.w.title("Data Summary")
         self.w.rowconfigure(0, weight=10)
         self.w.rowconfigure(1, weight=1)
@@ -337,6 +346,7 @@ class CropControl(object):
         self.start = [0, 0]
         self.end = list(self.shape)
         self.w = tk.Toplevel(parent)
+        self.w.attributes("-topmost", True)
         self.w.title("Cropping the control image(s): Click and drag to select a region.")
         # Configure the UI
         self.w.rowconfigure(0, weight=10)
@@ -548,6 +558,8 @@ def read_many_images(path, ext):
 
 def read_points(path):
     points = np.loadtxt(path, delimiter=" ", dtype=int)
+    if points.ndim == 1:
+        points = points.reshape((1, -1))
     z, y, x = points[:, 0], points[:, 1], points[:, 2]
     unique_slices = np.unique(z)
     points_data = {slice_num: np.hstack((y[z == slice_num].reshape(-1, 1), x[z == slice_num].reshape(-1, 1))) for slice_num in unique_slices}

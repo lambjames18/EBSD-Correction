@@ -14,13 +14,11 @@ from tkinter import filedialog, ttk
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 from skimage import io, exposure, transform
-import imageio
 
 # Local files
 import core
-import IO
+import Inputs
 import InteractiveView as IV
 
 ### TODO: Fix cropping in output
@@ -35,6 +33,7 @@ class App(tk.Tk):
         self.folder = os.getcwd()
         self.deiconify()
         self.title("Distortion Correction")
+        self.attributes("-topmost", True)
         # Setup structure of window
         # frames
         # frame_w = 1920
@@ -207,14 +206,14 @@ class App(tk.Tk):
 
     ### IO
     def select_data_popup(self, mode):
-        self.w = IO.DataInput(self, mode)
+        self.w = Inputs.DataInput(self, mode)
         self.wait_window(self.w.w)
         if self.w.clean_exit:
             ebsd_path, bse_path = self.w.ebsd_path, self.w.bse_path
             ebsd_points_path, bse_points_path = self.w.ebsd_points_path, self.w.bse_points_path
             ebsd_res, bse_res = self.w.ebsd_res, self.w.bse_res
-            e_d, b_d, e_pts, b_pts = IO.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
-            self.w = IO.DataSummary(self, e_d, b_d, e_pts, b_pts, ebsd_res, bse_res)
+            e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+            self.w = Inputs.DataSummary(self, e_d, b_d, e_pts, b_pts, ebsd_res, bse_res)
             self.wait_window(self.w.w)
             if self.w.clean_exit:
                 if e_pts is None:
@@ -228,13 +227,13 @@ class App(tk.Tk):
                     with open(bse_points_path, "w", encoding="utf8") as output:
                         output.write("")
                 if self.w.rescale:
-                    b_d = IO.rescale_control(b_d, bse_res, ebsd_res)
+                    b_d = Inputs.rescale_control(b_d, bse_res, ebsd_res)
                 if self.w.flip:
                     # b_d = np.flip(b_d, axis=1).copy(order='C')
                     b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
                 if self.w.crop:
                     ### TODO: Add multiple control images
-                    self.w = IO.CropControl(self, b_d[0, :, :])
+                    self.w = Inputs.CropControl(self, b_d[0, :, :])
                     self.wait_window(self.w.w)
                     if self.w.clean_exit:
                         s, e = self.w.start, self.w.end
@@ -272,18 +271,23 @@ class App(tk.Tk):
             self.ex_ctr_pt_ims["state"] = "normal"
             self.view_pts["state"] = "normal"
             self.show_points.set(1)
-    
+
     ### Coords stuff
     def add_coords(self, pos, event):
         """Responds to a click on an image. Redraws the images after the click. Also saves the click location in a file."""
         i = self.slice_num.get()
-        scale = int(self.resize_vars[pos].get()) / 100
         if pos == "ebsd":
-            x = int(self.ebsd.canvasx(event.x)) / scale
-            y = int(self.ebsd.canvasy(event.y)) / scale
+            scale = int(self.resize_vars["ebsd"].get()) / 100
+            x = int(np.around(self.ebsd.canvasx(event.x), 0))
+            y = int(np.around(self.ebsd.canvasy(event.y), 0))
+            x = int(np.around(x / scale, 0))
+            y = int(np.around(y / scale, 0))
         else:
-            x = int(self.bse.canvasx(event.x)) / scale
-            y = int(self.bse.canvasy(event.y)) / scale
+            scale = int(self.resize_vars["bse"].get()) / 100
+            x = int(np.around(self.bse.canvasx(event.x), 0))
+            y = int(np.around(self.bse.canvasy(event.y), 0))
+            x = int(np.around(x / scale, 0))
+            y = int(np.around(y / scale, 0))
         if i not in self.points[pos].keys():
             self.points[pos][i] = []
         try:
@@ -292,9 +296,9 @@ class App(tk.Tk):
             self.points[pos][i] = np.array([[x, y]])
         path = self.points_path[pos]
         with open(path, "a", encoding="utf8") as output:
-            output.write(f"{i} {event.x} {event.y}\n")
+            output.write(f"{i} {x} {y}\n")
         self._show_points()
-    
+
     def write_coords(self):
         for mode in ["ebsd", "bse"]:
             path = self.points_path[mode]
@@ -305,7 +309,7 @@ class App(tk.Tk):
                 data.append(s)
             data = np.vstack(data)
             np.savetxt(path, data, fmt="%i", delimiter=" ")
-        
+
     def clear_points(self, mode):
         if mode == "ebsd":
             self.ebsd.delete("all")
@@ -314,7 +318,7 @@ class App(tk.Tk):
             self.bse.delete("all")
             self.points["bse"][self.slice_num.get()] = []
         self._update_viewers()
-    
+
     def remove_coords(self, pos, event):
         """Remove the point closes to the clicked location, the point should be removed from both images"""
         if pos == 'bse': v = self.bse
@@ -379,7 +383,6 @@ class App(tk.Tk):
 
     def _get_cropping_slice(self, centroid, target_shape, current_shape):
         """Returns a slice object that can be used to crop an image"""
-        print(centroid, target_shape, current_shape)
         rstart, rend = centroid[0] - target_shape[0] // 2, centroid[0] + target_shape[0] // 2 + 1
         if rstart < 0:
             r_slice = slice(0, target_shape[0])
@@ -530,8 +533,8 @@ class App(tk.Tk):
                 SAVE_PATH_EBSD += extension
             # Get the images
             ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
-            print("Shape:", ebsd_im.shape)
-            print("RAW dtype:", ebsd_im.dtype)
+            # print("Shape:", ebsd_im.shape)
+            # print("RAW dtype:", ebsd_im.dtype)
             # Align the image
             align.TPS(bse_im.shape)
             if len(ebsd_im.shape) == 3:
@@ -541,8 +544,8 @@ class App(tk.Tk):
                 aligned = np.moveaxis(np.array(aligned), 0, -1)
             else:
                 aligned = align.TPS_apply(ebsd_im, out="array")
-            print("Aligned shape:", aligned.shape)
-            print("Aligned dtype:", aligned.dtype)
+            # print("Aligned shape:", aligned.shape)
+            # print("Aligned dtype:", aligned.dtype)
             # Correct dtype
             if aligned.dtype != ebsd_im.dtype:
                 aligned = core.handle_dtype(aligned, ebsd_im.dtype)
@@ -561,6 +564,13 @@ class App(tk.Tk):
             print("Correction complete!")
 
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
+        if im.ndim == 3 and im.shape[-1] == 3:
+            print("RGB image")
+            im = im/im.max(axis=(0, 1)).reshape(1, 1, 3)
+        elif im.ndim == 3 and im.shape[-1] == 1:
+            im = im[:, :, 0]
+        elif im.ndim == 3 and im.shape[-1] == 4:
+            im = im.mean(axis=-1)
         fig = plt.figure(2)
         ax = fig.add_subplot(111)
         ax.imshow(im, cmap=cmap)
@@ -576,10 +586,11 @@ class App(tk.Tk):
     ### Other functions for buttons on the UI
     def export_CP_imgs(self):
         i = self.slice_num.get()
+        ebsd_modality = self.ebsd_mode.get()
         pts = np.array(self.points["ebsd"][i])
-        self._save_CP_img(f"{i}_ebsd", self.ebsd_im, pts, "gray", "#c2344e")
+        self._save_CP_img(f"{i}_ebsd", self.ebsd_data[ebsd_modality][i], pts, "gray", "#c2344e")
         pts = np.array(self.points["bse"][i])
-        self._save_CP_img(f"{i}_bse", self.bse_im, pts, "gray", "#34c295")
+        self._save_CP_img(f"{i}_bse", self.bse_imgs[i], pts, "gray", "#34c295")
         print("Control point images exported successfully.")
 
     def clahe(self):
