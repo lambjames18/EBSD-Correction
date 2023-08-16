@@ -652,7 +652,7 @@ class App(tk.Tk):
                     SAVE_PATH_BSE += extension
                 io.imsave(SAVE_PATH_BSE, bse_im)
             print("Correction complete!")
-
+    
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
         if im.ndim == 3 and im.shape[-1] == 3:
             print("RGB image")
