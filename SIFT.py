@@ -14,7 +14,8 @@ import numpy as np
 def get_transformation_matrix(reference, misaligned):
     # min number keypoint between images
     MIN_MATCH_COUNT = 5
-    sift = cv2.xfeatures2d.SIFT_create()
+    # sift = cv2.xfeatures2d.SIFT_create()
+    sift = cv2.SIFT_create()
 
     kp1, des1 = sift.detectAndCompute(reference, None)
     kp2, des2 = sift.detectAndCompute(misaligned, None)
@@ -33,6 +34,7 @@ def get_transformation_matrix(reference, misaligned):
         if m.distance < 0.8 * n.distance:
             good.append(m)
 
+    print(len(good))
     if len(good) > MIN_MATCH_COUNT:
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)

@@ -278,8 +278,8 @@ class App(tk.Tk):
                 if self.w.rescale:
                     b_d = Inputs.rescale_control(b_d, bse_res, ebsd_res)
                 if self.w.flip:
-                    # b_d = np.flip(b_d, axis=1).copy(order='C')
-                    b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
+                    b_d = np.flip(b_d, axis=1).copy(order='C')
+                    # b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
                 if self.w.crop:
                     ### TODO: Add multiple control images
                     self.w = Inputs.CropControl(self, b_d[0, :, :])
