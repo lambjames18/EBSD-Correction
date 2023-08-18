@@ -8,7 +8,8 @@ UI for running distortion correction
 import os
 import shutil
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, messagebox
+import traceback
 
 # 3rd party packages
 import h5py
@@ -75,7 +76,7 @@ class App(tk.Tk):
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
         applymenu.add_command(label="TPS 3D", command=lambda: self.apply_3D("TPS"))
-        self.menu.add_cascade(label="Apply", menu=applymenu, state="disabled")
+        self.menu.add_cascade(label="View", menu=applymenu, state="disabled")
         self.config(menu=self.menu)
         # setup top
         self.show_points = tk.IntVar()
@@ -203,11 +204,19 @@ class App(tk.Tk):
         ### Additional things added
         self.points = {"ebsd": [], "bse": []}
         self.points_path = {"ebsd": "", "bse": ""}
+        self.report_callback_exception = self.report_callback_exception
 
+    def report_callback_exception(self, exc, val, tb):
+        message = "Error Encountered:\n\n"
+        message += "".join(traceback.format_exception(exc, val, tb))
+        messagebox.showerror("Error", message=val)
+    
     ### IO
     def easy_start(self):
-        ebsd_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/distorted_pts.txt"
-        bse_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/control_pts.txt"
+        # ebsd_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/distorted_pts.txt"
+        ebsd_points_path = "/Users/jameslamb/Documents/Research/distorted_pts.txt"
+        # bse_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/control_pts.txt"
+        ebsd_points_path = "/Users/jameslamb/Documents/Research/control_pts.txt"
         ebsd_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_aligned.dream3d"
         bse_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_BSE/*.tif"
         ebsd_res = 1.0
@@ -244,7 +253,7 @@ class App(tk.Tk):
         # Finish
         self.folder = os.path.dirname(ebsd_path)
         self._update_viewers()
-        self.menu.entryconfig("Apply", state="normal")
+        self.menu.entryconfig("View", state="normal")
         self.clear_ebsd_points["state"] = "normal"
         self.clear_bse_points["state"] = "normal"
         self.ebsd_resize_dropdown["state"] = "readonly"
@@ -311,7 +320,7 @@ class App(tk.Tk):
             # Finish
             self.folder = os.path.dirname(ebsd_path)
             self._update_viewers()
-            self.menu.entryconfig("Apply", state="normal")
+            self.menu.entryconfig("View", state="normal")
             self.clear_ebsd_points["state"] = "normal"
             self.clear_bse_points["state"] = "normal"
             self.ebsd_resize_dropdown["state"] = "readonly"
