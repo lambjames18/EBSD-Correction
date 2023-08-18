@@ -204,21 +204,22 @@ class App(tk.Tk):
         ### Additional things added
         self.points = {"ebsd": [], "bse": []}
         self.points_path = {"ebsd": "", "bse": ""}
-        self.report_callback_exception = self.report_callback_exception
 
-    def report_callback_exception(self, exc, val, tb):
-        message = "Error Encountered:\n\n"
-        message += "".join(traceback.format_exception(exc, val, tb))
-        messagebox.showerror("Error", message=val)
+    # def report_callback_exception(self, exc, val, tb):
+    #     message = "Error Encountered:\n\n"
+    #     message += "".join(traceback.format_exception(exc, val, tb))
+    #     messagebox.showerror("Error", message=val)
     
     ### IO
     def easy_start(self):
         # ebsd_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/distorted_pts.txt"
-        ebsd_points_path = "/Users/jameslamb/Documents/Research/distorted_pts.txt"
+        ebsd_points_path = "/Users/jameslamb/Documents/Research/CoNi67/distorted_pts.txt"
         # bse_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/control_pts.txt"
-        ebsd_points_path = "/Users/jameslamb/Documents/Research/control_pts.txt"
-        ebsd_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_aligned.dream3d"
-        bse_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_BSE/*.tif"
+        bse_points_path = "/Users/jameslamb/Documents/Research/CoNi67/control_pts.txt"
+        # ebsd_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_aligned.dream3d"
+        ebsd_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/CoNi67_aligned.dream3d"
+        # bse_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_BSE/*.tif"
+        bse_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/se_images_aligned/*.tif"
         ebsd_res = 1.0
         bse_res = 1.0
         e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
@@ -352,9 +353,10 @@ class App(tk.Tk):
             self.points[pos][i] = np.append(self.points[pos][i], [[x, y]], axis=0)
         except ValueError:
             self.points[pos][i] = np.array([[x, y]])
-        path = self.points_path[pos]
-        with open(path, "a", encoding="utf8") as output:
-            output.write(f"{i} {x} {y}\n")
+        self.write_coords()
+        # path = self.points_path[pos]
+        # with open(path, "a", encoding="utf8") as output:
+        #     output.write(f"{i} {x} {y}\n")
         self._show_points()
 
     def write_coords(self):
@@ -441,27 +443,29 @@ class App(tk.Tk):
 
     def _get_cropping_slice(self, centroid, target_shape, current_shape):
         """Returns a slice object that can be used to crop an image"""
-        print("Target shape: {}".format(target_shape))
-        print("Current shape: {}".format(current_shape))
-        rstart, rend = centroid[0] - target_shape[0] // 2, centroid[0] + target_shape[0] // 2 + 1
-        print("Row raw:", rstart, rend)
+        # print("Target shape: {}".format(target_shape))
+        # print("Current shape: {}".format(current_shape))
+        rstart = centroid[0] - target_shape[0] // 2
+        rend = rstart + target_shape[0]
+        # print("Row raw:", rstart, rend)
         if rstart < 0:
             r_slice = slice(0, target_shape[0])
         elif rend > current_shape[0]:
             r_slice = slice(current_shape[0] - target_shape[0], current_shape[0])
         else:
             r_slice = slice(rstart, rend)
-        print("Row slice:", r_slice)
+        # print("Row slice:", r_slice)
 
-        cstart, cend = centroid[1] - target_shape[1] // 2, centroid[1] + target_shape[1] // 2 + 1
-        print("Col raw:", cstart, cend)
+        cstart = centroid[1] - target_shape[1] // 2
+        cend = cstart + target_shape[1]
+        # print("Col raw:", cstart, cend)
         if cstart < 0:
             c_slice = slice(0, target_shape[1])
         elif cend > current_shape[1]:
             c_slice = slice(current_shape[1] - target_shape[1], current_shape[1])
         else:
             c_slice = slice(cstart, cend)
-        print("Col slice:", c_slice)
+        # print("Col slice:", c_slice)
         return r_slice, c_slice
 
     def _check_sizes(self, im1, im2, ndims=2):
@@ -540,6 +544,7 @@ class App(tk.Tk):
         print("Aligned/Control data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
         ebsd_cStack = ebsd_cStack[:, rslc, cslc]
         bse_stack = bse_stack[:, rslc, cslc]
+        print("Details", rslc, cslc, ebsd_cStack.shape, bse_stack.shape, ebsd_stack.shape)
         # View
         print("Creating interactive view")
         # Make the cursor normal again
@@ -550,42 +555,56 @@ class App(tk.Tk):
     ### Apply stuff for exporting
     def apply_correction_to_h5(self, algo):
         dtypes = {b"DataArray<uint8_t>": np.uint8,
+                  b"DataArray<uint8>": np.uint8,
                   b"DataArray<int8_t>": np.int8,
+                  b"DataArray<int8>": np.int8,
                   b"DataArray<uint16_t>": np.uint16,
+                  b"DataArray<uint16>": np.uint16,
                   b"DataArray<int16_t>": np.int16,
+                  b"DataArray<int16>": np.int16,
                   b"DataArray<uint32_t>": np.uint32,
+                  b"DataArray<uint32>": np.uint32,
                   b"DataArray<int32_t>": np.int32,
+                  b"DataArray<int32>": np.int32,
                   b"DataArray<uint64_t>": np.uint64,
+                  b"DataArray<uint64>": np.uint64,
                   b"DataArray<int64_t>": np.int64,
+                  b"DataArray<int64>": np.int64,
                   b"DataArray<float>": np.float32,
+                  b"DataArray<float32>": np.float32,
+                  b"DataArray<float64>": np.float64,
                   b"DataArray<double>": np.float64,
                   b"DataArray<bool>": bool}
         points = self.points
         if len(points["ebsd"].keys()) == 0:
             print("Error: No points have been selected!")
             return
-        elif len(points["ebsd"].keys()) == 1:
-            print("Warning: Only one slice has been selected! Applying it to all slices...")
         i = self.slice_num.get()
         referencePoints = np.array(self.points["bse"][list(self.points["bse"].keys())[0]])
         distortedPoints = np.array(self.points["ebsd"][list(self.points["ebsd"].keys())[0]])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Grab the h5 file
         print("Generating a new DREAM3D file...")
-        # EBSD_DIR_CORRECTED = (w := os.path.splitext(self.ebsd_path))[0] + "_corrected" + w[1]
         EBSD_DIR_CORRECTED = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save the corrected data in a new Dream3d file", filetypes=[("Dream3D HDF5 File", "*.dream3d"), ("All files", "*.*")], defaultextension=".dream3d")
+        if EBSD_DIR_CORRECTED == "":
+            print("No file selected. Aborting...")
+            return
         shutil.copyfile(self.ebsd_path, EBSD_DIR_CORRECTED)
         h5 = h5py.File(EBSD_DIR_CORRECTED, "r+")
-        # Actually apply it here
-        keys = list(h5["DataContainers/ImageDataContainer/CellData"])
+        if "DataContainers" not in h5.keys():
+            cell_path = "DataStructure/DataContainer/CellData"
+        else:
+            cell_path = "DataContainers/ImageDataContainer/CellData"
+        keys = list(h5[cell_path])
         # Get cropping and centering stuff
-        dummy = np.ones(h5["DataContainers/ImageDataContainer/CellData"][keys[0]].shape[:3])
+        dummy = np.ones(h5[cell_path][keys[0]].shape[:3])
         rc, cc = self._get_corrected_centroid(dummy, align, points)
         rslc, cslc = self._get_cropping_slice((rc, cc), dummy.shape[1:3], self.bse_imgs.shape[1:3])
+        print(rslc, cslc, dummy[:, rslc, cslc].shape, self.bse_imgs[:, rslc, cslc].shape)
         print(f"Success! Applying to volume ({len(keys)} modes)")
         for key in keys:
             # Get stack of one mode and determine characteristics
-            ebsd_stack = h5["DataContainers/ImageDataContainer/CellData/" + key]
+            ebsd_stack = h5[cell_path][key]
             dtype = dtypes[ebsd_stack.attrs["ObjectType"]]
             ebsd_stack = np.array(ebsd_stack[...])
             n_dims = ebsd_stack.shape[-1]
@@ -609,7 +628,7 @@ class App(tk.Tk):
                 # Fill original stack
                 ebsd_stack[:, :, :, i] = c_stack[:, rslc, cslc]
             # Write new stack to the h5
-            h5["DataContainers/ImageDataContainer/CellData/" + key][...] = ebsd_stack
+            h5[cell_path][key][...] = ebsd_stack
         h5.close()
         print("Correction complete!")
 

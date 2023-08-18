@@ -193,6 +193,8 @@ class Alignment:
         for key in slice_numbers:
             self.source = np.array(points["bse"][key])
             self.distorted = np.array(points["ebsd"][key])
+            if self.source.shape != self.distorted.shape:
+                raise RuntimeError("Number of control points in control and distorted do not match for slice {}".format(key))
             self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
             solutions[key] = self.TPS_solution
         solution_keys = np.array(list(solutions.keys()))
@@ -205,7 +207,7 @@ class Alignment:
         # If 2.3, same as 2.2 but extend the highest solution to the top and the lowest solution to the bottom
         # Case 1
         if dataset.shape[0] == len(solution_keys):
-            print("All slices have control points, applying solution to each slice.")
+            # print("All slices have control points, applying solution to each slice.")
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
                 self.TPS_solution = solutions[slice_numbers[i]]
@@ -213,7 +215,7 @@ class Alignment:
             return aligned_dataset
         # Case 3
         elif len(slice_numbers) == 1:
-            print("Only one slice has control points, applying solution to entire dataset.")
+            # print("Only one slice has control points, applying solution to entire dataset.")
             key = slice_numbers[0]
             self.TPS_solution = solutions[key]
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
@@ -231,10 +233,10 @@ class Alignment:
                 solutions_keys = np.append(solution_keys, len(slice_numbers) - 1)
             
             # Treat like it is Case 2.1 now
-            print("Only a few slices have control points, interpolating solutions between slices.")
+            # print("Only a few slices have control points, interpolating solutions between slices.")
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
-                if i in solution_keys:
+                if i in solutions_keys:
                     self.TPS_solution = solutions[i]
                     aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
                 else:
@@ -245,62 +247,6 @@ class Alignment:
                     self.TPS_solution = _linear((key_down, sol_down), (key_up, sol_up), i)
                     aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
             return aligned_dataset
-        # params = {}
-        # if len(slice_numbers) == 1:
-        #     print("Only one slice has control points, only calculating one solution.")
-        #     key = slice_numbers[0]
-        #     self.source = np.array(points["bse"][key])
-        #     self.distorted = np.array(points["ebsd"][key])
-        #     self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
-        #     # Create transform object for each slice and warp
-        #     aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
-        #     for i in range(dataset.shape[0]):
-        #         aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
-        #     return aligned_dataset
-        # else:
-        #     for key in slice_numbers:
-        #         self.source = np.array(points["bse"][key])
-        #         self.distorted = np.array(points["ebsd"][key])
-        #         self.TPS(bse.shape[1:], saveSolution=False, verbose=False)
-        #         params[key] = self.TPS_solution
-        #     # Interpolate the solutions
-        #     interpolations = {}
-        #     for i in range(len(slice_numbers) - 1):
-        #         f = interpolate.interp1d([slice_numbers[i], slice_numbers[i + 1]], [params[slice_numbers[i]], params[slice_numbers[i + 1]]], axis=0)
-        #         interpolations[f"{slice_numbers[i]} {slice_numbers[i + 1]}"] = {index: f(index) for index in range(slice_numbers[i] + 1, slice_numbers[i + 1])}
-        #     solutions = np.zeros((bse.shape[0], * self.TPS_solution.shape))
-        #     # Get the solution for each slice
-        #     for i in range(solutions.shape[0]):
-        #         found_match = False
-        #         if i in slice_numbers:
-        #             solutions[i] = params[i]
-        #             found_match = True
-        #             continue
-        #         elif i not in slice_numbers:
-        #             max_lower = 0
-        #             min_upper = solutions.shape[0]
-        #             for j in range(len(slice_numbers) - 1):
-        #                 if slice_numbers[j] < i < slice_numbers[j + 1]:
-        #                     max_lower = slice_numbers[j]
-        #                     min_upper = slice_numbers[j + 1]
-        #                     solutions[i] = interpolations[f"{max_lower} {min_upper}"][i]
-        #                     found_match = True
-        #             if not found_match:
-        #                 # Copy the closest slice
-        #                 if i < slice_numbers[0]:
-        #                     solutions[i] = params[0]
-        #                 elif i > slice_numbers[-1]:
-        #                     solutions[i] = params[max(list(params.keys()))]
-        #                     
-        #         else:
-        #             raise RuntimeError("Something went wrong while generating solutions")
-        #     # Create transform object for each slice and warp
-        #     aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
-        #     for i in range(dataset.shape[0]):
-        #         sol = solutions[i]
-        #         self.TPS_solution = sol
-        #         aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
-        #     return aligned_dataset
 
     def _TPS_makeL(self, cp):
         # cp: [K x 2] control points
