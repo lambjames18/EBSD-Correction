@@ -281,18 +281,20 @@ class DataSummary(object):
         self.flip = tk.BooleanVar()
         self.flip_check = ttk.Checkbutton(self.bot, text="Flip (Up/Down) Control Images?", variable=self.flip)
         self.flip_check.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
-        self.save1 = ttk.Button(self.bot, text="Continue (Rescale Control)", command=self.continue_rescale)
-        self.save1.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
-        self.save2 = ttk.Button(self.bot, text="Continue (No Rescale)", command=self.continue_norescale)
-        self.save2.grid(row=0, column=3, sticky="nsew", padx=2, pady=2)
-        self.cancel = ttk.Button(self.bot, text="Cancel", command=self.cancel)
-        self.cancel.grid(row=0, column=4, sticky="nsew", padx=2, pady=2)
+        self.r180 = tk.BooleanVar()
+        self.r180_check = ttk.Checkbutton(self.bot, text="Rotate Control Images 180º?", variable=self.r180)
+        self.r180_check.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
+        self.rescale = tk.BooleanVar()
+        self.rescale_check = ttk.Checkbutton(self.bot, text="Rescale Control Images?", variable=self.rescale)
+        self.rescale_check.grid(row=0, column=3, sticky="nsew", padx=2, pady=2)
+        self.save = ttk.Button(self.bot, text="Continue", command=self.exit)
+        self.save.grid(row=0, column=4, sticky="nsew", padx=2, pady=2)
         # Put in some information at the bottom
         self.separator = ttk.Separator(self.bot, orient="horizontal")
         self.separator.grid(row=1, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
         self.info1 = ttk.Label(self.bot, text="Note: Selecting the crop option will open a new window to select a region of the control image(s) (i.e. remove empty space around sample).")
         self.info2 = ttk.Label(self.bot, text="Note: Rescale Control will attempt to match the pixel resolutions of the distorted and control images by downsampling the control image (you should do this).")
-        self.info3 = ttk.Label(self.bot, text="Note: Flip control images will vertically (up/down) flip the control images (generally required for TriBeam datasets).")
+        self.info3 = ttk.Label(self.bot, text="Note: Flip or rotate 180º is only applied to the control images if selected (often needed for TriBeam datasets).")
         self.info1.grid(row=2, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
         self.info2.grid(row=3, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
         self.info3.grid(row=4, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
@@ -314,18 +316,12 @@ class DataSummary(object):
         else:
             self.bse_points = list(bse_points.keys())
     
-    def continue_rescale(self):
+    def exit(self):
         self.clean_exit = True
-        self.rescale = True
+        self.rescale = self.rescale.get()
         self.crop = self.crop.get()
         self.flip = self.flip.get()
-        self.w.destroy()
-    
-    def continue_norescale(self):
-        self.clean_exit = True
-        self.rescale = False
-        self.crop = self.crop.get()
-        self.flip = self.flip.get()
+        self.r180 = self.r180.get()
         self.w.destroy()
     
     def cancel(self):

@@ -212,16 +212,20 @@ class App(tk.Tk):
     
     ### IO
     def easy_start(self):
-        # ebsd_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/distorted_pts.txt"
-        ebsd_points_path = "/Users/jameslamb/Documents/Research/CoNi67/distorted_pts.txt"
-        # bse_points_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/control_pts.txt"
-        bse_points_path = "/Users/jameslamb/Documents/Research/CoNi67/control_pts.txt"
-        # ebsd_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_aligned.dream3d"
-        ebsd_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/CoNi67_aligned.dream3d"
-        # bse_path = "D:/Research/CMU-Registration/Datasets/Ta_AMS/Ta_AMS_small_BSE/*.tif"
-        bse_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/se_images_aligned/*.tif"
-        ebsd_res = 1.0
+        ebsd_points_path = ""
+        # ebsd_points_path = "/Users/jameslamb/Documents/Research/CoNi67/distorted_pts.txt"
+        bse_points_path = ""
+        # bse_points_path = "/Users/jameslamb/Documents/Research/CoNi67/control_pts.txt"
+        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/Test.dream3d"
+        # ebsd_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/CoNi67_aligned.dream3d"
+        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE_images/*.tif"
+        # bse_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/se_images_aligned/*.tif"
+        ebsd_res = 2.5
         bse_res = 1.0
+        rescale = True
+        r180 = True
+        flip = False
+        crop = False
         e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
         if e_pts is None:
             e_pts = {0: []}
@@ -233,6 +237,23 @@ class App(tk.Tk):
             bse_points_path = os.path.dirname(ebsd_path) + "/control_pts.txt"
             with open(bse_points_path, "w", encoding="utf8") as output:
                 output.write("")
+
+        if rescale:
+            b_d = Inputs.rescale_control(b_d, bse_res, ebsd_res)
+        # Flip or rotate 180 if desired
+        if flip:
+            b_d = np.flip(b_d, axis=1).copy(order='C')
+        elif r180:
+            b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
+        # Crop if desired
+        if crop:
+            ### TODO: Add multiple control images
+            self.w = Inputs.CropControl(self, b_d[0, :, :])
+            self.wait_window(self.w.w)
+            if self.w.clean_exit:
+                s, e = self.w.start, self.w.end
+                ### TODO: Add multiple control images
+                b_d = b_d[:, s[0]:e[0], s[1]:e[1]]
         # Set the data
         self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
         self.ebsd_path, self.bse_path = ebsd_path, bse_path
@@ -285,11 +306,15 @@ class App(tk.Tk):
                     bse_points_path = os.path.dirname(ebsd_path) + "/control_pts.txt"
                     with open(bse_points_path, "w", encoding="utf8") as output:
                         output.write("")
+                # Rescale if desired
                 if self.w.rescale:
                     b_d = Inputs.rescale_control(b_d, bse_res, ebsd_res)
+                # Flip or rotate 180 if desired
                 if self.w.flip:
                     b_d = np.flip(b_d, axis=1).copy(order='C')
-                    # b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
+                elif self.w.r180:
+                    b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
+                # Crop if desired
                 if self.w.crop:
                     ### TODO: Add multiple control images
                     self.w = Inputs.CropControl(self, b_d[0, :, :])
@@ -365,9 +390,22 @@ class App(tk.Tk):
             data = []
             pts = self.points[mode]
             for key in pts.keys():
-                s = np.hstack((np.ones((len(pts[key]), 1)) * key, pts[key]))
+                pts_temp = np.array(pts[key])
+                if pts_temp.size == 0:
+                    continue
+                # Handle if there is only one point and give a z value for each point
+                if pts_temp.ndim == 1:
+                    s = np.insert(pts_temp, 0, key).reshape(1, 3)
+                else:
+                    s = np.hstack((np.ones((pts_temp.shape[0], 1)) * key, pts_temp))
                 data.append(s)
-            data = np.vstack(data)
+            # Handle if there is one slice or if there are multiple slices with points
+            if len(data) == 0:
+                continue
+            elif len(data) > 1:
+                data = np.vstack(data)
+            else:
+                data = np.array(data[0])
             np.savetxt(path, data, fmt="%i", delimiter=" ")
 
     def clear_points(self, mode):
@@ -433,9 +471,9 @@ class App(tk.Tk):
         if points is None:
             im = align.apply(im, out="array").astype(bool)
         else:
-            im = align.apply(im[0], out="array").astype(bool)
-            # im = align.TPS_apply_3D(points, im, self.bse_imgs)
-            # im = im.sum(axis=0).astype(bool)
+            # im = align.apply(im[0], out="array").astype(bool)
+            im = align.TPS_apply_3D(points, im, self.bse_imgs)
+            im = im.astype(bool).sum(axis=0).astype(bool)
         rows = np.any(im, axis=1)
         cols = np.any(im, axis=0)
         rmin, rmax = np.where(rows)[0][[0, -1]]
@@ -527,11 +565,13 @@ class App(tk.Tk):
         """Applies the correction algorithm and calls the interactive view"""
         self.config(cursor="watch")
         points = self.points
-        ebsd_stack = np.sqrt(np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3))
+        ebsd_stack = np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3)
+        ebsd_stack[ebsd_stack > 0] = np.sqrt(ebsd_stack[ebsd_stack > 0])
         ebsd_stack = np.around(255 * ((ebsd_stack - ebsd_stack.min()) / (ebsd_stack.max() - ebsd_stack.min())), 0).astype(np.uint8)
+        # ebsd_stack = np.around(255 * ((ebsd_stack - ebsd_stack.min(axis=(0, 1, 2))) / (ebsd_stack.max(axis=(0, 1, 2)) - ebsd_stack.min(axis=(0, 1, 2)))), 0).astype(np.uint8)
         bse_stack = self.bse_imgs
-        referencePoints = np.array(self.points["bse"][self.slice_num.get()])
-        distortedPoints = np.array(self.points["ebsd"][self.slice_num.get()])
+        referencePoints = np.array(self.points["bse"][list(self.points["bse"].keys())[0]])
+        distortedPoints = np.array(self.points["ebsd"][list(self.points["ebsd"].keys())[0]])
         print("Aligning the full EBSD stack in mode {}".format(self.ebsd_mode.get()))
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         ebsd_cStack = align.TPS_apply_3D(points, ebsd_stack, self.bse_imgs)
@@ -539,7 +579,7 @@ class App(tk.Tk):
         bse_stack = self._check_sizes(ebsd_stack, bse_stack, ndims=3)
         ebsd_cStack = self._check_sizes(ebsd_stack, ebsd_cStack, ndims=3)
         # Handle cropping and centering
-        dummy = np.ones(ebsd_cStack.shape)
+        dummy = np.ones(ebsd_stack.shape)
         rc, cc = self._get_corrected_centroid(dummy, align, points)
         print("Centroid:", rc, cc)
         # Now crop the corrected image
@@ -737,7 +777,7 @@ class App(tk.Tk):
     def _update_viewers(self, *args):
         i = self.slice_num.get()
         key = self.ebsd_mode.get()
-        print(f"Updating viewers for slice {i} and mode {key}")
+        # print(f"Updating viewers for slice {i} and mode {key}")
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
         if self.clahe_active: bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)

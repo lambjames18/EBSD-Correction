@@ -11,6 +11,7 @@ def Interactive3D(stack0, stack1, title="Interactive View"):
     max_r = stack0.shape[1]
     max_c = stack1.shape[2]
     max_s = stack0.shape[0] - 1
+    if max_s == 0: max_s = 1
     ax.set_title(title)
     alphas = np.ones(stack0.shape[1:3])
     # Show images
