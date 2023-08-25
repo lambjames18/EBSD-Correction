@@ -433,8 +433,9 @@ class App(tk.Tk):
         if points is None:
             im = align.apply(im, out="array").astype(bool)
         else:
-            im = align.TPS_apply_3D(points, im, self.bse_imgs)
-            im = im.sum(axis=0).astype(bool)
+            im = align.apply(im[0], out="array").astype(bool)
+            # im = align.TPS_apply_3D(points, im, self.bse_imgs)
+            # im = im.sum(axis=0).astype(bool)
         rows = np.any(im, axis=1)
         cols = np.any(im, axis=0)
         rmin, rmax = np.where(rows)[0][[0, -1]]
