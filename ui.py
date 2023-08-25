@@ -503,20 +503,20 @@ class App(tk.Tk):
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         align.get_solution(size=im0.shape)
         im1 = align.apply(ebsd_im, out="array")
-        print("Distorted", ebsd_im.shape, "Control", im0.shape, "Corrected", im1.shape)
         # Make sure there are no axes that are smaller than the EBSD data (if there is, pad that axis with zeros)
         im0 = self._check_sizes(ebsd_im, im0)
         im1 = self._check_sizes(ebsd_im, im1)
-        print("Distorted", ebsd_im.shape, "Control", im0.shape, "Corrected", im1.shape)
         # Make sure there are no axes that are larger than the EBSD data (if there is, crop that axis, making sure to keep everything centered)
         # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
         dummy = np.ones(ebsd_im.shape)
         rc, cc = self._get_corrected_centroid(dummy, align)
+        print("Centroid:", rc, cc)
         # Now crop the corrected image
         rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, im1.shape)
         print("Aligned/Control data cropped from {} to {} (to match distorted grid size)".format(im1.shape, im1[rslc, cslc].shape))
         im0 = im0[rslc, cslc]
         im1 = im1[rslc, cslc]
+        print("Details", rslc, cslc, im1.shape, im0.shape, ebsd_im.shape)
         # View
         print("Creating interactive view")
         IV.Interactive2D(im0, im1, "2D TPS Correction")
@@ -540,6 +540,8 @@ class App(tk.Tk):
         # Handle cropping and centering
         dummy = np.ones(ebsd_cStack.shape)
         rc, cc = self._get_corrected_centroid(dummy, align, points)
+        print("Centroid:", rc, cc)
+        # Now crop the corrected image
         rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_stack.shape[1:], ebsd_cStack.shape[1:])
         print("Aligned/Control data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
         ebsd_cStack = ebsd_cStack[:, rslc, cslc]
