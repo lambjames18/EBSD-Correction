@@ -227,16 +227,16 @@ class Alignment:
             # Handle Case 2.2 and 2.3
             if 0 not in solution_keys:
                 solutions[0] = solutions[solution_keys[0]]
-                solutions_keys = np.insert(solution_keys, 0, 0)
-            if len(slice_numbers) - 1 not in solution_keys:
+                solution_keys = np.insert(solution_keys, 0, 0)
+            if dataset.shape[0] - 1 not in solution_keys:
                 solutions[len(slice_numbers) - 1] = solutions[solution_keys[-1]]
-                solutions_keys = np.append(solution_keys, len(slice_numbers) - 1)
+                solution_keys = np.append(solution_keys, dataset.shape[0] - 1)
             
             # Treat like it is Case 2.1 now
             # print("Only a few slices have control points, interpolating solutions between slices.")
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
             for i in range(dataset.shape[0]):
-                if i in solutions_keys:
+                if i in solution_keys:
                     self.TPS_solution = solutions[i]
                     aligned_dataset[i] = self.TPS_apply(dataset[i], out="array")
                 else:
