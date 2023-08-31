@@ -20,10 +20,24 @@ from scipy import interpolate
 # points = {"ebsd": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 4: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}, "bse": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 4: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}}
 
 # No top or bottom slices
-points = {"ebsd": {1: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 3: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}, "bse": {1: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 3: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}}
+points_ebsd = np.loadtxt("/Users/jameslamb/Downloads/distorted_pts.txt", delimiter=" ")
+points_bse = np.loadtxt("/Users/jameslamb/Downloads/control_pts.txt", delimiter=" ")
+print(points_ebsd.shape, points_bse.shape)
+points = {"ebsd": {}, "bse": {}}
+for i in range(points_ebsd.shape[0]):
+    if points_ebsd[i, 0] not in list(points["ebsd"].keys()):
+        points["ebsd"][int(points_ebsd[i, 0])] = []
+    points["ebsd"][points_ebsd[i, 0]].append(points_ebsd[i, 1:])
+points["ebsd"] = {key: np.array(points["ebsd"][key]) for key in points["ebsd"].keys()}
 
-dataset = np.random.randint(0, 100, (5, 10, 10))
-bse = np.random.randint(0, 100, (5, 10, 10))
+for i in range(points_bse.shape[0]):
+    if points_bse[i, 0] not in list(points["bse"].keys()):
+        points["bse"][int(points_bse[i, 0])] = []
+    points["bse"][points_bse[i, 0]].append(points_bse[i, 1:])
+points["bse"] = {key: np.array(points["bse"][key]) for key in points["bse"].keys()}
+
+dataset = np.random.randint(0, 100, (187, 380, 449))
+bse = np.random.randint(0, 100, (187, 1024, 1536))
 
 # Get slice numbers
 slice_numbers = list(points["ebsd"].keys())
