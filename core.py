@@ -225,16 +225,12 @@ class Alignment:
         # Case 2
         else:
             # Handle Case 2.2 and 2.3
-            print("Raw solutions:", solution_keys)
             if 0 not in solution_keys:
-                print("no slice 0 solution, extending lowest solution to bottom of dataset")
                 solutions[0] = solutions[solution_keys[0]]
                 solution_keys = np.insert(solution_keys, 0, 0)
             if dataset.shape[0] - 1 not in solution_keys:
-                print("no slice {} solution, extending highest solution to top of dataset".format(dataset.shape[0] - 1))
                 solutions[dataset.shape[0] - 1] = solutions[solution_keys[-1]]
                 solution_keys = np.append(solution_keys, dataset.shape[0] - 1)
-            print("Updated solutions:", solution_keys) 
             # Treat like it is Case 2.1 now
             # print("Only a few slices have control points, interpolating solutions between slices.")
             aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
