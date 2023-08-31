@@ -78,11 +78,11 @@ elif len(slice_numbers) == 1:
 else:
     # Handle Case 2.2 and 2.3
     if 0 not in solution_keys:
-        print("no slice 0 solution, extending lowest solution to top of dataset")
+        print("no slice 0 solution, extending lowest solution to the bottom of dataset")
         solutions[0] = solutions[solution_keys[0]]
         solution_keys = np.insert(solution_keys, 0, 0)
     if dataset.shape[0] - 1 not in solution_keys:
-        print("no slice {} solution, extending highest solution to bottom of dataset".format(dataset.shape[0] - 1))
+        print("no slice {} solution, extending highest solution to the top of dataset".format(dataset.shape[0] - 1))
         solutions[len(slice_numbers) - 1] = solutions[solution_keys[-1]]
         solution_keys = np.append(solution_keys, dataset.shape[0] - 1)
     

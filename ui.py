@@ -204,7 +204,7 @@ class App(tk.Tk):
         ### TODO: Test 3D IO and everything else
         ### TODO: Fix 2D and 3D output stuff (prompt for file save, saving options, etc.)
         ### Additional things added
-        self.points = {"ebsd": [], "bse": []}
+        self.points = {"ebsd": {}, "bse": {}}
         self.points_path = {"ebsd": "", "bse": ""}
 
     # def report_callback_exception(self, exc, val, tb):

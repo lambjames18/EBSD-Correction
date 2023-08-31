@@ -232,7 +232,7 @@ class Alignment:
                 solution_keys = np.insert(solution_keys, 0, 0)
             if dataset.shape[0] - 1 not in solution_keys:
                 print("no slice {} solution, extending highest solution to top of dataset".format(dataset.shape[0] - 1))
-                solutions[len(slice_numbers) - 1] = solutions[solution_keys[-1]]
+                solutions[dataset.shape[0] - 1] = solutions[solution_keys[-1]]
                 solution_keys = np.append(solution_keys, dataset.shape[0] - 1)
             print("Updated solutions:", solution_keys) 
             # Treat like it is Case 2.1 now
