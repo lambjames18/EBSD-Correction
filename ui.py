@@ -6,6 +6,8 @@ UI for running distortion correction
 
 # Python packages
 import os
+# from threading import Thread
+from multiprocessing.pool import ThreadPool
 import shutil
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
@@ -210,23 +212,36 @@ class App(tk.Tk):
     #     message += "".join(traceback.format_exception(exc, val, tb))
     #     messagebox.showerror("Error", message=val)
     
+    def _thread_function(self, function, *args):
+        output = function(*args)
+        self.event_generate("<<Foo>>", when="tail")
+        return output
+
+    def _run_in_background(self, text, function, *args):
+        self.w = ProgressWindow(text)
+        self.bind("<<Foo>>", lambda arg: self.w.destroy())
+        thread_obj = ThreadPool(processes=1)
+        output = thread_obj.apply_async(self._thread_function, (function, *args))
+        self.wait_window(self.w)
+        return output.get()
+
     ### IO
     def easy_start(self):
-        ebsd_points_path = ""
-        # ebsd_points_path = "/Users/jameslamb/Documents/Research/CoNi67/distorted_pts.txt"
-        bse_points_path = ""
-        # bse_points_path = "/Users/jameslamb/Documents/Research/CoNi67/control_pts.txt"
-        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/Test.dream3d"
-        # ebsd_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/CoNi67_aligned.dream3d"
-        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE_images/*.tif"
-        # bse_path = "/Users/jameslamb/Documents/Research/CoNi67/CoNi_Dataset/se_images_aligned/*.tif"
+        # ebsd_points_path = ""
+        # bse_points_path = ""
+        # ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/Test.dream3d"
+        # bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE_images/*.tif"
+        ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
+        bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
+        ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
+        bse_path = "D:/Research/scripts/Alignment/CoNi67/se_images_aligned/*.tif"
         ebsd_res = 2.5
         bse_res = 1.0
-        rescale = True
-        r180 = True
+        rescale = False
+        r180 = False
         flip = False
         crop = False
-        e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+        e_d, b_d, e_pts, b_pts = self._run_in_background("Importing data...", Inputs.read_data, ebsd_path, bse_path, ebsd_points_path, bse_points_path)
         if e_pts is None:
             e_pts = {0: []}
             ebsd_points_path = os.path.dirname(ebsd_path) + "/distorted_pts.txt"
@@ -254,37 +269,8 @@ class App(tk.Tk):
                 s, e = self.w.start, self.w.end
                 ### TODO: Add multiple control images
                 b_d = b_d[:, s[0]:e[0], s[1]:e[1]]
-        # Set the data
-        self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
-        self.ebsd_path, self.bse_path = ebsd_path, bse_path
-        self.ebsd_data, self.bse_imgs = e_d, b_d
-        self.ebsd_res, self.bse_res = ebsd_res, bse_res
-        self.points["ebsd"], self.points["bse"] = e_pts, b_pts
-        # Set the UI stuff
-        self.ebsd_mode_options = list(self.ebsd_data.keys())
-        self.ebsd_mode.set(self.ebsd_mode_options[0])
-        self.slice_min = 0
-        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
-        self.slice_num.set(self.slice_min)
-        # self.ebsd_cStack = np.zeros(self.ebsd_data[self.ebsd_mode_options[0]].shape)
-        # Configure UI
-        self.slice_picker["state"] = "readonly"
-        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
-        self.ebsd_picker["state"] = "readonly"
-        self.ebsd_picker["values"] = self.ebsd_mode_options
-        # Finish
-        self.folder = os.path.dirname(ebsd_path)
-        self._update_viewers()
-        self.menu.entryconfig("View", state="normal")
-        self.clear_ebsd_points["state"] = "normal"
-        self.clear_bse_points["state"] = "normal"
-        self.ebsd_resize_dropdown["state"] = "readonly"
-        self.bse_resize_dropdown["state"] = "readonly"
-        self.clahe_b["state"] = "normal"
-        self.ex_ctr_pt_ims["state"] = "normal"
-        self.view_pts["state"] = "normal"
-        self.show_points.set(1)
-    
+        self._handle_input(ebsd_path, bse_path, e_d, b_d, ebsd_points_path, bse_points_path, e_pts, b_pts, ebsd_res, bse_res)
+
     def select_data_popup(self, mode):
         self.w = Inputs.DataInput(self, mode)
         self.wait_window(self.w.w)
@@ -323,38 +309,42 @@ class App(tk.Tk):
                         s, e = self.w.start, self.w.end
                         ### TODO: Add multiple control images
                         b_d = b_d[:, s[0]:e[0], s[1]:e[1]]
+                self._handle_input(ebsd_path, bse_path, e_d, b_d, ebsd_points_path, bse_points_path, e_pts, b_pts, ebsd_res, bse_res)
             else:
                 return
-            # Set the data
-            self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
-            self.ebsd_path, self.bse_path = ebsd_path, bse_path
-            self.ebsd_data, self.bse_imgs = e_d, b_d
-            self.ebsd_res, self.bse_res = ebsd_res, bse_res
-            self.points["ebsd"], self.points["bse"] = e_pts, b_pts
-            # Set the UI stuff
-            self.ebsd_mode_options = list(self.ebsd_data.keys())
-            self.ebsd_mode.set(self.ebsd_mode_options[0])
-            self.slice_min = 0
-            self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
-            self.slice_num.set(self.slice_min)
-            # self.ebsd_cStack = np.zeros(self.ebsd_data[self.ebsd_mode_options[0]].shape)
-            # Configure UI
-            self.slice_picker["state"] = "readonly"
-            self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
-            self.ebsd_picker["state"] = "readonly"
-            self.ebsd_picker["values"] = self.ebsd_mode_options
-            # Finish
-            self.folder = os.path.dirname(ebsd_path)
-            self._update_viewers()
-            self.menu.entryconfig("View", state="normal")
-            self.clear_ebsd_points["state"] = "normal"
-            self.clear_bse_points["state"] = "normal"
-            self.ebsd_resize_dropdown["state"] = "readonly"
-            self.bse_resize_dropdown["state"] = "readonly"
-            self.clahe_b["state"] = "normal"
-            self.ex_ctr_pt_ims["state"] = "normal"
-            self.view_pts["state"] = "normal"
-            self.show_points.set(1)
+        
+
+    def _handle_input(self, ebsd_path, bse_path, e_d, b_d, ebsd_points_path, bse_points_path, e_pts, b_pts, ebsd_res, bse_res):
+        # Set the data
+        self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
+        self.ebsd_path, self.bse_path = ebsd_path, bse_path
+        self.ebsd_data, self.bse_imgs = e_d, b_d
+        self.ebsd_res, self.bse_res = ebsd_res, bse_res
+        self.points["ebsd"], self.points["bse"] = e_pts, b_pts
+        # Set the UI stuff
+        self.ebsd_mode_options = list(self.ebsd_data.keys())
+        self.ebsd_mode.set(self.ebsd_mode_options[0])
+        self.slice_min = 0
+        self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
+        self.slice_num.set(self.slice_min)
+        # self.ebsd_cStack = np.zeros(self.ebsd_data[self.ebsd_mode_options[0]].shape)
+        # Configure UI
+        self.slice_picker["state"] = "readonly"
+        self.slice_picker["values"] = list(np.arange(self.slice_min, self.slice_max + 1))
+        self.ebsd_picker["state"] = "readonly"
+        self.ebsd_picker["values"] = self.ebsd_mode_options
+        # Finish
+        self.folder = os.path.dirname(ebsd_path)
+        self._update_viewers()
+        self.menu.entryconfig("View", state="normal")
+        self.clear_ebsd_points["state"] = "normal"
+        self.clear_bse_points["state"] = "normal"
+        self.ebsd_resize_dropdown["state"] = "readonly"
+        self.bse_resize_dropdown["state"] = "readonly"
+        self.clahe_b["state"] = "normal"
+        self.ex_ctr_pt_ims["state"] = "normal"
+        self.view_pts["state"] = "normal"
+        self.show_points.set(1)
 
     ### Coords stuff
     def add_coords(self, pos, event):
@@ -767,7 +757,7 @@ class App(tk.Tk):
     ### Viewer stuff
     def _resize(self, pos, scale):
         """Resizes the image in the viewer"""
-        print(f"Resizing {pos} to {scale}%")
+        # print(f"Resizing {pos} to {scale}%")
         if pos == "ebsd":
             self.ebsd.delete("all")
         else:
@@ -861,6 +851,20 @@ class App(tk.Tk):
             s.configure("TLabelframe.Label", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
 
 
+class ProgressWindow(tk.Toplevel):
+    """ displays progress """
+    def __init__(self, text):
+        super().__init__()
+        self.f = ttk.Frame(self)
+        self.f.grid(row=0, column=0, sticky="nsew")
+        self.note = text
+        self.p_label = ttk.Label(self.f, text=self.note, font=("", 12, "bold"), anchor=tk.CENTER)
+        self.p_label.grid(row=0, column=0, sticky="nsew", padx=10, pady=5)
+        self.progress = ttk.Progressbar(self.f, orient="horizontal", length=300, mode="indeterminate")
+        self.progress.grid(row=1, column=0, sticky="nsew", padx=2, pady=2)
+        self.progress.start()
+
+
 if __name__ == "__main__":
     # s = ttk.Style()
     # print(s.theme_names())
@@ -870,4 +874,3 @@ if __name__ == "__main__":
     # root.tk.call("set_theme", "dark")
     app = App()
     app.mainloop()
-
