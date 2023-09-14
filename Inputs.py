@@ -116,7 +116,7 @@ class DataInput(object):
         if self.mode == "3D":
             path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .dream3d file", filetypes=(("dream3d files", "*.dream3d"), ("all files", "*.*")))
         else:
-            path = filedialog.askopenfilename(initialdir=self.directory, title="Select a distorted (EBSD) file", filetypes=(("ang files", "*.ang"), ("h5 files", "*.h5"), ("all files", "*.*")))
+            path = filedialog.askopenfilename(initialdir=self.directory, title="Select a distorted (EBSD) file", filetypes=(("ang files", "*.ang"), ("h5 files", "*.h5"), ("tif files", "*.tif"), ("tiff files", "*.tiff"), ("all files", "*.*")))
         # If a file is selected, update the entry box
         if path:
             self.ebsd_entry.delete(0, tk.END)
@@ -576,6 +576,9 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         ebsd_data = read_h5(ebsd_path)[0]
     elif ebsd_path.endswith(".dream3d"):
         ebsd_data = read_dream3d(ebsd_path)[0]
+    elif ebsd_path.endswith(".tif") or ebsd_path.endswith(".tiff"):
+        ebsd_data = read_image(ebsd_path)
+        ebsd_data = {"Intensity": ebsd_data}
     else:
         raise ValueError(f"Unknown file type: {ebsd_path}")
     if "*" in bse_path:

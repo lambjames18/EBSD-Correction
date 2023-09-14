@@ -536,16 +536,20 @@ class App(tk.Tk):
         im0 = self._check_sizes(ebsd_im, im0)
         im1 = self._check_sizes(ebsd_im, im1)
         # Make sure there are no axes that are larger than the EBSD data (if there is, crop that axis, making sure to keep everything centered)
-        # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-        dummy = np.ones(ebsd_im.shape)
-        rc, cc = self._get_corrected_centroid(dummy, align)
-        print("Centroid:", rc, cc)
-        # Now crop the corrected image
-        rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, im1.shape)
-        print("Aligned/Control data cropped from {} to {} (to match distorted grid size)".format(im1.shape, im1[rslc, cslc].shape))
-        im0 = im0[rslc, cslc]
-        im1 = im1[rslc, cslc]
-        print("Details", rslc, cslc, im1.shape, im0.shape, ebsd_im.shape)
+        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        if result is None:
+            return
+        elif result:
+            # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
+            dummy = np.ones(ebsd_im.shape)
+            rc, cc = self._get_corrected_centroid(dummy, align)
+            print("Centroid:", rc, cc)
+            # Now crop the corrected image
+            rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, im1.shape)
+            print("Aligned/Control data cropped from {} to {} (to match distorted grid size)".format(im1.shape, im1[rslc, cslc].shape))
+            im0 = im0[rslc, cslc]
+            im1 = im1[rslc, cslc]
+            print("Details", rslc, cslc, im1.shape, im0.shape, ebsd_im.shape)
         # View
         print("Creating interactive view")
         IV.Interactive2D(im0, im1, "2D TPS Correction")
@@ -569,15 +573,19 @@ class App(tk.Tk):
         bse_stack = self._check_sizes(ebsd_stack, bse_stack, ndims=3)
         ebsd_cStack = self._check_sizes(ebsd_stack, ebsd_cStack, ndims=3)
         # Handle cropping and centering
-        dummy = np.ones(ebsd_stack.shape)
-        rc, cc = self._get_corrected_centroid(dummy, align, points)
-        print("Centroid:", rc, cc)
-        # Now crop the corrected image
-        rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_stack.shape[1:], ebsd_cStack.shape[1:])
-        print("Aligned/Control data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
-        ebsd_cStack = ebsd_cStack[:, rslc, cslc]
-        bse_stack = bse_stack[:, rslc, cslc]
-        print("Details", rslc, cslc, ebsd_cStack.shape, bse_stack.shape, ebsd_stack.shape)
+        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        if result is None:
+            return
+        elif result:
+            dummy = np.ones(ebsd_stack.shape)
+            rc, cc = self._get_corrected_centroid(dummy, align, points)
+            print("Centroid:", rc, cc)
+            # Now crop the corrected image
+            rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_stack.shape[1:], ebsd_cStack.shape[1:])
+            print("Aligned/Control data cropped from {} to {} (to match EBSD grid)".format(ebsd_cStack.shape[1:], ebsd_cStack[:, rslc, cslc].shape))
+            ebsd_cStack = ebsd_cStack[:, rslc, cslc]
+            bse_stack = bse_stack[:, rslc, cslc]
+            print("Details", rslc, cslc, ebsd_cStack.shape, bse_stack.shape, ebsd_stack.shape)
         # View
         print("Creating interactive view")
         # Make the cursor normal again
@@ -684,28 +692,34 @@ class App(tk.Tk):
                 SAVE_PATH_EBSD += extension
             # Get the images
             ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
-            # print("Shape:", ebsd_im.shape)
-            # print("RAW dtype:", ebsd_im.dtype)
             # Align the image
-            align.TPS(bse_im.shape)
+            align.get_solution(size=bse_im.shape)
             if len(ebsd_im.shape) == 3:
                 aligned = []
                 for i in range(ebsd_im.shape[-1]):
-                    aligned.append(align.TPS_apply(ebsd_im[:, :, i], out="array"))
+                    aligned.append(align.apply(ebsd_im[:, :, i], out="array"))
                 aligned = np.moveaxis(np.array(aligned), 0, -1)
             else:
-                aligned = align.TPS_apply(ebsd_im, out="array")
-            # print("Aligned shape:", aligned.shape)
-            # print("Aligned dtype:", aligned.dtype)
+                aligned = align.apply(ebsd_im, out="array")
             # Correct dtype
             if aligned.dtype != ebsd_im.dtype:
                 aligned = core.handle_dtype(aligned, ebsd_im.dtype)
-            print("Corrected dtype:", aligned.dtype)
+            # Correct shape
+            aligned = self._check_sizes(ebsd_im, aligned)
+            bse_im = self._check_sizes(ebsd_im, bse_im)
+            result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+            if result is None:
+                return
+            elif result:
+                # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
+                dummy = np.ones(ebsd_im.shape)
+                rc, cc = self._get_corrected_centroid(dummy, align)
+                # Now crop the corrected image
+                rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, aligned.shape)
+                aligned = aligned[rslc, cslc]
+                bse_im = bse_im[rslc, cslc]
             # Save the image
             io.imsave(SAVE_PATH_EBSD, aligned)
-            d_read = io.imread(SAVE_PATH_EBSD)
-            print("Shape:", d_read.shape)
-            print(d_read.dtype, aligned.dtype, np.allclose(d_read, aligned))
 
             SAVE_PATH_BSE = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
             if SAVE_PATH_BSE != "":
@@ -713,7 +727,7 @@ class App(tk.Tk):
                     SAVE_PATH_BSE += extension
                 io.imsave(SAVE_PATH_BSE, bse_im)
             print("Correction complete!")
-    
+
     def _save_CP_img(self, name, im, pts, cmap, tc="red"):
         if im.ndim == 3 and im.shape[-1] == 3:
             print("RGB image")

@@ -9,93 +9,34 @@ import Inputs
 import core
 from scipy import interpolate
 
+def read_csv(path):
+    data = np.genfromtxt(path, delimiter=",", skip_header=5, dtype=int)[:, 1:]
+    return data
 
-# Only one slice
-# points = {"ebsd": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}, "bse": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}}
+folder = "C:/Users/lambj/Downloads/CoNi16-EDS/EDS/"
 
-# All slices
-# points = {"ebsd": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 1: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 2: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 3: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 4: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}, "bse": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 1: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 2: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 3: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 4: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}}
+al_paths = [f for f in os.listdir(folder) if "_al" in f]
+o_paths = [f for f in os.listdir(folder) if "_o" in f]
+fov_paths = [f for f in os.listdir(folder) if "_fov" in f]
+cps_paths = [f for f in os.listdir(folder) if "_cps" in f]
 
-# Top and bottom slices
-# points = {"ebsd": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 4: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}, "bse": {0: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], 4: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]}}
+al_paths.sort()
+o_paths.sort()
+fov_paths.sort()
+cps_paths.sort()
 
-# No top or bottom slices
-points_ebsd = np.loadtxt("/Users/jameslamb/Downloads/distorted_pts.txt", delimiter=" ")
-points_bse = np.loadtxt("/Users/jameslamb/Downloads/control_pts.txt", delimiter=" ")
-print(points_ebsd.shape, points_bse.shape)
-points = {"ebsd": {}, "bse": {}}
-for i in range(points_ebsd.shape[0]):
-    if points_ebsd[i, 0] not in list(points["ebsd"].keys()):
-        points["ebsd"][int(points_ebsd[i, 0])] = []
-    points["ebsd"][points_ebsd[i, 0]].append(points_ebsd[i, 1:])
-points["ebsd"] = {key: np.array(points["ebsd"][key]) for key in points["ebsd"].keys()}
+al_imgs = [read_csv(folder + f) for f in al_paths]
+o_imgs = [read_csv(folder + f) for f in o_paths]
+fov_imgs = [read_csv(folder + f) for f in fov_paths]
+cps_imgs = [read_csv(folder + f) for f in cps_paths]
 
-for i in range(points_bse.shape[0]):
-    if points_bse[i, 0] not in list(points["bse"].keys()):
-        points["bse"][int(points_bse[i, 0])] = []
-    points["bse"][points_bse[i, 0]].append(points_bse[i, 1:])
-points["bse"] = {key: np.array(points["bse"][key]) for key in points["bse"].keys()}
-
-dataset = np.random.randint(0, 100, (187, 380, 449))
-bse = np.random.randint(0, 100, (187, 1024, 1536))
-
-# Get slice numbers
-slice_numbers = list(points["ebsd"].keys())
-if len(slice_numbers) != len(list(points["bse"].keys())):
-    raise RuntimeError("Number of slices with reference points in control and distorted do not match")
-
-print("Number of slices with reference points: {}".format(len(slice_numbers)))
-# Get the solution for each set of control points
-solutions = {}
-for key in slice_numbers:
-    source = np.array(points["bse"][key])
-    distorted = np.array(points["ebsd"][key])
-    if source.shape != distorted.shape:
-        raise RuntimeError("Number of control points in control and distorted do not match for slice {}".format(key))
-    solutions[key] = np.random.randint(0, 100, (10, 10))
-solution_keys = np.array(list(solutions.keys()))
-print("Number of slices with solutions: {}".format(len(solution_keys)))
-# Three cases: 1) all slices have control points, 2) a few slices have control points 3) only one slice has control points
-# If 1, then just apply the solution to each slice
-# If 3, then apply the solution to the entire dataset
-# Versions of case 2: 1) Top and bottom slices are accounted for, 2) Top or bottom is accounted for, 3) Neither are accounted for
-# If 2.1, then interpolate solutions between pairs of slices that have control points
-# If 2.2, extend the lowest/highest solution to the top/bottom of the dataset, depending on which is missing
-# If 2.3, same as 2.2 but extend the highest solution to the top and the lowest solution to the bottom
-# Case 1
-if dataset.shape[0] == len(solution_keys):
-    # print("All slices have control points, applying solution to each slice.")
-    aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
-    for i in range(dataset.shape[0]):
-        print("aligning slice {}, unique solution".format(i))
-# Case 3
-elif len(slice_numbers) == 1:
-    # print("Only one slice has control points, applying solution to entire dataset.")
-    key = slice_numbers[0]
-    for i in range(dataset.shape[0]):
-        print("aligning slice {}, all slices are using the same solution".format(i))
-# Case 2
-else:
-    # Handle Case 2.2 and 2.3
-    if 0 not in solution_keys:
-        print("no slice 0 solution, extending lowest solution to the bottom of dataset")
-        solutions[0] = solutions[solution_keys[0]]
-        solution_keys = np.insert(solution_keys, 0, 0)
-    if dataset.shape[0] - 1 not in solution_keys:
-        print("no slice {} solution, extending highest solution to the top of dataset".format(dataset.shape[0] - 1))
-        solutions[len(slice_numbers) - 1] = solutions[solution_keys[-1]]
-        solution_keys = np.append(solution_keys, dataset.shape[0] - 1)
-    
-    print(solution_keys)
-    # Treat like it is Case 2.1 now
-    # print("Only a few slices have control points, interpolating solutions between slices.")
-    aligned_dataset = np.zeros(bse.shape, dtype=dataset.dtype)
-    for i in range(dataset.shape[0]):
-        if i in solution_keys:
-            print("aligning slice {}, slice has a unique solution".format(i))
-        else:
-            key_up = solution_keys[solution_keys > i][0]
-            key_down = solution_keys[solution_keys < i][-1]
-            sol_up = solutions[key_up]
-            sol_down = solutions[key_down]
-            print("aligning slice {}, interpolating between slices {} and {}".format(i, key_up, key_down))
+for i in range(len(al_imgs)):
+    eds_img = al_imgs[i] + o_imgs[i]
+    eds_img = np.around(eds_img / np.max(eds_img) * 255, 0).astype(np.uint8).T
+    io.imsave(folder + "Al2O3-EDS_" + str(i) + ".tif", eds_img)
+    fov_img = fov_imgs[i] / fov_imgs[i].max() + cps_imgs[i] / cps_imgs[i].max()
+    fov_img = np.around(fov_img / np.max(fov_img) * 255, 0).astype(np.uint8).T
+    io.imsave(folder + "FoV-EDS_" + str(i) + ".tif", fov_img)
+    img = np.dstack((al_imgs[i]/al_imgs[i].max(), o_imgs[i]/o_imgs[i].max(), cps_imgs[i]/cps_imgs[i].max()))
+    img = np.around(img / np.max(img) * 255, 0).astype(np.uint8).T
+    io.imsave(folder + "EDS_" + str(i) + ".tif", img)
