@@ -522,6 +522,9 @@ class App(tk.Tk):
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
+        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        if result is None:
+            return
         i = self.slice_num.get()
         # Get the bse and ebsd images
         im0 = self.bse_imgs[i, :, :]
@@ -536,10 +539,7 @@ class App(tk.Tk):
         im0 = self._check_sizes(ebsd_im, im0)
         im1 = self._check_sizes(ebsd_im, im1)
         # Make sure there are no axes that are larger than the EBSD data (if there is, crop that axis, making sure to keep everything centered)
-        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
-        if result is None:
-            return
-        elif result:
+        if result:
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
             dummy = np.ones(ebsd_im.shape)
             rc, cc = self._get_corrected_centroid(dummy, align)
@@ -557,6 +557,9 @@ class App(tk.Tk):
 
     def apply_3D(self, algo="LR"):
         """Applies the correction algorithm and calls the interactive view"""
+        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        if result is None:
+            return
         self.config(cursor="watch")
         points = self.points
         ebsd_stack = np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3)
@@ -573,10 +576,7 @@ class App(tk.Tk):
         bse_stack = self._check_sizes(ebsd_stack, bse_stack, ndims=3)
         ebsd_cStack = self._check_sizes(ebsd_stack, ebsd_cStack, ndims=3)
         # Handle cropping and centering
-        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
-        if result is None:
-            return
-        elif result:
+        if result:
             dummy = np.ones(ebsd_stack.shape)
             rc, cc = self._get_corrected_centroid(dummy, align, points)
             print("Centroid:", rc, cc)
@@ -690,6 +690,9 @@ class App(tk.Tk):
         if SAVE_PATH_EBSD != "":
             if "." not in SAVE_PATH_EBSD:
                 SAVE_PATH_EBSD += extension
+            result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+            if result is None:
+                return
             # Get the images
             ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
             # Align the image
@@ -707,10 +710,7 @@ class App(tk.Tk):
             # Correct shape
             aligned = self._check_sizes(ebsd_im, aligned)
             bse_im = self._check_sizes(ebsd_im, bse_im)
-            result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
-            if result is None:
-                return
-            elif result:
+            if result:
                 # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
                 dummy = np.ones(ebsd_im.shape)
                 rc, cc = self._get_corrected_centroid(dummy, align)
