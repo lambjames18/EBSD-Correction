@@ -10,10 +10,11 @@ import h5py
 import imageio
 from skimage import io
 from skimage import transform as tf
-
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
 from scipy import interpolate
+import torch
+from dole import dole_match
 
 
 class Alignment:
@@ -265,6 +266,20 @@ class Alignment:
         np.fill_diagonal(U, 0)  # should be redundant
         L[:K, :K] = U
         return L
+
+
+def do_dole(im0, im1):
+    im0 = torch.from_numpy(im0).float()
+    im1 = torch.from_numpy(im1).float()
+    imgs = torch.stack([im0, im1], dim=0).unsqueeze(1)
+    homography, (src_pts, dst_pts, mask, inliers, lafs) = dole_match(imgs)
+    homography = homography.squeeze(0).numpy()
+    src_pts = src_pts.squeeze(0).numpy()
+    dst_pts = dst_pts.squeeze(0).numpy()
+    mask = mask.squeeze(0).numpy()
+    inliers = inliers.squeeze(0).numpy()
+    lafs = lafs.squeeze(0).numpy()
+    return homography, src_pts, dst_pts, mask, inliers, lafs
 
 # Functions #
 def resize_imgs(bse_path, size):

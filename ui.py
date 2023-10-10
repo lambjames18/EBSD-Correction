@@ -25,7 +25,6 @@ import Inputs
 import InteractiveView as IV
 
 ### TODO: Fix cropping in output
-### TODO: Test 3D output
 class App(tk.Tk):
     def __init__(self, screenName=None, baseName=None):
         super().__init__(screenName, baseName)
@@ -78,6 +77,7 @@ class App(tk.Tk):
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
         applymenu.add_command(label="TPS 3D", command=lambda: self.apply_3D("TPS"))
+        applymenu.add_command(label="DoLE", command=self.automatic_apply)
         self.menu.add_cascade(label="View", menu=applymenu, state="disabled")
         self.config(menu=self.menu)
         # setup top
@@ -227,18 +227,18 @@ class App(tk.Tk):
 
     ### IO
     def easy_start(self):
-        # ebsd_points_path = ""
-        # bse_points_path = ""
-        # ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/Test.dream3d"
-        # bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE_images/*.tif"
-        ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
-        bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
-        ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
-        bse_path = "D:/Research/scripts/Alignment/CoNi67/se_images_aligned/*.tif"
+        ebsd_points_path = "" # /Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/distorted_pts.txt"
+        bse_points_path = "" # /Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/control_pts.txt"
+        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/EBSD.ang"
+        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
+        # ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
+        # bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
+        # ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
+        # bse_path = "D:/Research/scripts/Alignment/CoNi67/se_images_aligned/*.tif"
         ebsd_res = 2.5
         bse_res = 1.0
-        rescale = False
-        r180 = False
+        rescale = True
+        r180 = True
         flip = False
         crop = False
         e_d, b_d, e_pts, b_pts = self._run_in_background("Importing data...", Inputs.read_data, ebsd_path, bse_path, ebsd_points_path, bse_points_path)
@@ -519,6 +519,33 @@ class App(tk.Tk):
                 im2_temp[:, :, :im2.shape[2]] = im2
                 im2 = im2_temp
             return im2
+    
+    def automatic_apply(self):
+        i = self.slice_num.get()
+        if self.clahe_active:
+            im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.1)
+        else:
+            im0 = self.bse_imgs[int(self.slice_num.get())]
+        im1 = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
+        im0 = self._check_sizes(im1, im0)
+        im1_small = self._check_sizes(im1, im1)
+        im1 = np.zeros(im0.shape, dtype=im1.dtype)
+        im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small
+        homography, src_pts, dst_pts, mask, inliers, lafs = self._run_in_background("Calculating homography...", core.do_dole, im0, im1)
+        src_good = src_pts[mask]
+        dst_good = dst_pts[mask]
+        fig, ax = plt.subplots(1, 2)
+        ax[0].imshow(im0, cmap="gray")
+        ax[1].imshow(im1, cmap="gray")
+        colors = plt.cm.jet(np.linspace(0, 1, len(src_good)))
+        for i in range(len(src_good)):
+            ax[0].scatter(src_good[i, 0], src_good[i, 1], 10, color=colors[i], marker="o")
+            ax[1].scatter(dst_good[i, 0], dst_good[i, 1], 10, color=colors[i], marker="o")
+        plt.savefig("test.png")
+        plt.close("all")
+        im1 = transform.warp(im1, homography, output_shape=im0.shape)
+        IV.Interactive2D(im0, im1, "2D Homography Correction")
+
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
@@ -527,7 +554,10 @@ class App(tk.Tk):
             return
         i = self.slice_num.get()
         # Get the bse and ebsd images
-        im0 = self.bse_imgs[i, :, :]
+        if self.clahe_active:
+            im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
+        else:
+            im0 = self.bse_imgs[int(self.slice_num.get())]
         ebsd_im = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
         # Get the points and performa alignment
         referencePoints = np.array(self.points["bse"][i])

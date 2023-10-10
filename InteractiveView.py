@@ -219,8 +219,8 @@ def Interactive2D(im0, im1, title="Interactive View"):
     col_slider = Slider(
         ax=axcol,
         label="X pos",
-        valmin=max_c,
-        valmax=0,
+        valmin=0,
+        valmax=max_c,
         valinit=0,
         valstep=-1,
         orientation="horizontal",
@@ -248,6 +248,7 @@ def Interactive2D(im0, im1, title="Interactive View"):
 
 
 if __name__ == "__main__":
-    stack0 = np.random.rand(80, 100, 100)
-    stack1 = np.random.rand(80, 100, 100) * 10
-    Interactive3D(stack0, stack1)
+    from skimage import data, filters
+    im0 = data.camera()
+    im1 = filters.gaussian(im0, sigma=2)
+    Interactive2D(im0, im1)

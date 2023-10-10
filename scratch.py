@@ -13,6 +13,14 @@ def read_csv(path):
     data = np.genfromtxt(path, delimiter=",", skip_header=5, dtype=int)[:, 1:]
     return data
 
+data, _ = Inputs.read_ang("/Users/jameslamb/Documents/Research/scripts/Research_Analysis/hrebsd_data/ebsd_data.ang")
+data = np.rot90(np.clip(data["CI"][0], *np.percentile(data["CI"], (0.5, 99.5))), 1, (0, 1))
+data = np.around((data - np.min(data)) / (np.max(data) - np.min(data)) * 255, 0).astype(np.uint8)
+print(data.shape)
+io.imsave("/Users/jameslamb/Documents/Research/scripts/Research_Analysis/hrebsd_data/ebsd_data.tif", data)
+
+exit()
+
 folder = "C:/Users/lambj/Downloads/CoNi16-EDS/EDS/"
 
 al_paths = [f for f in os.listdir(folder) if "_al" in f]
