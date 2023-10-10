@@ -11,6 +11,9 @@ To download the code, either run `git clone git@github.com:lambjames18/EBSD-Corr
 
 `conda create -n align python numpy matplotlib h5py imageio scipy scikit-learn scikit-image tifffile`
 
+New command for automatic control point IDing:
+`conda create -n align python numpy matplotlib h5py imageio scipy scikit-learn scikit-image pytorch torchvision kornia -c pytorch -c conda-forge`
+
 For information about miniconda (the lightweight command line version of anaconda) see https://docs.conda.io/en/latest/miniconda.html. The environment (named "align" in the command above) will need to be activated in order to run the code. Alternatively, any python interpreter can be used as long as the following packages are installed on your computer:
 
 - `python >= 3.8`
