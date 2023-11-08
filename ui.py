@@ -227,18 +227,18 @@ class App(tk.Tk):
 
     ### IO
     def easy_start(self):
-        ebsd_points_path = "" # /Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/distorted_pts.txt"
-        bse_points_path = "" # /Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/control_pts.txt"
-        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/EBSD.ang"
-        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
+        ebsd_points_path = "/Users/jameslamb/Documents/Research/WCu/distorted_pts.txt"
+        bse_points_path = "/Users/jameslamb/Documents/Research/WCu/control_pts.txt"
+        ebsd_path = "/Users/jameslamb/Documents/Research/WCu/5842WCu.dream3d"
+        bse_path = "/Users/jameslamb/Documents/Research/WCu/BSE/*.tif"
         # ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
         # bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
         # ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
         # bse_path = "D:/Research/scripts/Alignment/CoNi67/se_images_aligned/*.tif"
-        ebsd_res = 2.5
-        bse_res = 1.0
-        rescale = True
-        r180 = True
+        ebsd_res = 1
+        bse_res = 1
+        rescale = False
+        r180 = False
         flip = False
         crop = False
         e_d, b_d, e_pts, b_pts = self._run_in_background("Importing data...", Inputs.read_data, ebsd_path, bse_path, ebsd_points_path, bse_points_path)
@@ -530,7 +530,7 @@ class App(tk.Tk):
         im0 = self._check_sizes(im1, im0)
         im1_small = self._check_sizes(im1, im1)
         im1 = np.zeros(im0.shape, dtype=im1.dtype)
-        im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small
+        im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small[:, :, 0]
         homography, src_pts, dst_pts, mask, inliers, lafs = self._run_in_background("Calculating homography...", core.do_dole, im0, im1)
         src_good = src_pts[mask]
         dst_good = dst_pts[mask]

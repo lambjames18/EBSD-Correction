@@ -21,36 +21,36 @@ class Interactive3D:
         self.create_figure()
         # Show images
         image = self._create_slice(0, 0, 0, 0)
-        self.im0_ax = self.ax.imshow(image, cmap="gray")
+        self.im0_ax = self.ax.imshow(image, cmap="gray", aspect="auto")
         # Put slider on
         self.create_widgets()
         # Enable update functions
         plt.show()
 
-    def get_limits(self, axis):
+    def get_limits(self, axis, shape):
+        self.max_r = shape[0]
+        self.max_c = shape[1]
         if axis == 0:
             self.max_s = self.stack0.shape[0] - 1
-            self.max_r = self.stack0.shape[1]
-            self.max_c = self.stack0.shape[2]
         elif axis == 1:
             self.max_s = self.stack0.shape[1] - 1
-            self.max_r = self.stack0.shape[0]
-            self.max_c = self.stack0.shape[2]
         elif axis == 2:
             self.max_s = self.stack0.shape[2] - 1
-            self.max_r = self.stack0.shape[0]
-            self.max_c = self.stack0.shape[1]
 
     def create_figure(self):
-        plt.clf()
+        try:
+            plt.close(self.fig)
+        except AttributeError:
+            pass
         width = self.max_c / self.max_r
         height = 1
-        self.fig = plt.figure(num=1, figsize=(10, 10 * height / width))
+        self.fig = plt.figure(num=1, figsize=(8, 8 * height / width), dpi=100)
         self.ax = self.fig.add_subplot(111)
         self.ax.set_title(self.title)
         self.ax.set_xticks([])
         self.ax.set_yticks([])
-        plt.subplots_adjust(left=0.1, bottom=0.1, right=0.8)
+        plt.tight_layout()
+        plt.subplots_adjust(left=0.08, bottom=0.08, right=0.80, top=0.92)
 
     def create_widgets(self, index=0):
         left = self.ax.get_position().x0
@@ -62,7 +62,7 @@ class Interactive3D:
         axcol = plt.axes([left, bot - 0.05, width, 0.05])
         axcol.set_ylabel("Y split point", fontsize=10)
         axslice = plt.axes([left + width + 0.05, bot, 0.05, height])
-        axradio = plt.axes([left + width + 0.12, bot + height / 2, 0.05, 0.1])
+        axradio = plt.axes([left + width + 0.11, bot + 0.1, 0.05, height/2])
         axradio.set_title("Plane", fontsize=10)
         self.row_slider = Slider(
             ax=axrow,
@@ -133,11 +133,6 @@ class Interactive3D:
         self.im0_ax.set_data(image)
         self.im0_ax.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
-        # val = int(np.around(val, 0))
-        # new_alphas = np.copy(self.alphas)
-        # new_alphas[:, :val] = 0
-        # self.im0_ax.set(alpha=new_alphas)
-        # self.fig.canvas.draw_idle()
 
     def change_image(self, val):
         val = int(np.around(val, 0))
@@ -157,12 +152,12 @@ class Interactive3D:
     def change_plane(self, index):
         # Handle input
         index = ["XY", "XZ", "YZ"].index(index)
+        image = self._create_slice(0, index, 0, 0)
         # Update limits
-        self.get_limits(index)
+        self.get_limits(index, image.shape)
         # Update figure
         self.create_figure()
         # Update image
-        image = self._create_slice(0, index, 0, 0)
         self.im0_ax = self.ax.imshow(image, cmap="gray")
         self.ax.set_title(f"{self.title} (Slice 0)")
         # Update widgets
@@ -179,6 +174,12 @@ class Interactive3D:
         elif axis == 2:
             im0 = self.stack0[:, :, slice_num]
             im1 = self.stack1[:, :, slice_num]
+        if im0.shape[0] < im0.shape[1] / 2:
+            im0 = np.repeat(im0, np.floor(im0.shape[1] / im0.shape[0]), axis=0)
+            im1 = np.repeat(im1, np.floor(im1.shape[1] / im1.shape[0]), axis=0)
+        elif im0.shape[1] < im0.shape[0] / 2:
+            im0 = np.repeat(im0, np.floor(im0.shape[0] / im0.shape[1]), axis=1)
+            im1 = np.repeat(im1, np.floor(im1.shape[0] / im1.shape[1]), axis=1)
         if split_axis == 0:
             split_num = im0.shape[0] - split_num
             image = np.vstack((im0[:split_num], im1[split_num:]))
@@ -249,6 +250,13 @@ def Interactive2D(im0, im1, title="Interactive View"):
 
 if __name__ == "__main__":
     from skimage import data, filters
-    im0 = data.camera()
+    im0 = data.human_mitosis()
+    print(im0.shape)
     im1 = filters.gaussian(im0, sigma=2)
-    Interactive2D(im0, im1)
+    # Interactive2D(im0, im1)
+
+    stack0 = np.stack([im0 for i in range(100)]) * (np.arange(100)/100 + 1)[:, None, None]
+    stack1 = filters.gaussian(stack0, sigma=4)
+    Interactive3D(stack0, stack1)
+
+
