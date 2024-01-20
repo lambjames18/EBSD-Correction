@@ -187,6 +187,8 @@ class DataInput(object):
             self.clean_exit = True
         else:
             print("Distorted and control data must be passed.")
+        if self.ebsd_path.endswith(".ang"):
+            self.ang = True
         self.cancel()
 
     def cancel(self):
@@ -482,18 +484,8 @@ def read_ang(path):
         
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    out["Phase"] = out["Phase index"].astype(np.int32)
-    out["XPos"] = out["x"].astype(float)
-    out["YPos"] = out["y"].astype(float)
-    out["IQ"] = out["IQ"].astype(float)
-    out["CI"] = out["CI"].astype(float)
-    for key in ["phi1", "PHI", "phi2", "Phase index", "PRIAS Bottom Strip", "PRIAS Top Strip", "PRIAS Center Square", "SEM", "Fit", "x", "y"]:
-        try:
-            del out[key]
-        except KeyError:
-            pass
     for key in out.keys():
-        if key != "EulerAngles":
+        if key not in ["EulerAngles"]:
             out[key] = np.fliplr(np.rot90(out[key], k=3))
         if len(out[key].shape) == 2:
             out[key] = out[key].T

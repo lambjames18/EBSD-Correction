@@ -12,6 +12,7 @@ import shutil
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import traceback
+from copy import deepcopy
 
 # 3rd party packages
 import h5py
@@ -227,20 +228,23 @@ class App(tk.Tk):
 
     ### IO
     def easy_start(self):
-        ebsd_points_path = "/Users/jameslamb/Documents/Research/WCu/distorted_pts.txt"
-        bse_points_path = "/Users/jameslamb/Documents/Research/WCu/control_pts.txt"
-        ebsd_path = "/Users/jameslamb/Documents/Research/WCu/5842WCu.dream3d"
-        bse_path = "/Users/jameslamb/Documents/Research/WCu/BSE/*.tif"
+        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/EBSD.ang"
+        ebsd_points_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/distorted_pts.txt"
+        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
+        bse_points_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/control_pts.txt"
         # ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
         # bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
         # ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
         # bse_path = "D:/Research/scripts/Alignment/CoNi67/se_images_aligned/*.tif"
-        ebsd_res = 1
-        bse_res = 1
-        rescale = False
+        ebsd_res = 2.5
+        bse_res = 1.0
+        rescale = True
         r180 = False
         flip = False
         crop = False
+        self.ang_path = ebsd_path
+        self.ebsd_res = ebsd_res
+        self.bse_res = bse_res
         e_d, b_d, e_pts, b_pts = self._run_in_background("Importing data...", Inputs.read_data, ebsd_path, bse_path, ebsd_points_path, bse_points_path)
         if e_pts is None:
             e_pts = {0: []}
@@ -275,6 +279,8 @@ class App(tk.Tk):
         self.w = Inputs.DataInput(self, mode)
         self.wait_window(self.w.w)
         if self.w.clean_exit:
+            if self.w.ang:
+                self.ang_path = self.w.ebsd_path
             ebsd_path, bse_path = self.w.ebsd_path, self.w.bse_path
             ebsd_points_path, bse_points_path = self.w.ebsd_points_path, self.w.bse_points_path
             ebsd_res, bse_res = self.w.ebsd_res, self.w.bse_res
@@ -715,42 +721,106 @@ class App(tk.Tk):
         else:
             bse_im = self.bse_imgs[int(self.slice_num.get())]
         # Create the output filename
-        extension = ".tif"
-        SAVE_PATH_EBSD = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save corrected (from distorted) image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
+        SAVE_PATH_EBSD = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save corrected (from distorted) image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("ANG", "*.ang"), ("All files", "*.*")], defaultextension=".tiff")
+        extension = os.path.splitext(SAVE_PATH_EBSD)[1]
         if SAVE_PATH_EBSD != "":
             if "." not in SAVE_PATH_EBSD:
-                SAVE_PATH_EBSD += extension
+                raise ValueError("No extension provided!")
             result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
             if result is None:
                 return
-            # Get the images
-            ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
-            # Align the image
-            align.get_solution(size=bse_im.shape)
-            if len(ebsd_im.shape) == 3:
-                aligned = []
-                for i in range(ebsd_im.shape[-1]):
-                    aligned.append(align.apply(ebsd_im[:, :, i], out="array"))
-                aligned = np.moveaxis(np.array(aligned), 0, -1)
+            if extension != ".ang":
+                # Get the images
+                ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
+                # Align the image
+                align.get_solution(size=bse_im.shape)
+                if len(ebsd_im.shape) == 3:
+                    aligned = []
+                    for i in range(ebsd_im.shape[-1]):
+                        aligned.append(align.apply(ebsd_im[:, :, i], out="array"))
+                    aligned = np.moveaxis(np.array(aligned), 0, -1)
+                else:
+                    aligned = align.apply(ebsd_im, out="array")
+                # Correct dtype
+                if aligned.dtype != ebsd_im.dtype:
+                    aligned = core.handle_dtype(aligned, ebsd_im.dtype)
+                # Correct shape
+                aligned = self._check_sizes(ebsd_im, aligned)
+                bse_im = self._check_sizes(ebsd_im, bse_im)
+                if result:
+                    # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
+                    dummy = np.ones(ebsd_im.shape)
+                    rc, cc = self._get_corrected_centroid(dummy, align)
+                    # Now crop the corrected image
+                    rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, aligned.shape)
+                    aligned = aligned[rslc, cslc]
+                    bse_im = bse_im[rslc, cslc]
+                # Save the image
+                io.imsave(SAVE_PATH_EBSD, aligned)
             else:
-                aligned = align.apply(ebsd_im, out="array")
-            # Correct dtype
-            if aligned.dtype != ebsd_im.dtype:
-                aligned = core.handle_dtype(aligned, ebsd_im.dtype)
-            # Correct shape
-            aligned = self._check_sizes(ebsd_im, aligned)
-            bse_im = self._check_sizes(ebsd_im, bse_im)
-            if result:
-                # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-                dummy = np.ones(ebsd_im.shape)
-                rc, cc = self._get_corrected_centroid(dummy, align)
-                # Now crop the corrected image
-                rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, aligned.shape)
-                aligned = aligned[rslc, cslc]
-                bse_im = bse_im[rslc, cslc]
-            # Save the image
-            io.imsave(SAVE_PATH_EBSD, aligned)
-
+                data = deepcopy(self.ebsd_data)
+                del data["EulerAngles"]
+                columns = list(data.keys())
+                data_stack = np.zeros((len(columns), *data["x"][0].shape))
+                print("EBSD entries:", columns)
+                print("EBSD grid size:", data_stack.shape)
+                for i, key in enumerate(columns):
+                    # Get the images
+                    ebsd_im = np.squeeze(data[key][int(self.slice_num.get())])
+                    # Align the image
+                    align.get_solution(size=bse_im.shape)
+                    if len(ebsd_im.shape) == 3:
+                        aligned = []
+                        for i in range(ebsd_im.shape[-1]):
+                            aligned.append(align.apply(ebsd_im[:, :, i], out="array"))
+                        aligned = np.moveaxis(np.array(aligned), 0, -1)
+                    else:
+                        aligned = align.apply(ebsd_im, out="array")
+                    # Correct dtype
+                    if aligned.dtype != ebsd_im.dtype:
+                        aligned = core.handle_dtype(aligned, ebsd_im.dtype)
+                    # Correct shape
+                    aligned = self._check_sizes(ebsd_im, aligned)
+                    bse_im = self._check_sizes(ebsd_im, bse_im)
+                    # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
+                    dummy = np.ones(ebsd_im.shape)
+                    rc, cc = self._get_corrected_centroid(dummy, align)
+                    # Now crop the corrected image
+                    rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, aligned.shape)
+                    aligned = aligned[rslc, cslc]
+                    data_stack[i] = aligned
+                d = data_stack.reshape(data_stack.shape[0], -1).T
+                x_index = columns.index("x")
+                y_index = columns.index("y")
+                y, x = np.indices(data["x"][0].shape)
+                x = x.ravel() * self.ebsd_res
+                y = y.ravel() * self.ebsd_res
+                d[:, x_index] = x
+                d[:, y_index] = y
+                # Get the header
+                with open(self.ang_path, "r") as f:
+                    header = []
+                    for line in f.readlines():
+                        if line.startswith("#"):
+                            header.append(line)
+                        else:
+                            break
+                header = "".join(header)
+                # Save the data
+                with open(SAVE_PATH_EBSD, "w") as f:
+                    f.write(header)
+                    for i in range(d.shape[0]):
+                        # e = f" {d[i,0]:.5f}  {d[i,1]:.5}  {d[i,2]:.5}"
+                        # pos = " "*(6-str(int(d[i,3]))) + f"{d[i,3]:.5f}" + " "*(6-str(int(d[i,4]))) + f"{d[i,4]:.5f}"
+                        # iq = " "*(6-str(int(d[i,5]))) + f"{d[i,5]:.1f}"
+                        # ci = " "*(3-str(int(d[i,6]))) + f"{d[i,6]:.3f}"
+                        # p = f"  {int(d[i,7]):.0f}"
+                        fmts = ["%.5f", "%.5f", "%.5f", "%.5f", "%.5f", "%.1f", "%.3f", "%.0f", "%.0f", "%.3f", "%.6f", "%.6f", "%.6f"]
+                        space = [3, 4, 4, 7, 7, 5, 3, 3, 7, 4, 3, 3, 3]
+                        line = [" "*(space[j]-len(str(int(d[i,j])))) + fmts[j] % (d[i,j]+0.0) for j in range(d.shape[1])]
+                        line = "".join(line)
+                        f.write(f" {line}\n")
+            # Save the control image (if desired)
             SAVE_PATH_BSE = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save control image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("All files", "*.*")], defaultextension=extension)
             if SAVE_PATH_BSE != "":
                 if "." not in SAVE_PATH_BSE:
