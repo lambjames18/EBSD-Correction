@@ -78,7 +78,8 @@ class App(tk.Tk):
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
         applymenu.add_command(label="TPS 3D", command=lambda: self.apply_3D("TPS"))
-        applymenu.add_command(label="DoLE", command=self.automatic_apply)
+        dole_state = {True: "normal", False: "disabled"}[core.TORCH_INSTALLED]
+        applymenu.add_command(label="DoLE", command=self.automatic_apply, state=dole_state)
         self.menu.add_cascade(label="View", menu=applymenu, state="disabled")
         self.config(menu=self.menu)
         # setup top
