@@ -776,9 +776,14 @@ class App(tk.Tk):
                         aligned = np.moveaxis(np.array(aligned), 0, -1)
                     else:
                         aligned = align.apply(ebsd_im, out="array")
+                    if key.lower() in ["phi1", "phi", "phi2"]:
+                        aligned[aligned == 0] = 4*float(np.pi)
+                    elif key.lower() == "ci":
+                        aligned[aligned == 0] = -1
+                    elif key.lower() == "fit":
+                        aligned[aligned == 0] = 180
                     # Correct dtype
-                    if aligned.dtype != ebsd_im.dtype:
-                        aligned = core.handle_dtype(aligned, ebsd_im.dtype)
+                    aligned = core.handle_dtype(np.around(aligned, 5), ebsd_im.dtype)
                     # Correct shape
                     aligned = self._check_sizes(ebsd_im, aligned)
                     bse_im = self._check_sizes(ebsd_im, bse_im)
@@ -810,13 +815,8 @@ class App(tk.Tk):
                 with open(SAVE_PATH_EBSD, "w") as f:
                     f.write(header)
                     for i in range(d.shape[0]):
-                        # e = f" {d[i,0]:.5f}  {d[i,1]:.5}  {d[i,2]:.5}"
-                        # pos = " "*(6-str(int(d[i,3]))) + f"{d[i,3]:.5f}" + " "*(6-str(int(d[i,4]))) + f"{d[i,4]:.5f}"
-                        # iq = " "*(6-str(int(d[i,5]))) + f"{d[i,5]:.1f}"
-                        # ci = " "*(3-str(int(d[i,6]))) + f"{d[i,6]:.3f}"
-                        # p = f"  {int(d[i,7]):.0f}"
                         fmts = ["%.5f", "%.5f", "%.5f", "%.5f", "%.5f", "%.1f", "%.3f", "%.0f", "%.0f", "%.3f", "%.6f", "%.6f", "%.6f"]
-                        space = [3, 4, 4, 7, 7, 5, 3, 3, 7, 4, 3, 3, 3]
+                        space = [3, 4, 4, 7, 7, 7, 3, 3, 7, 4, 7, 7, 7]
                         line = [" "*(space[j]-len(str(int(d[i,j])))) + fmts[j] % (d[i,j]+0.0) for j in range(d.shape[1])]
                         line = "".join(line)
                         f.write(f" {line}\n")

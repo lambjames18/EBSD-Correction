@@ -38,7 +38,7 @@ class Alignment:
         saveParams=False,
         saveSolution=False,
         solutionFile="TPS_mapping.npy",
-        verbose=True,
+        verbose=False,
     ):
         TPS_Params = "TPS_params.csv"
         # solutionFile = "TPS_mapping.npy"
@@ -314,6 +314,10 @@ def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=
     print("Saved the {} image to {}".format(view, fname))
 
 def handle_dtype(data, dtype):
+    if dtype == data.dtype:
+        return data
+    else:
+        data = data.astype(float)
     if dtype == np.uint8:
         data = np.around(255 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
     elif dtype == np.uint16:
