@@ -576,7 +576,7 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         ebsd_data = read_h5(ebsd_path)[0]
     elif ebsd_path.endswith(".dream3d"):
         ebsd_data = read_dream3d(ebsd_path)[0]
-    elif ebsd_path.endswith(".tif") or ebsd_path.endswith(".tiff"):
+    elif ebsd_path.endswith(".tif") or ebsd_path.endswith(".tiff") or ebsd_path.endswith(".png") or ebsd_path.endswith(".jpg"):
         ebsd_data = read_image(ebsd_path)
         ebsd_data = {"Intensity": ebsd_data}
     else:

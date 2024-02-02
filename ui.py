@@ -532,6 +532,7 @@ class App(tk.Tk):
         im1 = np.zeros(im0.shape, dtype=im1.dtype)
         im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small
         homography, src_pts, dst_pts, mask, inliers, lafs = self._run_in_background("Calculating homography...", core.do_dole, im0, im1)
+        print(src_pts.shape, dst_pts.shape, mask.shape)
         src_good = src_pts[mask]
         dst_good = dst_pts[mask]
         fig, ax = plt.subplots(1, 2)
@@ -539,8 +540,8 @@ class App(tk.Tk):
         ax[1].imshow(im1, cmap="gray")
         colors = plt.cm.jet(np.linspace(0, 1, len(src_good)))
         for i in range(len(src_good)):
-            ax[0].scatter(src_good[i, 0], src_good[i, 1], 10, color=colors[i], marker="o")
-            ax[1].scatter(dst_good[i, 0], dst_good[i, 1], 10, color=colors[i], marker="o")
+            ax[0].scatter(src_good[i, 1], src_good[i, 0], 10, color=colors[i], marker="o")
+            ax[1].scatter(dst_good[i, 1], dst_good[i, 0], 10, color=colors[i], marker="o")
         plt.savefig("test.png")
         plt.close("all")
         im1 = transform.warp(im1, homography, output_shape=im0.shape)
