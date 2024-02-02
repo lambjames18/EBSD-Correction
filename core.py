@@ -13,8 +13,15 @@ from skimage import transform as tf
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
 from scipy import interpolate
-import torch
-from dole import dole_match
+try:
+    import torch
+    from dole import dole_match
+    TORCH_INSTALLED = True
+    print("Using PyTorch for DOLE")
+except ImportError:
+    TORCH_INSTALLED = False
+    print("PyTorch not installed, DoLE will not be available.")
+
 
 
 class Alignment:
@@ -38,7 +45,7 @@ class Alignment:
         saveParams=False,
         saveSolution=False,
         solutionFile="TPS_mapping.npy",
-        verbose=True,
+        verbose=False,
     ):
         TPS_Params = "TPS_params.csv"
         # solutionFile = "TPS_mapping.npy"
@@ -314,6 +321,10 @@ def h5_to_img(h5_path, slice_id, fname, view="Confidence Index", axis=0, format=
     print("Saved the {} image to {}".format(view, fname))
 
 def handle_dtype(data, dtype):
+    if dtype == data.dtype:
+        return data
+    else:
+        data = data.astype(float)
     if dtype == np.uint8:
         data = np.around(255 * (data - np.min(data)) / (np.max(data) - np.min(data))).astype(dtype)
     elif dtype == np.uint16:
