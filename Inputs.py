@@ -544,7 +544,10 @@ def read_many_images(path, ext):
     return imgs
 
 def read_points(path):
-    points = np.loadtxt(path, delimiter=" ", dtype=int)
+    points = np.loadtxt(path, dtype=int)
+    if points.shape[1] != 3:
+        print("No z value found in the points file. Assuming all points are in the same slice.")
+        points = np.hstack((np.zeros((points.shape[0], 1)), points))
     if points.ndim == 1:
         points = points.reshape((1, -1))
     z, y, x = points[:, 0], points[:, 1], points[:, 2]
