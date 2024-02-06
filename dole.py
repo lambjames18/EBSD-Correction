@@ -400,10 +400,10 @@ def dole_match(images: torch.Tensor,
                mr_size: float = 6.0,
                n_intensity_bins: int = 20,
                mode: str = 'fft',
-               n_features: int = 5000,
+               n_features: int = 10000,
                model_type: str = 'homography',
-               match_thresh_ratio: float = 0.99,
-               match_thresh_sq_dist: float = 20
+               match_thresh_ratio: float = 0.995,
+               match_thresh_sq_dist: float = 40
                ):
     """
     DoLE matching algorithm
