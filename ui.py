@@ -34,7 +34,7 @@ def CLAHE(im, clip_limit=20.0, kernel_size=(8, 8)):
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
     tensor = equalize_clahe(tensor, clip_limit, kernel_size)
     tensor = torch.round(255 * (tensor - tensor.min()) / (tensor.max() - tensor.min()),
-                         decimals=0).as_type(torch.uint8)
+                         decimals=0)
     return np.squeeze(tensor.detach().numpy().astype(np.uint8)).reshape(im.shape)
 
 
@@ -138,7 +138,7 @@ class App(tk.Tk):
         # setup viewer_left
         l = ttk.Label(self.viewer_left, text="EBSD/Distorted image", anchor=tk.CENTER)
         l.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.4), height=int(screen_height*.6))
+        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.45), height=int(screen_height*.7))
         self.ebsd.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         if os.name == 'posix':
             self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
@@ -154,7 +154,7 @@ class App(tk.Tk):
         # setup viewer right
         l = ttk.Label(self.viewer_right, text="BSE/Control image", anchor=tk.CENTER)
         l.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.4), height=int(screen_height*.6))
+        self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.45), height=int(screen_height*.7))
         self.bse.grid(row=1, column=0, pady=5, padx=5, sticky="nsew")
         if os.name == 'posix':
             self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
