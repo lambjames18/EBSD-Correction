@@ -21,6 +21,7 @@ from skimage import io, exposure, transform
 import torch
 from torchvision.transforms.functional import resize as RESIZE
 from torchvision.transforms import InterpolationMode
+from kornia.enhance import equalize_clahe as CLAHE
 
 # Local files
 import core
@@ -535,7 +536,9 @@ class App(tk.Tk):
     def automatic_apply(self):
         i = int(self.slice_num.get())
         if self.clahe_active:
-            im0 = exposure.equalize_adapthist(self.bse_imgs[i], clip_limit=0.1)
+            # im0 = exposure.equalize_adapthist(self.bse_imgs[i], clip_limit=0.1)
+            _im0 = torch.tensor(im0).unsqueeze(0).unsqueeze(0).float()
+            im0 = np.squeeze(CLAHE(_im0).detach().numpy())
         else:
             im0 = self.bse_imgs[i]
         im1 = self.ebsd_data[self.ebsd_mode.get()][i]
@@ -564,7 +567,9 @@ class App(tk.Tk):
     def automatic_apply_full(self):
         i = int(self.slice_num.get())
         if self.clahe_active:
-            im0 = exposure.equalize_adapthist(self.bse_imgs[i], clip_limit=0.1)
+            # im0 = exposure.equalize_adapthist(self.bse_imgs[i], clip_limit=0.1)
+            _im0 = torch.tensor(im0).unsqueeze(0).unsqueeze(0).float()
+            im0 = np.squeeze(CLAHE(_im0).detach().numpy())
         else:
             im0 = self.bse_imgs[i]
         im1 = self.ebsd_data[self.ebsd_mode.get()][i]
@@ -603,10 +608,11 @@ class App(tk.Tk):
     def _apply(self, algo, crop_to_distorted_grid):
         i = self.slice_num.get()
         # Get the bse and ebsd images
+        im0 = self.bse_imgs[int(self.slice_num.get())]
         if self.clahe_active:
-            im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
-        else:
-            im0 = self.bse_imgs[int(self.slice_num.get())]
+            # im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
+            _im0 = torch.tensor(im0).unsqueeze(0).unsqueeze(0).float()
+            im0 = np.squeeze(CLAHE(_im0).detach().numpy())
         ebsd_im = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
         # Get the points and performa alignment
         referencePoints = np.array(self.points["bse"][i])
@@ -758,10 +764,11 @@ class App(tk.Tk):
         distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Get BSE
+        bse_im = self.bse_imgs[int(self.slice_num.get())]
         if self.clahe_active:
-            bse_im = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
-        else:
-            bse_im = self.bse_imgs[int(self.slice_num.get())]
+            # bse_im = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
+            _bse_im = torch.tensor(bse_im).unsqueeze(0).unsqueeze(0).float()
+            bse_im = np.squeeze(CLAHE(_bse_im).detach().numpy())
         # Create the output filename
         SAVE_PATH_EBSD = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save corrected (from distorted) image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("ANG", "*.ang"), ("All files", "*.*")], defaultextension=".tiff")
         extension = os.path.splitext(SAVE_PATH_EBSD)[1]
@@ -926,7 +933,10 @@ class App(tk.Tk):
         # print(f"Updating viewers for slice {i} and mode {key}")
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
-        if self.clahe_active: bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)
+        if self.clahe_active:
+            # bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)
+            _bse_im = torch.tensor(bse_im).unsqueeze(0).unsqueeze(0).float()
+            bse_im = np.squeeze(CLAHE(bse_im).detach().numpy())
         # Check if there are 3 dimensions in which the last one is not needed
         if len(ebsd_im.shape) == 3 and ebsd_im.shape[-1] == 1: ebsd_im = ebsd_im[:, :, 0]
         if len(bse_im.shape) == 3 and bse_im.shape[-1] == 1:   bse_im = bse_im[:, :, 0]
