@@ -132,16 +132,45 @@ class Alignment:
         affine = axs + ays
         affine[0, :, :] += a1[0]
         affine[1, :, :] += a1[1]
+        del xgd, ygd, x, y
 
         # bending portion
+        print("Calculating bending portion...")
         R = cdist(pixels, cps, "euclidean")  # are nx*ny pixels, cps = num reference pairs
+        del pixels
         Rsq = R * R
-        Rsq[R == 0] = 1  # avoid log(0) undefined, will correct itself as log(1) = 0, so U(0) = 0
-        U = Rsq * np.log(Rsq)
+        if Rsq.shape[0] <= 1e6:
+            print("Rsq is small enough to calculate in one go...")
+            Rsq = np.where(R == 0, 1, Rsq)
+            U = Rsq * np.log(Rsq)
+        else:
+            print("Rsq is too large, chunking...")
+            counted = 0
+            while counted < Rsq.shape[0]:
+                start = int(counted)
+                end = min(int(counted + 1e6), Rsq.shape[0])
+                Rsq[start:end] = np.where(R[start:end] == 0, 1, Rsq[start:end])
+                counted += 1e6
+                print("{} processed Rsq values...".format(counted), end="\r", flush=True)
+
+            del R
+            U = np.zeros_like(Rsq)
+            counted = 0
+            while counted < Rsq.shape[0]:
+                start = int(counted)
+                end = min(int(counted + 1e6), Rsq.shape[0])
+                U[start:end] = Rsq[start:end] * np.log(Rsq[start:end])
+                counted += 1e6
+                print("{} processed U values...".format(counted), end="\r", flush=True)
+            print("All Rsq values processed..." + " " * 20)
+        
         bend = np.einsum("ij,jk->ik", U, wi).T
+        del U
+        print("Bending portion calculated...")
         bend = np.reshape(bend, (2, ny, nx))
 
         # add together portions
+        print("Combining affine and bending portions...")
         if affineOnly:
             sol = affine
         else:

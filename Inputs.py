@@ -492,7 +492,27 @@ def read_ang(path):
         else:
             out[key] = out[key].transpose((1, 0, 2))
         out[key] = out[key].reshape((1,) + out[key].shape)
+    
+    # Get the grain file if it exists
+    dirname = os.path.dirname(path)
+    basename = os.path.splitext(os.path.basename(path))[0] + "_Grain.txt"
+    if os.path.exists(os.path.join(dirname, basename)):
+        grain_path = os.path.join(dirname, basename)
+        grain_data = read_grainFile(grain_path)
+        out["GrainIDs"] = grain_data.reshape((1,) + (nrows, ncols))
     return out, res
+
+def read_grainFile(path):
+    with open(path, "r") as f:
+        for line in f:
+            if line[0] == "#" and "Grain ID" in line:
+                column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
+                break
+    grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
+    f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
+    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(np.int32)
+    grainIDs[grainIDs <= 0] = 0
+    return grainIDs
 
 def read_h5(path):
     h5 = h5py.File(path, "r")

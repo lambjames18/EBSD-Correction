@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import io
@@ -7,11 +8,9 @@ def read_ang(path):
     """Reads an ang file into a numpy array"""
     num_header_lines = 0
     col_names = None
-    header = []
     with open(path, "r") as f:
         for line in f:
             if line[0] == "#":
-                header.append(line)
                 num_header_lines += 1
                 if "NCOLS_ODD" in line:
                     ncols = int(line.split(": ")[1].strip())
@@ -34,61 +33,46 @@ def read_ang(path):
         
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    out["Phase"] = out["Phase index"].astype(np.int32)
-    out["XPos"] = out["x"].astype(float)
-    out["YPos"] = out["y"].astype(float)
-    out["IQ"] = out["IQ"].astype(float)
-    out["CI"] = out["CI"].astype(float)
-    for key in ["phi1", "PHI", "phi2", "Phase index", "PRIAS Bottom Strip", "PRIAS Top Strip", "PRIAS Center Square", "SEM", "Fit", "x", "y"]:
-        try:
-            del out[key]
-        except KeyError:
-            pass
     for key in out.keys():
-        if key != "EulerAngles":
+        if key not in ["EulerAngles"]:
             out[key] = np.fliplr(np.rot90(out[key], k=3))
         if len(out[key].shape) == 2:
             out[key] = out[key].T
         else:
             out[key] = out[key].transpose((1, 0, 2))
-    out["header"] = header
-    return out
-
-def write_ang(data:dict):
-    header = data["header"]
-    ncols = data["IQ"].shape[1]
-    nrows = data["IQ"].shape[0]
-    n_keys = len([key for key in data.keys() if key != "header"])
-    arr = np.zeros((nrows * ncols, 8))
-    arr[:, 0] = data["EulerAngles"][:, :, 0].flatten()
-    arr[:, 1] = data["EulerAngles"][:, :, 1].flatten()
-    arr[:, 2] = data["EulerAngles"][:, :, 2].flatten()
-    arr[:, 3] = data["XPos"].flatten()
-    arr[:, 4] = data["YPos"].flatten()
-    arr[:, 5] = data["IQ"].flatten()
-    arr[:, 6] = data["CI"].flatten()
-    arr[:, 7] = data["Phase"].flatten()
-    data_out = []
-    for i in range(nrows * ncols):
-        data_out.append(f"  {arr[i, 0]:.5f}   {arr[i, 1]:.5f}   {arr[i, 2]:.5f}"
-                        + " "*(7-len(str(arr[i, 3]).split(".")[0])) + f"{arr[i, 3]:.5f}"
-                        + " "*(7-len(str(arr[i, 4]).split(".")[0])) + f"{arr[i, 4]:.5f}"
-                        + f"     {arr[i, 5]:.5f}  {arr[i, 6]:.5f}  {arr[i, 7]:.0f}")
-    data_out = "\n".join(data_out)
-    with open("D:/Research/CoNi67/Data/temp/1_new.ang", "w") as File:
-        File.write("".join(header) + data_out)
-
-iq = np.load("D:/Research/CoNi67/Data/3D/iq.npy")[0, :, :, 0]
-xc = np.load("D:/Research/CoNi67/Data/3D/xc.npy")[0, :, :, 0]
-ang = read_ang("D:/Research/CoNi67/Data/temp/1.ang")
-ang["IQ"] = iq.copy()
-ang["CI"] = xc.copy()
-write_ang(ang)
+        out[key] = out[key].reshape((1,) + out[key].shape)
+    
+    # Get the grain file if it exists
+    dirname = os.path.dirname(path)
+    basename = os.path.splitext(os.path.basename(path))[0] + "_Grain.txt"
+    if os.path.exists(os.path.join(dirname, basename)):
+        grain_path = os.path.join(dirname, basename)
+        grain_data = read_grainFile(grain_path)
+        out["GrainIDs"] = grain_data.reshape((1,) + (nrows, ncols))
+    return out, res
 
 
-ang = read_ang("D:/Research/CoNi67/Data/temp/1_new.ang")
-iq = ang["IQ"]
-xc = ang["CI"]
-# Save CI and IQ as tif images using float32
-io.imsave("D:/Research/CoNi67/Data/temp/CI.tif", xc.astype(np.float32))
-io.imsave("D:/Research/CoNi67/Data/temp/IQ.tif", iq.astype(np.float32))
+def read_grainFile(path):
+    with open(path, "r") as f:
+        for line in f:
+            if line[0] == "#" and "Grain ID" in line:
+                column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
+                break
+
+    grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
+    f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
+    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(np.uint32)
+    grainIDs[grainIDs <= 0] = 0
+    return grainIDs
+
+
+
+path = "C:\\Users\\PollockGroup\\Desktop\\Leah to James\\Stitch\\C-103_50um_DIC\\Corrected\\crop20000\\EBSD-Corrected\\James Use This\\map20231022124105186_Spherical_cleaned_cropped-20000-DIC.ang"
+
+data, _ = read_ang(path)
+
+print(data.keys())
+fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
+ax[0].imshow(data["IQ"][0], cmap="gray")
+ax[1].imshow(data["GrainIDs"][0], cmap="viridis")
+plt.show()
