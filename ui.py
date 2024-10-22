@@ -38,25 +38,23 @@ def CLAHE(im, clip_limit=20.0, kernel_size=(8, 8)):
     return np.squeeze(tensor.detach().numpy().astype(np.uint8)).reshape(im.shape)
 
 
-### TODO: Fix cropping in output
 class App(tk.Tk):
     def __init__(self, screenName=None, baseName=None):
         super().__init__(screenName, baseName)
         self._style_call("dark")
-        # handle main folder
+        #
+        # Starting stuff
         self.update_idletasks()
         self.withdraw()
         self.folder = os.getcwd()
         self.deiconify()
         self.title("Distortion Correction")
-        # Get the screen width and height
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
-        # frames
-        # frame_w = 1920
-        # frame_h = 1080
-        # self.geometry(f"{frame_w}x{frame_h}")
+        self.geometry(f"{int(screen_width*2/3)}x{int(screen_height*2/3)}")
         self.resizable(False, False)
+        #
+        # Frames
         self.columnconfigure((0, 2), weight=5)
         self.columnconfigure(1, weight=1)
         self.rowconfigure((0, 4), weight=5)
@@ -93,11 +91,9 @@ class App(tk.Tk):
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
         applymenu.add_command(label="TPS 3D", command=lambda: self.apply_3D("TPS"))
-        dole_state = {True: "normal", False: "disabled"}[core.TORCH_INSTALLED]
-        applymenu.add_command(label="DoLE Full", command=self.automatic_apply_full, state=dole_state)
-        applymenu.add_command(label="DoLE Points Only", command=self.automatic_apply, state=dole_state)
         self.menu.add_cascade(label="View", menu=applymenu, state="disabled")
         self.config(menu=self.menu)
+        #
         # setup top
         self.show_points = tk.IntVar()
         self.show_points.set(1)
@@ -140,16 +136,21 @@ class App(tk.Tk):
         l.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.45), height=int(screen_height*.7))
         self.ebsd.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
-        if os.name == 'posix':
-            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
-        else:
-            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
-        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
         self.ebsd_hscroll = ttk.Scrollbar(self.viewer_left, orient=tk.HORIZONTAL, command=self.ebsd.xview, cursor="sb_h_double_arrow")
         self.ebsd_hscroll.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         self.ebsd_vscroll = ttk.Scrollbar(self.viewer_left, orient=tk.VERTICAL, command=self.ebsd.yview, cursor="sb_v_double_arrow")
         self.ebsd_vscroll.grid(row=1, column=1, sticky="ns", padx=5, pady=5)
         self.ebsd.config(xscrollcommand=self.ebsd_hscroll.set, yscrollcommand=self.ebsd_vscroll.set)
+        if os.name == 'posix':
+            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
+            self.ebsd.bind_all('<MouseWheel>', lambda event: self.ebsd.yview_scroll(int(-1*(event.delta)), "units"))
+            self.ebsd.bind_all('<Shift-MouseWheel>', lambda event: self.ebsd.xview_scroll(int(-1*(event.delta)), "units"))
+            self.ebsd.bind_all('<Control-MouseWheel>', lambda event: self., "units"))
+        else:
+            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
+            self.ebsd.bind_all("<MouseWheel>", lambda event: self.ebsd.yview_scroll(int(-1*(event.delta/120)), "units"))
+            self.ebsd.bind_all("<Shift-MouseWheel>", lambda event: self.ebsd.xview_scroll(int(-1*(event.delta/120)), "units"))
+        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
         #
         # setup viewer right
         l = ttk.Label(self.viewer_right, text="BSE/Control image", anchor=tk.CENTER)
@@ -224,11 +225,6 @@ class App(tk.Tk):
         ### Additional things added
         self.points = {"ebsd": {}, "bse": {}}
         self.points_path = {"ebsd": "", "bse": ""}
-
-    # def report_callback_exception(self, exc, val, tb):
-    #     message = "Error Encountered:\n\n"
-    #     message += "".join(traceback.format_exception(exc, val, tb))
-    #     messagebox.showerror("Error", message=val)
     
     def _thread_function(self, function, *args):
         output = function(*args)
@@ -242,6 +238,17 @@ class App(tk.Tk):
         output = thread_obj.apply_async(self._thread_function, (function, *args))
         self.wait_window(self.w)
         return output.get()
+
+    def change_zoom_event(self, event, name):
+        change = np.sign(event.delta if os.name == 'posix' else event.delta/120)
+        if name == "bse":
+            index = self.resize_options.index(self.resize_var_bse.get())
+            index = max(0, min(len(self.resize_options) - 1, index + change))
+            self.resize_var_bse.set(self.resize_options[index])
+        elif name == "ebsd":
+            index = self.resize_options.index(self.resize_var_ebsd.get())
+            index = max(0, min(len(self.resize_options) - 1, index + change))
+            self.resize_var_ebsd.set(self.resize_options[index])
 
     ### IO
     def easy_start(self):
@@ -543,64 +550,6 @@ class App(tk.Tk):
                 im2 = im2_temp
             return im2
     
-    def automatic_apply(self):
-        i = int(self.slice_num.get())
-        if self.clahe_active:
-            # im0 = exposure.equalize_adapthist(self.bse_imgs[i], clip_limit=0.1)
-            im0 = CLAHE(im0)
-        else:
-            im0 = self.bse_imgs[i]
-        im1 = self.ebsd_data[self.ebsd_mode.get()][i]
-        im0 = self._check_sizes(im1, im0)
-        im1_small = self._check_sizes(im1, im1)
-        im1 = np.zeros(im0.shape, dtype=im1.dtype)
-        im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small
-        homography, src_pts, dst_pts, mask, inliers, lafs = self._run_in_background("Calculating homography...", core.do_dole, im0, im1)
-        src_good = src_pts[mask]
-        dst_good = dst_pts[mask]
-        fig, ax = plt.subplots(1, 2)
-        ax[0].imshow(im0, cmap="gray")
-        ax[1].imshow(im1, cmap="gray")
-        colors = plt.cm.jet(np.linspace(0, 1, len(src_good)))
-        for i in range(len(src_good)):
-            ax[0].scatter(src_good[i, 0], src_good[i, 1], 10, color=colors[i], marker="o")
-            ax[1].scatter(dst_good[i, 0], dst_good[i, 1], 10, color=colors[i], marker="o")
-        plt.savefig("test.png")
-        plt.close("all")
-        self.points["bse"][i] = dst_good
-        self.points["ebsd"][i] = src_good
-        self.ebsd.delete("all")
-        self.bse.delete("all")
-        self._update_viewers()
-
-    def automatic_apply_full(self):
-        i = int(self.slice_num.get())
-        if self.clahe_active:
-            # im0 = exposure.equalize_adapthist(self.bse_imgs[i], clip_limit=0.1)
-            im0 = CLAHE(im0)
-        else:
-            im0 = self.bse_imgs[i]
-        im1 = self.ebsd_data[self.ebsd_mode.get()][i]
-        im0 = self._check_sizes(im1, im0)
-        im1_small = self._check_sizes(im1, im1)
-        im1 = np.zeros(im0.shape, dtype=im1.dtype)
-        im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small
-        homography, src_pts, dst_pts, mask, inliers, lafs = self._run_in_background("Calculating homography...", core.do_dole, im0, im1)
-        print(src_pts.shape, dst_pts.shape, mask.shape)
-        src_good = src_pts[mask]
-        dst_good = dst_pts[mask]
-        fig, ax = plt.subplots(1, 2)
-        ax[0].imshow(im0, cmap="gray")
-        ax[1].imshow(im1, cmap="gray")
-        colors = plt.cm.jet(np.linspace(0, 1, len(src_good)))
-        for i in range(len(src_good)):
-            ax[0].scatter(src_good[i, 1], src_good[i, 0], 10, color=colors[i], marker="o")
-            ax[1].scatter(dst_good[i, 1], dst_good[i, 0], 10, color=colors[i], marker="o")
-        plt.savefig("test.png")
-        plt.close("all")
-        im1 = transform.warp(im1, homography, output_shape=im0.shape)
-        IV.Interactive2D(im0, im1, "2D Homography Correction")
-
 
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
