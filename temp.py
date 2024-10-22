@@ -55,20 +55,25 @@ def read_ang(path):
 def read_grainFile(path):
     with open(path, "r") as f:
         for line in f:
-            if line[0] == "#" and "Grain ID" in line:
+            if line[0] != "#":
+                break
+            if "Grain ID" in line:
                 column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
                 break
-
     grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
     f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
-    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(np.uint32)
+    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(int)
     grainIDs[grainIDs <= 0] = 0
+    # Randomize grain IDs
+    # unique_grainIDs = np.unique(grainIDs)
+    # unique_grainIDs[1:] = np.random.permutation(unique_grainIDs[1:])
+    # for i, gid in enumerate(unique_grainIDs):
+    #     grainIDs[grainIDs == gid] = i
     return grainIDs
 
 
 
-path = "C:\\Users\\PollockGroup\\Desktop\\Leah to James\\Stitch\\C-103_50um_DIC\\Corrected\\crop20000\\EBSD-Corrected\\James Use This\\map20231022124105186_Spherical_cleaned_cropped-20000-DIC.ang"
-
+path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
 data, _ = read_ang(path)
 
 print(data.keys())

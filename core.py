@@ -12,15 +12,7 @@ from skimage import io
 from skimage import transform as tf
 import numpy.linalg as nl
 from scipy.spatial.distance import cdist
-from scipy import interpolate
-try:
-    import torch
-    from dole import dole_match
-    TORCH_INSTALLED = True
-    print("Using PyTorch for DOLE")
-except ImportError:
-    TORCH_INSTALLED = False
-    print("PyTorch not installed, DoLE will not be available.")
+import torch
 
 
 

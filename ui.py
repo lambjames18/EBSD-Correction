@@ -6,6 +6,7 @@ UI for running distortion correction
 
 # Python packages
 import os
+from pathlib import Path
 # from threading import Thread
 from multiprocessing.pool import ThreadPool
 import shutil
@@ -51,7 +52,7 @@ class App(tk.Tk):
         self.title("Distortion Correction")
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
-        self.geometry(f"{int(screen_width*2/3)}x{int(screen_height*2/3)}")
+        # self.geometry(f"{int(screen_width*2/3)}x{int(screen_height*2/3)}")
         self.resizable(False, False)
         #
         # Frames
@@ -141,32 +142,41 @@ class App(tk.Tk):
         self.ebsd_vscroll = ttk.Scrollbar(self.viewer_left, orient=tk.VERTICAL, command=self.ebsd.yview, cursor="sb_v_double_arrow")
         self.ebsd_vscroll.grid(row=1, column=1, sticky="ns", padx=5, pady=5)
         self.ebsd.config(xscrollcommand=self.ebsd_hscroll.set, yscrollcommand=self.ebsd_vscroll.set)
-        if os.name == 'posix':
-            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
-            self.ebsd.bind_all('<MouseWheel>', lambda event: self.ebsd.yview_scroll(int(-1*(event.delta)), "units"))
-            self.ebsd.bind_all('<Shift-MouseWheel>', lambda event: self.ebsd.xview_scroll(int(-1*(event.delta)), "units"))
-            self.ebsd.bind_all('<Control-MouseWheel>', lambda event: self., "units"))
-        else:
-            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
-            self.ebsd.bind_all("<MouseWheel>", lambda event: self.ebsd.yview_scroll(int(-1*(event.delta/120)), "units"))
-            self.ebsd.bind_all("<Shift-MouseWheel>", lambda event: self.ebsd.xview_scroll(int(-1*(event.delta/120)), "units"))
-        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
         #
         # setup viewer right
         l = ttk.Label(self.viewer_right, text="BSE/Control image", anchor=tk.CENTER)
         l.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.45), height=int(screen_height*.7))
         self.bse.grid(row=1, column=0, pady=5, padx=5, sticky="nsew")
-        if os.name == 'posix':
-            self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
-        else:
-            self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
-        self.bse.bind("<ButtonPress-1>", lambda arg: self.add_coords("bse", arg))
         self.bse_hscroll = ttk.Scrollbar(self.viewer_right, orient=tk.HORIZONTAL, command=self.bse.xview, cursor="sb_h_double_arrow")
         self.bse_hscroll.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         self.bse_vscroll = ttk.Scrollbar(self.viewer_right, orient=tk.VERTICAL, command=self.bse.yview, cursor="sb_v_double_arrow")
         self.bse_vscroll.grid(row=1, column=1, sticky="ns", padx=5, pady=5)
         self.bse.config(xscrollcommand=self.bse_hscroll.set, yscrollcommand=self.bse_vscroll.set)
+        #
+        # Bindings on viewers
+        if os.name == 'posix':
+            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
+            self.ebsd.bind('<MouseWheel>', lambda event: self.ebsd.yview_scroll(int(-1*(event.delta)), "units"))
+            self.ebsd.bind('<Shift-MouseWheel>', lambda event: self.ebsd.xview_scroll(int(-1*(event.delta)), "units"))
+            self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
+            self.bse.bind('<MouseWheel>', lambda event: self.bse.yview_scroll(int(-1*(event.delta)), "units"))
+            self.bse.bind('<Shift-MouseWheel>', lambda event: self.bse.xview_scroll(int(-1*(event.delta)), "units"))
+        else:
+            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
+            self.ebsd.bind("<MouseWheel>", lambda event: self.ebsd.yview_scroll(int(-1*(event.delta/120)), "units"))
+            self.ebsd.bind("<Shift-MouseWheel>", lambda event: self.ebsd.xview_scroll(int(-1*(event.delta/120)), "units"))
+            self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
+            self.bse.bind("<MouseWheel>", lambda event: self.bse.yview_scroll(int(-1*(event.delta/120)), "units"))
+            self.bse.bind("<Shift-MouseWheel>", lambda event: self.bse.xview_scroll(int(-1*(event.delta/120)), "units"))
+        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
+        self.bse.bind("<ButtonPress-1>", lambda arg: self.add_coords("bse", arg))
+        self.bind('<Control-equal>', lambda event: self.change_zoom_event(+1), "units")
+        self.bind('<Control-minus>', lambda event: self.change_zoom_event(-1), "units")
+        # self.ebsd.bind('<Control-equal>', lambda event: self.change_zoom_event(+1, "ebsd"), "units")
+        # self.ebsd.bind('<Control-minus>', lambda event: self.change_zoom_event(-1, "ebsd"), "units")
+        # self.bse.bind('<Control-equal>', lambda event: self.change_zoom_event(+1, "bse"), "units")
+        # self.bse.bind('<Control-minus>', lambda event: self.change_zoom_event(-1, "bse"), "units")
         #
         # setup bottom left
         self.clear_ebsd_points = ttk.Button(self.bot_left, text="Clear points", command=lambda: self.clear_points("ebsd"), state="disabled")
@@ -239,23 +249,21 @@ class App(tk.Tk):
         self.wait_window(self.w)
         return output.get()
 
-    def change_zoom_event(self, event, name):
-        change = np.sign(event.delta if os.name == 'posix' else event.delta/120)
-        if name == "bse":
-            index = self.resize_options.index(self.resize_var_bse.get())
-            index = max(0, min(len(self.resize_options) - 1, index + change))
-            self.resize_var_bse.set(self.resize_options[index])
-        elif name == "ebsd":
-            index = self.resize_options.index(self.resize_var_ebsd.get())
-            index = max(0, min(len(self.resize_options) - 1, index + change))
-            self.resize_var_ebsd.set(self.resize_options[index])
+    def change_zoom_event(self, change):
+        print("Changing zoom !", change)
+        index = self.resize_options.index(int(self.resize_var_bse.get()))
+        index = max(0, min(len(self.resize_options) - 1, index + change))
+        self.resize_var_bse.set(self.resize_options[index])
+        index = self.resize_options.index(int(self.resize_var_ebsd.get()))
+        index = max(0, min(len(self.resize_options) - 1, index + change))
+        self.resize_var_ebsd.set(self.resize_options[index])
 
     ### IO
     def easy_start(self):
-        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/EBSD.ang"
-        ebsd_points_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/distorted_pts.txt"
-        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
-        bse_points_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/control_pts.txt"
+        ebsd_path = "./test_data/EBSD.ang"
+        ebsd_points_path = "./test_data/distorted_pts.txt"
+        bse_path = "./test_data/BSE.tif"
+        bse_points_path = "./test_data/control_pts.txt"
         # ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
         # bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
         # ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
@@ -343,7 +351,6 @@ class App(tk.Tk):
             else:
                 return
         
-
     def _handle_input(self, ebsd_path, bse_path, e_d, b_d, ebsd_points_path, bse_points_path, e_pts, b_pts, ebsd_res, bse_res):
         # Set the data
         self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
@@ -550,7 +557,6 @@ class App(tk.Tk):
                 im2 = im2_temp
             return im2
     
-
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
         result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the corrected output to match the distorted grid?")
