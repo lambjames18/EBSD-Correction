@@ -286,6 +286,7 @@ class App(tk.Tk):
             ebsd_points_path, bse_points_path = self.w.ebsd_points_path, self.w.bse_points_path
             ebsd_res, bse_res = self.w.ebsd_res, self.w.bse_res
             e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+            # e_d, b_d, e_pts, b_pts = self._run_in_background("Importing data...", Inputs.read_data, ebsd_path, bse_path, ebsd_points_path, bse_points_path)
             self.w = Inputs.DataSummary(self, e_d, b_d, e_pts, b_pts, ebsd_res, bse_res)
             self.wait_window(self.w.w)
             if self.w.clean_exit:
@@ -305,7 +306,7 @@ class App(tk.Tk):
                 # Flip or rotate 180 if desired
                 if self.w.flip:
                     b_d = np.flip(b_d, axis=1).copy(order='C')
-                elif self.w.r180:
+                if self.w.r180:
                     b_d = np.rot90(b_d, 2, axes=(1,2)).copy(order='C')
                 # Crop if desired
                 if self.w.crop:
@@ -595,8 +596,8 @@ class App(tk.Tk):
 
     def apply_3D(self, algo="LR"):
         """Applies the correction algorithm and calls the interactive view"""
-        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
-        if result is None:
+        crop_to_dist_grid = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        if crop_to_dist_grid is None:
             return
         self.config(cursor="watch")
         points = self.points
@@ -614,7 +615,7 @@ class App(tk.Tk):
         bse_stack = self._check_sizes(ebsd_stack, bse_stack, ndims=3)
         ebsd_cStack = self._check_sizes(ebsd_stack, ebsd_cStack, ndims=3)
         # Handle cropping and centering
-        if result:
+        if crop_to_dist_grid:
             dummy = np.ones(ebsd_stack.shape)
             rc, cc = self._get_corrected_centroid(dummy, align, points)
             print("Centroid:", rc, cc)
@@ -678,8 +679,6 @@ class App(tk.Tk):
         # Get cropping and centering stuff
         dummy = np.ones(h5[cell_path][keys[0]].shape[:3])
         rc, cc = self._get_corrected_centroid(dummy, align, points)
-        rslc, cslc = self._get_cropping_slice((rc, cc), dummy.shape[1:3], self.bse_imgs.shape[1:3])
-        print(rslc, cslc, dummy[:, rslc, cslc].shape, self.bse_imgs[:, rslc, cslc].shape)
         print(f"Success! Applying to volume ({len(keys)} modes)")
         for key in keys:
             # Get stack of one mode and determine characteristics
@@ -692,7 +691,11 @@ class App(tk.Tk):
             for i in range(ebsd_stack.shape[-1]):
                 # Isolate one dimension and correct
                 stack = np.copy(ebsd_stack[:, :, :, i])
+                # Apply, check sizes, crop/center, correct dtype, store
                 c_stack = align.TPS_apply_3D(points, stack, self.bse_imgs)
+                c_stack = self._check_sizes(stack, c_stack, ndims=3)
+                rslc, cslc = self._get_cropping_slice((rc, cc), stack.shape[1:], c_stack.shape[1:])
+                c_stack = c_stack[:, rslc, cslc]
                 if dtype == np.uint8:
                     c_stack = np.around(255 * c_stack / c_stack.max(), 0).astype(np.uint8)
                 elif dtype == np.uint16:
@@ -705,7 +708,7 @@ class App(tk.Tk):
                     c_stack = c_stack.astype(dtype)
                 
                 # Fill original stack
-                ebsd_stack[:, :, :, i] = c_stack[:, rslc, cslc]
+                ebsd_stack[:, :, :, i] = c_stack
             # Write new stack to the h5
             h5[cell_path][key][...] = ebsd_stack
         h5.close()
@@ -947,7 +950,7 @@ class App(tk.Tk):
             self.hl = "#007fff"
             self.tk.call('source', r"./theme/dark.tcl")
             s = ttk.Style(self)
-            s.theme_use("azure-dark")
+            # s.theme_use("azure-dark")
             s.configure("TFrame", background=self.bg)
             s.configure("TLabel", background=self.bg, foreground=self.fg)
             s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
@@ -959,7 +962,7 @@ class App(tk.Tk):
             self.hl = "#007fff"
             self.tk.call('source', r"./theme/light.tcl")
             s = ttk.Style(self)
-            s.theme_use("azure-light")
+            # s.theme_use("azure-light")
             s.configure("TFrame", background=self.bg)
             s.configure("TLabel", background=self.bg, foreground=self.fg)
             s.configure("TCheckbutton", background=self.bg, foreground=self.fg)

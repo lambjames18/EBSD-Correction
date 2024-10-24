@@ -189,6 +189,8 @@ class DataInput(object):
             print("Distorted and control data must be passed.")
         if self.ebsd_path.endswith(".ang"):
             self.ang = True
+        else:
+            self.ang = False
         self.cancel()
 
     def cancel(self):
@@ -563,23 +565,29 @@ def read_image(path):
 ##########
 def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
     if ebsd_path.endswith(".ang"):
+        print("Reading ang file")
         ebsd_data = read_ang(ebsd_path)[0]
     elif ebsd_path.endswith(".h5"):
+        print("Reading h5 file")
         ebsd_data = read_h5(ebsd_path)[0]
     elif ebsd_path.endswith(".dream3d"):
+        print("Reading dream3d file")
         ebsd_data = read_dream3d(ebsd_path)[0]
     elif ebsd_path.endswith(".tif") or ebsd_path.endswith(".tiff") or ebsd_path.endswith(".png") or ebsd_path.endswith(".jpg"):
+        print("Reading image file")
         ebsd_data = read_image(ebsd_path)
         ebsd_data = {"Intensity": ebsd_data}
     else:
         raise ValueError(f"Unknown file type: {ebsd_path}")
     if "*" in bse_path:
+        print("Reading multiple BSE images")
         ext = os.path.splitext(bse_path)[1]
         folder = os.path.dirname(bse_path)
         bse_data = read_many_images(folder, ext)
         if bse_data.shape[0] != ebsd_data[list(ebsd_data.keys())[0]].shape[0]:
-            raise ValueError("The number of BSE images does not match the number of EBSD images.")
+            raise ValueError(f"The number of BSE images does not match the number of EBSD images. EBSD: {ebsd_data[list(ebsd_data.keys())[0]].shape[0]} BSE: {bse_data.shape[0]}")
     else:
+        print("Reading BSE image")
         bse_data = read_image(bse_path)
     if ebsd_points_path == "":
         ebsd_points = None
