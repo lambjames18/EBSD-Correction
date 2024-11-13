@@ -14,6 +14,7 @@ from PIL import Image, ImageTk
 
 class DataInput(object):
     def __init__(self, parent, mode="3D"):
+        # Variables
         self.parent = parent
         self.mode = mode
         self.ebsd_path = ""
@@ -22,6 +23,9 @@ class DataInput(object):
         self.bse_points_path = ""
         self.directory = os.getcwd()
         self.clean_exit = False
+        self.ang = False
+
+        # Create the toplevel
         self.w = tk.Toplevel(parent)
         self.w.attributes("-topmost", True)
         self.w.title(f"Open {self.mode} Data")
@@ -189,6 +193,8 @@ class DataInput(object):
             print("Distorted and control data must be passed.")
         if self.ebsd_path.endswith(".ang"):
             self.ang = True
+        else:
+            self.ang = False
         self.cancel()
 
     def cancel(self):
