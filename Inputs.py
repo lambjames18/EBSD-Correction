@@ -501,9 +501,11 @@ def read_ang(path):
     
     # Get the grain file if it exists
     dirname = os.path.dirname(path)
-    basename = os.path.splitext(os.path.basename(path))[0] + "_Grain.txt"
-    if os.path.exists(os.path.join(dirname, basename)):
-        grain_path = os.path.join(dirname, basename)
+    basenames = [os.path.splitext(os.path.basename(path))[0] + "_Grain.txt",
+                 os.path.splitext(os.path.basename(path))[0] + "_grain.txt"]
+    grain_file_exists = [os.path.exists(os.path.join(dirname, basename)) for basename in basenames]
+    if any(grain_file_exists):
+        grain_path = os.path.join(dirname, basenames[grain_file_exists.index(True)])
         grain_data = read_grainFile(grain_path)
         out["GrainIDs"] = grain_data.reshape((1,) + (nrows, ncols))
     return out, res
@@ -511,13 +513,20 @@ def read_ang(path):
 def read_grainFile(path):
     with open(path, "r") as f:
         for line in f:
-            if line[0] == "#" and "Grain ID" in line:
+            if line[0] != "#":
+                break
+            if "Grain ID" in line:
                 column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
                 break
     grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
     f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
-    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(np.int32)
+    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(int)
     grainIDs[grainIDs <= 0] = 0
+    # Randomize grain IDs
+    # unique_grainIDs = np.unique(grainIDs)
+    # unique_grainIDs[1:] = np.random.permutation(unique_grainIDs[1:])
+    # for i, gid in enumerate(unique_grainIDs):
+    #     grainIDs[grainIDs == gid] = i
     return grainIDs
 
 def read_h5(path):
