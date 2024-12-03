@@ -7,9 +7,9 @@ Contains python files for correcting distorted EBSD images using reference BSE i
 
 ## Usage
 
-To download the code, either run `git clone git@github.com:lambjames18/EBSD-Correction.git` (assuming git is installed) or download the zip file of the repository and unpack it. Once it is downloaded, move into the directory (`cd EBSD-Correction`) and simply run `python ui.py`. The conda environment used during development can be recreated using the following command:
+To download the code, either run `git clone git@github.com:lambjames18/EBSD-Correction.git` (assuming git is installed) or download the zip file of the repository and unpack it. Once it is downloaded, move into the directory (`cd EBSD-Correction`) and simply run `python ui.py`. The conda environment used during development can be recreated using the following command (developed on windows):
 
-`conda create -n align python numpy matplotlib h5py imageio scipy scikit-learn scikit-image pytorch torchvision kornia -c pytorch -c conda-forge`
+`conda create -n align python numpy matplotlib h5py imageio scipy scikit-learn scikit-image pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -c conda-forge`
 
 For information about miniconda (the lightweight command line version of anaconda) see https://docs.conda.io/en/latest/miniconda.html. The environment (named "align" in the command above) will need to be activated in order to run the code. Alternatively, any python interpreter can be used as long as the following packages are installed on your computer:
 
