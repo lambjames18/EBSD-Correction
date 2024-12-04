@@ -276,17 +276,23 @@ class App(tk.Tk):
 
     ### IO ###
     def easy_start(self):
-        ebsd_path = "./test_data/EBSD.ang"
-        ebsd_points_path = "./test_data/distorted_pts.txt"
-        bse_path = "./test_data/BSE.tif"
-        bse_points_path = "./test_data/control_pts.txt"
-        # ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
-        # bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
-        # ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
-        # bse_path = "D:/Research/scripts/Alignment/CoNi67/se_images_aligned/*.tif"
-        ebsd_res = 2.5
+        # ebsd_path = "./test_data/EBSD.ang"
+        # ebsd_points_path = "./test_data/distorted_pts.txt"
+        # bse_path = "./test_data/BSE.tif"
+        # bse_points_path = "./test_data/control_pts.txt"
+        # ebsd_res = 2.5
+        # bse_res = 1.0
+        # rescale = True
+        # r180 = False
+        # flip = False
+        # crop = False
+        ebsd_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/distorted_pts.txt"
+        bse_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/control_pts.txt"
+        ebsd_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
+        bse_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CBS.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CLAHE_CBS.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_ETD.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CLAHE_ETD.tif"
+        ebsd_res = 1.0
         bse_res = 1.0
-        rescale = True
+        rescale = False
         r180 = False
         flip = False
         crop = False
@@ -326,6 +332,7 @@ class App(tk.Tk):
     def select_data_popup(self, mode):
         self.w = Inputs.DataInput(self, mode)
         self.wait_window(self.w.w)
+        self.update()
         if self.w.clean_exit:
             if self.w.ang:
                 self.ang_path = self.w.ebsd_path
@@ -335,6 +342,7 @@ class App(tk.Tk):
             e_d, b_d, e_pts, b_pts = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
             self.w = Inputs.DataSummary(self, e_d, b_d, e_pts, b_pts, ebsd_res, bse_res)
             self.wait_window(self.w.w)
+            self.update()
             if self.w.clean_exit:
                 if e_pts is None:
                     e_pts = {0: []}
@@ -358,6 +366,7 @@ class App(tk.Tk):
                     im = b_d[list(b_d.keys())[0]][0]
                     self.w = Inputs.CropControl(self, im)
                     self.wait_window(self.w.w)
+                    self.update()
                     if self.w.clean_exit:
                         s, e = self.w.start, self.w.end
                         for key in b_d.keys():
@@ -401,7 +410,6 @@ class App(tk.Tk):
         self.clahe_ebsd_b["state"] = "normal"
         self.view_pts["state"] = "normal"
         self.show_points.set(1)
-        print()
 
     ### Coords stuff ###
     def add_coords(self, pos, event):
@@ -516,29 +524,23 @@ class App(tk.Tk):
     ### Apply stuff for visualizing ###
     def _get_cropping_slice(self, centroid, target_shape, current_shape):
         """Returns a slice object that can be used to crop an image"""
-        # print("Target shape: {}".format(target_shape))
-        # print("Current shape: {}".format(current_shape))
         rstart = centroid[0] - target_shape[0] // 2
         rend = rstart + target_shape[0]
-        # print("Row raw:", rstart, rend)
         if rstart < 0:
             r_slice = slice(0, target_shape[0])
         elif rend > current_shape[0]:
             r_slice = slice(current_shape[0] - target_shape[0], current_shape[0])
         else:
             r_slice = slice(rstart, rend)
-        # print("Row slice:", r_slice)
 
         cstart = centroid[1] - target_shape[1] // 2
         cend = cstart + target_shape[1]
-        # print("Col raw:", cstart, cend)
         if cstart < 0:
             c_slice = slice(0, target_shape[1])
         elif cend > current_shape[1]:
             c_slice = slice(current_shape[1] - target_shape[1], current_shape[1])
         else:
             c_slice = slice(cstart, cend)
-        # print("Col slice:", c_slice)
         return r_slice, c_slice
 
     def apply(self):
@@ -589,17 +591,29 @@ class App(tk.Tk):
         else:
             SAVE_PATH_BSE = os.path.splitext(SAVE_PATH_EBSD)[0] + "_dst" + extension
 
+        print("Saving EBSD to:", SAVE_PATH_EBSD)
+        print("Saving BSE to:", SAVE_PATH_BSE)
+
         # Ask if the user wants to crop the corrected image to match the distorted grid
         crop_to_distorted_grid = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        self.update()
         if crop_to_distorted_grid is None:
             return
 
+        # Get the modality keys
+        ebsd_keys = list(self.ebsd_data.keys())
+        ebsd_keys.pop([k.lower() for k in ebsd_keys].index("eulerangles"))
+        bse_keys = list(self.bse_data.keys())
+
         # Apply the correction
         # dst_img, src_imgs = self._run_in_background("Applying correction to all EBSD modes...", self._apply_multiple, crop_to_distorted_grid)
-        dst_img, src_imgs, params = self._apply_multiple(crop_to_distorted_grid)
+        dst_imgs, src_imgs, params = self._apply_multiple(crop_to_distorted_grid)
+        print("Destination image shape:", dst_imgs.shape)
+        print("Source image shape:", src_imgs.shape)
+        print("Parameters shape:", params.shape)
 
         # Handle dtype of images
-        for i, key in enumerate(self.ebsd_data.keys()):
+        for i, key in enumerate(ebsd_keys):
             src_imgs[i] = core.handle_dtype(src_imgs[i], self.ebsd_data[key].dtype)
 
         # Get the ang header
@@ -626,36 +640,41 @@ class App(tk.Tk):
         # Save the data based on the extension
         if extension.lower() == ".ang":
             data_out = []
-            for i, key in enumerate(self.ebsd_data.keys()):
+            for i, key in enumerate(ebsd_keys):
                 if key in col_names:
                     data_out.append(src_imgs[i].reshape(-1, 1).astype(np.float32))
             data_out = np.hstack(data_out)
             np.savetxt(SAVE_PATH_EBSD, data_out, header=header_string, fmt="%.5f", delimiter=" ", comments="")
-            io.imsave(SAVE_PATH_BSE, dst_img)
+            for i, key in enumerate(bse_keys):
+                SAVE_PATH_BSE = os.path.splitext(SAVE_PATH_BSE)[0] + f"_{key}.tif"
+                io.imsave(SAVE_PATH_BSE, dst_imgs[i])
 
         elif extension.lower() == ".h5":
             h5 = h5py.File(SAVE_PATH_EBSD, "w")
             h5.attrs.create(name="resolution", data=res)
             h5.attrs.create(name="header", data=header_string)
-            for i, key in enumerate(self.ebsd_data.keys()):
+            for i, key in enumerate(ebsd_keys):
                 h5.create_dataset(name=key, data=src_imgs[i])
                 h5[key].attrs.create(name="name", data=key)
                 h5[key].attrs.create(name="dtype", data=str(src_imgs[i].dtype))
                 h5[key].attrs.create(name="shape", data=src_imgs[i].shape)
-            h5.create_dataset(name="Reference", data=dst_img)
-            h5["Reference"].attrs.create(name="name", data="Reference")
-            h5["Reference"].attrs.create(name="dtype", data=str(dst_img.dtype))
-            h5["Reference"].attrs.create(name="shape", data=dst_img.shape)
-
+            for i, key in enumerate(bse_keys):
+                h5.create_dataset(name=f"{key}", data=dst_imgs[i])
+                h5[f"{key}"].attrs.create(name="name", data=f"{key}")
+                h5[f"{key}"].attrs.create(name="dtype", data=str(dst_imgs[i].dtype))
+                h5[f"{key}"].attrs.create(name="shape", data=dst_imgs[i].shape)
+            h5.close()
         else:
-            for i, key in enumerate(self.ebsd_data.keys()):
+            for i, key in enumerate(ebsd_keys):
                 SAVE_PATH_EBSD = os.path.splitext(SAVE_PATH_EBSD)[0] + f"_{key}" + extension
                 io.imsave(SAVE_PATH_EBSD, src_imgs[i])
-            io.imsave(SAVE_PATH_BSE, dst_img)
+            for i, key in enumerate(bse_keys):
+                SAVE_PATH_BSE = os.path.splitext(SAVE_PATH_BSE)[0] + f"_{key}." + extension
+                io.imsave(SAVE_PATH_BSE, dst_imgs[i])
 
         # Save the parameters of the solution in the same location as the EBSD file
         params_path = os.path.splitext(self.ang_path)[0] + "_params.txt"
-        np.savetxt(params_path, params, delimiter=" ", header="# Parameters for the TPS correction", comments="")
+        np.savetxt(params_path, params.reshape(2, -1), delimiter=" ", header="# Parameters for the TPS correction", comments="")
 
         print("Correction complete!")
 
@@ -663,8 +682,6 @@ class App(tk.Tk):
         # Get the bse image and process
         dst_img = self.bse_data[self.bse_mode.get()][0]
         src_img = self.ebsd_data[self.ebsd_mode.get()][0]
-        src_img_shape = src_img.shape
-        dst_img_shape = dst_img.shape
 
         # Get the points and perform alignment
         src_points = np.array(self.points["ebsd"][0])
@@ -676,23 +693,23 @@ class App(tk.Tk):
             dst_img = CLAHE(dst_img)
         if self.clahe_active_ebsd:
             src_img = CLAHE(src_img)
-        if dst_img_shape[0] < src_img_shape[0]:
-            dst_img = np.pad(dst_img, ((0, 0), (0, src_img_shape[1] - dst_img_shape[1])), mode="constant", constant_values=0)
-        if dst_img_shape[1] < src_img_shape[1]:
-            dst_img = np.pad(dst_img, ((0, 0), (0, src_img_shape[2] - dst_img_shape[1])), mode="constant", constant_values=0)
+        if dst_img.shape[0] < src_img.shape[0]:
+            dst_img = np.pad(dst_img, ((0, src_img.shape[0] - dst_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
+        if dst_img.shape[1] < src_img.shape[1]:
+            dst_img = np.pad(dst_img, ((0, 0), (0, src_img.shape[1] - dst_img.shape[1])), mode="constant", constant_values=0)
         print("Processed destination (BSE) data")
 
         # Warp all the EBSD modes
-        warped_src = warping.transform_image(src_img, dst_points, src_points, output_shape=dst_img_shape, mode="tps", size=dst_img_shape)
+        warped_src = warping.transform_image(src_img, dst_points, src_points, output_shape=dst_img.shape, mode="tps", size=dst_img.shape)
 
         # Crop to the center of the corrected image if desired
         if crop_to_distorted_grid:
             print("Cropping to match distorted grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-            dummy = np.ones(src_img_shape)
-            dummy = warping.transform_image(dummy, dst_points, src_points, output_shape=dst_img_shape, mode="tps", size=dst_img_shape)
+            dummy = np.ones(src_img.shape)
+            dummy = warping.transform_image(dummy, dst_points, src_points, output_shape=dst_img.shape, mode="tps", size=dst_img.shape)
             rc, cc = np.array(np.where(dummy)).reshape(2, -1).T.mean(axis=0).astype(int)
-            rslc, cslc = self._get_cropping_slice((rc, cc), src_img_shape, dst_img_shape)
+            rslc, cslc = self._get_cropping_slice((rc, cc), src_img.shape, dst_img.shape)
             dst_img = dst_img[rslc, cslc]
             warped_src = warped_src[rslc, cslc]
 
@@ -701,9 +718,9 @@ class App(tk.Tk):
 
     def _apply_multiple(self, crop_to_distorted_grid):
         # Get the bse image and process
-        dst_img = self.bse_data[self.bse_mode.get()][0]
         src_img_shape = self.ebsd_data[self.ebsd_mode.get()][0].shape
-        dst_img_shape = dst_img.shape
+        dst_img_shape = self.bse_data[self.bse_mode.get()][0].shape
+        dst_imgs = [self.bse_data[key][0] for key in self.bse_data.keys()]
 
         # Get the points and perform alignment
         src_points = np.array(self.points["ebsd"][0])
@@ -711,37 +728,40 @@ class App(tk.Tk):
         print("Gathered data for correction")
 
         # Process
-        if self.clahe_active_bse:
-            dst_img = CLAHE(dst_img)
         if dst_img_shape[0] < src_img_shape[0]:
-            dst_img = np.pad(dst_img, ((0, 0), (0, src_img_shape[1] - dst_img_shape[1])), mode="constant", constant_values=0)
+            dst_imgs = [np.pad(img, ((0, src_img_shape[0] - img.shape[0]), (0, 0)), mode="constant", constant_values=0) for img in dst_imgs]
         if dst_img_shape[1] < src_img_shape[1]:
-            dst_img = np.pad(dst_img, ((0, 0), (0, src_img_shape[2] - dst_img_shape[1])), mode="constant", constant_values=0)
+            dst_imgs = [np.pad(img, ((0, 0), (0, src_img_shape[1] - img.shape[1])), mode="constant", constant_values=0) for img in dst_imgs]
         print("Processed destination (BSE) data")
+
+        # Get the transform for the EBSD data
+        src_img = self.ebsd_data[self.ebsd_mode.get()][0]
+        tform = warping.get_transform(src_points, dst_points, mode="tps", size=dst_img_shape)
 
         # Warp all the EBSD modes
         warped_srcs = []
         for i, ebsd_mode in enumerate(self.ebsd_data.keys()):
-            print(f"Processing EBSD mode {ebsd_mode} ({i + 1}/{len(self.ebsd_data.keys())})")
+            print(f"Processing source (EBSD) mode {ebsd_mode} ({i + 1}/{len(self.ebsd_data.keys())})")
+            if "eulerangles" in ebsd_mode.lower():
+                continue
             src_img = self.ebsd_data[ebsd_mode][0]
-            warped_src_img, params = warping.transform_image(
-                src_img, dst_points, src_points, output_shape=dst_img_shape, mode="tps", return_params=True, size=dst_img_shape
-            )
+            warped_src_img = transform.warp(src_img, tform, mode="constant", cval=0, order=0, output_shape=dst_img_shape)
             warped_srcs.append(warped_src_img)
+        print([img.shape for img in warped_srcs])
 
         # Crop to the center of the corrected image if desired
         if crop_to_distorted_grid:
-            print("Cropping to match distorted grid")
+            print("Cropping to match source (EBSD) grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
             dummy = np.ones(src_img_shape)
             dummy = warping.transform_image(dummy, dst_points, src_points, output_shape=dst_img_shape, mode="tps", size=dst_img_shape)
             rc, cc = np.array(np.where(dummy)).reshape(2, -1).T.mean(axis=0).astype(int)
             rslc, cslc = self._get_cropping_slice((rc, cc), src_img_shape, dst_img_shape)
-            dst_img = dst_img[rslc, cslc]
+            dst_imgs = [img[rslc, cslc] for img in dst_imgs]
             warped_srcs = [img[rslc, cslc] for img in warped_srcs]
 
         print("Finished processing")
-        return dst_img, warped_srcs, params
+        return np.array(dst_imgs), np.array(warped_srcs), warping.get_transform_params(tform)
 
     def clahe(self, viewer):
         if viewer == "ebsd":
@@ -766,7 +786,6 @@ class App(tk.Tk):
     ### Viewer stuff
     def _resize(self, pos, scale):
         """Resizes the image in the viewer"""
-        # print(f"Resizing {pos} to {scale}%")
         if pos == "ebsd":
             self.ebsd.delete("all")
         else:

@@ -169,19 +169,16 @@ if __name__ == "__main__":
     r180 = False
     flip = False
     crop = False
-    src_data, dst_img, src_points, dst_points = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+    src_data, dst_data, src_points, dst_points = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
     src_points, dst_points = src_points[0], dst_points[0]
-    dst_img = np.squeeze(Inputs.rescale_control(dst_img, bse_res, ebsd_res))
+    dst_data = Inputs.rescale_control(dst_data, bse_res, ebsd_res)
+    dst_img = np.squeeze(dst_data[list(dst_data.keys())[0]])
     src_img = np.squeeze(src_data["CI"])
 
     if dst_img.shape[0] < src_img.shape[0]:
         dst_img = np.pad(dst_img, ((0, src_img.shape[0] - dst_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
-    elif dst_img.shape[0] > src_img.shape[0]:
-        src_img = np.pad(src_img, ((0, dst_img.shape[0] - src_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
     if dst_img.shape[1] < src_img.shape[1]:
         dst_img = np.pad(dst_img, ((0, 0), (0, src_img.shape[1] - dst_img.shape[1])), mode="constant", constant_values=0)
-    elif dst_img.shape[1] > src_img.shape[1]:
-        src_img = np.pad(src_img, ((0, 0), (0, dst_img.shape[1] - src_img.shape[1])), mode="constant", constant_values=0)
 
     print("SRC", src_img.shape)
     print("DST", dst_img.shape)

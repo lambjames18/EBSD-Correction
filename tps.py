@@ -14,11 +14,10 @@ class ThinPlateSplineTransform:
         """Transform coordinates from source to destination using thin plate spline."""
         if not self._estimated:
             raise ValueError("Transformation not estimated.")
+        print(self.params.shape)
         params = np.moveaxis(self.params, 0, -1)
         coords = np.asarray(coords).astype(int)
-        print(params.shape, coords.shape)
         out = params[(coords[:, 1], coords[:, 0])]
-        print(out.shape)
         return out
 
 
@@ -50,6 +49,7 @@ class ThinPlateSplineTransform:
         xt = np.asarray(dst[:, 0])
         yt = np.array(dst[:, 1])
         n = len(xs)
+        print("Number of control points:", n)
 
         # construct L
         L = self._TPS_makeL(cps)
@@ -89,30 +89,20 @@ class ThinPlateSplineTransform:
         affine = axs + ays
         affine[0, :, :] += a1[0]
         affine[1, :, :] += a1[1]
+        del xgd, ygd, x, y
 
-        # bending portion
-        R = cdist(pixels, cps, "euclidean")  # are nx*ny pixels, cps = num reference pairs
-        Rsq = R * R
-        if Rsq.shape[0] <= 1e6:
-            Rsq = np.where(R == 0, 1, Rsq)
+        # bending portion, but do it in parts for memory reasons
+        bend = np.zeros((2, nx * ny))
+        for i in range(n):
+            print("Calculating bending portion for control point {}...".format(i))
+            R = np.linalg.norm(pixels - cps[i], axis=1).reshape(-1, 1)
+            Rsq = R * R
+            Rsq[R == 0] = 1
             U = Rsq * np.log(Rsq)
-        else:
-            counted = 0
-            while counted < Rsq.shape[0]:
-                start = int(counted)
-                end = min(int(counted + 1e6), Rsq.shape[0])
-                Rsq[start:end] = np.where(R[start:end] == 0, 1, Rsq[start:end])
-                counted += 1e6
-            U = np.zeros_like(Rsq)
-            counted = 0
-            while counted < Rsq.shape[0]:
-                start = int(counted)
-                end = min(int(counted + 1e6), Rsq.shape[0])
-                U[start:end] = Rsq[start:end] * np.log(Rsq[start:end])
-                counted += 1e6
-        
-        bend = np.einsum("ij,jk->ik", U, wi).T
+            bend += np.einsum("ij,jk->ik", U, wi[i].reshape(1, 2)).T
         bend = np.reshape(bend, (2, ny, nx))
+
+        print("Bending portion calculated...")
         self.params = affine + bend
         self.size = size
         self._estimated = True
