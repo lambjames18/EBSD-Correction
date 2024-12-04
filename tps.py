@@ -14,8 +14,13 @@ class ThinPlateSplineTransform:
         """Transform coordinates from source to destination using thin plate spline."""
         if not self._estimated:
             raise ValueError("Transformation not estimated.")
-        print(self.params[0].flatten().shape, coords[:, 0].astype(int).shape)
-        return self.params.reshape(2, -1).T
+        params = np.moveaxis(self.params, 0, -1)
+        coords = np.asarray(coords).astype(int)
+        print(params.shape, coords.shape)
+        out = params[(coords[:, 1], coords[:, 0])]
+        print(out.shape)
+        return out
+
 
     def estimate(self, src, dst, size):
         """Estimate optimal spline mappings between source and destination points.

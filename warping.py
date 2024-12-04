@@ -20,7 +20,7 @@ def set_transform_params(tform, params):
     tform.params = params
 
 
-def transform_coords(src, dst, mode="tps", *args, **kwargs):
+def transform_coords(src, dst, mode="tps", return_params=False, *args, **kwargs):
     """
     Transform coordinates from source to destination using thin plate spline or affine transformation.
 
@@ -42,10 +42,13 @@ def transform_coords(src, dst, mode="tps", *args, **kwargs):
         Transformed coordinates.
     """
     tform = get_transform(src, dst, mode, *args, **kwargs)
-    return tform(src)
+    warped = tform(src)
+    if return_params:
+        return warped, get_transform_params(tform)
+    return warped
 
 
-def transform_image(image, src, dst, mode="tps", order=0, *args, **kwargs):
+def transform_image(image, src, dst, output_shape=None, mode="tps", order=0, return_params=False, *args, **kwargs):
     """
     Transform an image from source to destination using thin plate spline or affine transformation.
 
@@ -68,8 +71,13 @@ def transform_image(image, src, dst, mode="tps", order=0, *args, **kwargs):
     (H, W) ndarray
         Transformed image.
     """
+    if output_shape is None:
+        output_shape = image.shape
     tform = get_transform(src, dst, mode, *args, **kwargs)
-    return tf.warp(image, tform, output_shape=image.shape, mode="constant", cval=0, order=order)
+    warped = tf.warp(image, tform, mode="constant", cval=0, order=order, output_shape=output_shape)
+    if return_params:
+        return warped, get_transform_params(tform)
+    return warped
 
 
 def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
@@ -148,23 +156,46 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
 
 
 if __name__ == "__main__":
+    import Inputs
     import matplotlib.pyplot as plt
-    from skimage import data
-    image = data.checkerboard()
-    image_stack = np.array([image, image, image, image, image])
-    src = np.loadtxt("src.txt", delimiter=",", dtype=int)
-    dst = np.loadtxt("dst.txt", delimiter=",", dtype=int)
-    print(image_stack.shape)
-    print(src.shape)
-    print(dst.shape)
 
-    kw = dict(size=image.shape)
-    t_images = transform_image_stack(image_stack, src, dst, "tps", 0, **kw)
-    print(t_images.shape)
+    ebsd_path = "./test_data/EBSD.ang"
+    ebsd_points_path = "./test_data/distorted_pts.txt"
+    bse_path = "./test_data/BSE.tif"
+    bse_points_path = "./test_data/control_pts.txt"
+    ebsd_res = 2.5
+    bse_res = 1.0
+    rescale = True
+    r180 = False
+    flip = False
+    crop = False
+    src_data, dst_img, src_points, dst_points = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+    src_points, dst_points = src_points[0], dst_points[0]
+    dst_img = np.squeeze(Inputs.rescale_control(dst_img, bse_res, ebsd_res))
+    src_img = np.squeeze(src_data["CI"])
 
-    fig, ax = plt.subplots(1, 5, figsize=(20, 4), sharex=True, sharey=True)
-    for i in range(5):
-        ax[i].imshow(t_images[i, ..., 1:], cmap="gray")
-        ax[i].axis("off")
+    if dst_img.shape[0] < src_img.shape[0]:
+        dst_img = np.pad(dst_img, ((0, src_img.shape[0] - dst_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
+    elif dst_img.shape[0] > src_img.shape[0]:
+        src_img = np.pad(src_img, ((0, dst_img.shape[0] - src_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
+    if dst_img.shape[1] < src_img.shape[1]:
+        dst_img = np.pad(dst_img, ((0, 0), (0, src_img.shape[1] - dst_img.shape[1])), mode="constant", constant_values=0)
+    elif dst_img.shape[1] > src_img.shape[1]:
+        src_img = np.pad(src_img, ((0, 0), (0, dst_img.shape[1] - src_img.shape[1])), mode="constant", constant_values=0)
+
+    print("SRC", src_img.shape)
+    print("DST", dst_img.shape)
+    t_image = transform_image(src_img, dst_points, src_points, output_shape=dst_img.shape, mode="tps", order=0, size=dst_img.shape)
+    print(t_image.shape)
+
+    fig, ax = plt.subplots(1, 3, figsize=(15, 5), sharex=True, sharey=True)
+    ax[0].imshow(src_img, cmap="gray")
+    ax[0].scatter(src_points[:, 0], src_points[:, 1], c="r", s=10)
+    ax[0].set_title("Source")
+    ax[1].imshow(dst_img, cmap="gray")
+    ax[1].scatter(dst_points[:, 0], dst_points[:, 1], c="b", s=10)
+    ax[1].set_title("Destination")
+    ax[2].imshow(t_image, cmap="gray")
+    ax[2].set_title("Transformed")
     plt.tight_layout()
     plt.show()
