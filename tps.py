@@ -5,16 +5,15 @@ from skimage import transform as tf
 
 
 class ThinPlateSplineTransform:
-    def __init__(self):
+    def __init__(self, affine_only=False):
         self._estimated = False
         self.params = None
-        self.src = None
+        self.affine_only = affine_only
 
     def __call__(self, coords):
         """Transform coordinates from source to destination using thin plate spline."""
         if not self._estimated:
             raise ValueError("Transformation not estimated.")
-        print(self.params.shape)
         params = np.moveaxis(self.params, 0, -1)
         coords = np.asarray(coords).astype(int)
         out = params[(coords[:, 1], coords[:, 0])]
@@ -43,11 +42,11 @@ class ThinPlateSplineTransform:
         The number N of source and destination points must match.
         """
         # convert input pixels in arrays. cps are control points
-        xs = np.asarray(src[:, 0])
-        ys = np.array(src[:, 1])
+        xs = np.asarray(dst[:, 0])
+        ys = np.array(dst[:, 1])
         cps = np.vstack([xs, ys]).T
-        xt = np.asarray(dst[:, 0])
-        yt = np.array(dst[:, 1])
+        xt = np.asarray(src[:, 0])
+        yt = np.array(src[:, 1])
         n = len(xs)
         print("Number of control points:", n)
 
@@ -103,7 +102,10 @@ class ThinPlateSplineTransform:
         bend = np.reshape(bend, (2, ny, nx))
 
         print("Bending portion calculated...")
-        self.params = affine + bend
+        if self.affine_only:
+            self.params = affine
+        else:
+            self.params = affine + bend
         self.size = size
         self._estimated = True
         return True

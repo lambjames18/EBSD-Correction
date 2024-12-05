@@ -7,6 +7,9 @@ def get_transform(src, dst, mode, *args, **kwargs):
     if mode.lower() == "tps":
         tform = ThinPlateSplineTransform()
         tform.estimate(src, dst, *args, **kwargs)
+    elif mode.lower() == "tps affine":
+        tform = ThinPlateSplineTransform(affine_only=True)
+        tform.estimate(src, dst, *args, **kwargs)
     else:
         tform = tf.estimate_transform(mode.lower(), src, dst, *args, **kwargs)
     return tform
@@ -157,33 +160,28 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
 
 if __name__ == "__main__":
     import Inputs
+    import h5py
+    import core
     import matplotlib.pyplot as plt
+    from skimage import io
 
-    ebsd_path = "./test_data/EBSD.ang"
-    ebsd_points_path = "./test_data/distorted_pts.txt"
-    bse_path = "./test_data/BSE.tif"
-    bse_points_path = "./test_data/control_pts.txt"
-    ebsd_res = 2.5
-    bse_res = 1.0
-    rescale = True
-    r180 = False
-    flip = False
-    crop = False
-    src_data, dst_data, src_points, dst_points = Inputs.read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
-    src_points, dst_points = src_points[0], dst_points[0]
-    dst_data = Inputs.rescale_control(dst_data, bse_res, ebsd_res)
-    dst_img = np.squeeze(dst_data[list(dst_data.keys())[0]])
-    src_img = np.squeeze(src_data["CI"])
+    ebsd_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
+    bse_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CBS.tif"
+    src_img = Inputs.read_ang(ebsd_path)[0]["GrainIDs"][0]
+    dst_img = Inputs.read_image(bse_path)[0]
 
-    if dst_img.shape[0] < src_img.shape[0]:
-        dst_img = np.pad(dst_img, ((0, src_img.shape[0] - dst_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
-    if dst_img.shape[1] < src_img.shape[1]:
-        dst_img = np.pad(dst_img, ((0, 0), (0, src_img.shape[1] - dst_img.shape[1])), mode="constant", constant_values=0)
+    ebsd_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-src_pts.txt"
+    bse_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-dst_pts.txt"
+    src_points = np.loadtxt(ebsd_points_path, dtype=int)[:, 1:]
+    dst_points = np.loadtxt(bse_points_path, dtype=int)[:, 1:]
 
-    print("SRC", src_img.shape)
-    print("DST", dst_img.shape)
+    print("SRC", src_img.shape, src_img.dtype)
+    print("DST", dst_img.shape, dst_img.dtype)
     t_image = transform_image(src_img, dst_points, src_points, output_shape=dst_img.shape, mode="tps", order=0, size=dst_img.shape)
-    print(t_image.shape)
+    t_image = t_image[:dst_img.shape[0], :dst_img.shape[1]]
+    print("SRC", src_img.shape, src_img.dtype)
+    t_image = core.handle_dtype(t_image, t_image.dtype)
+
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 5), sharex=True, sharey=True)
     ax[0].imshow(src_img, cmap="gray")

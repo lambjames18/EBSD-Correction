@@ -86,11 +86,17 @@ class App(tk.Tk):
         filemenu = tk.Menu(self.menu, tearoff=0)
         filemenu.add_command(label="Open 2D", command=lambda: self.select_data_popup("2D"))
         filemenu.add_command(label="Export 2D", command=self.apply_and_export)
+        filemenu.add_command(label="Export transform", command=self.export_transform)
         filemenu.add_command(label="Quick start", command=self.easy_start)
         self.menu.add_cascade(label="File", menu=filemenu)
         applymenu = tk.Menu(self.menu, tearoff=0)
-        applymenu.add_command(label="TPS", command=lambda: self.apply())
-        self.menu.add_cascade(label="View", menu=applymenu, state="disabled")
+        applymenu.add_command(label="TPS (affine only)", command=lambda: self.apply("tps affine"))
+        applymenu.add_command(label="TPS", command=lambda: self.apply("tps"))
+        applymenu.add_command(label="Euclidian", command=lambda: self.apply("euclidean"))
+        applymenu.add_command(label="Similarity", command=lambda: self.apply("similarity"))
+        applymenu.add_command(label="Affine", command=lambda: self.apply("affine"))
+        applymenu.add_command(label="Projective", command=lambda: self.apply("projective"))
+        self.menu.add_cascade(label="View transform", menu=applymenu, state="disabled")
         self.config(menu=self.menu)
         #
         # setup top
@@ -286,8 +292,8 @@ class App(tk.Tk):
         # r180 = False
         # flip = False
         # crop = False
-        ebsd_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/distorted_pts.txt"
-        bse_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/control_pts.txt"
+        ebsd_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-src_pts.txt"
+        bse_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-dst_pts.txt"
         ebsd_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
         bse_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CBS.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CLAHE_CBS.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_ETD.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CLAHE_ETD.tif"
         ebsd_res = 1.0
@@ -401,7 +407,7 @@ class App(tk.Tk):
         # Finish
         self.folder = os.path.dirname(ebsd_path)
         self._update_viewers()
-        self.menu.entryconfig("View", state="normal")
+        self.menu.entryconfig("View transform", state="normal")
         self.clear_ebsd_points["state"] = "normal"
         self.clear_bse_points["state"] = "normal"
         self.ebsd_resize_dropdown["state"] = "readonly"
@@ -410,6 +416,45 @@ class App(tk.Tk):
         self.clahe_ebsd_b["state"] = "normal"
         self.view_pts["state"] = "normal"
         self.show_points.set(1)
+
+    def export_transform(self):
+        save_path = filedialog.asksaveasfilename(initialdir=self.folder, title="Save the transform", filetypes=(("Binary NumPy Array", ("*.npy")), ("CSV files", "*.csv"), ("TXT files", "*.txt"), ("All files", "*.*")))
+        if save_path == "":
+            return
+        delimiter = "," if save_path.endswith(".csv") else " "
+
+        # Get the mode
+        mode = ArbitraryMessageBox(
+            self, title="Mode",
+            msg="Select the mode to use for the correction.",
+            options=["Thin-Plate Spline", "Thin-Plate Spline (Affine only)", "Euclidean", "Similarity", "Affine", "Piecewise-affine", "Projective"],
+            orientation="vertical",
+        )
+        if mode == False:
+            return
+        else:
+            mode = ["tps", "tps affine", "euclidean", "similarity", "affine", "piecewise-affine", "projective"][mode.choice]
+        print("Mode choice:", mode)
+
+        # Get the shape of the BSE image and the points
+        dst_img_shape = self.bse_data[self.bse_mode.get()][0].shape
+        src_points = np.array(self.points["ebsd"][0])
+        dst_points = np.array(self.points["bse"][0])
+
+        # Get the transform for the EBSD data
+        if "tps" in mode.lower():
+            tform = warping.get_transform(src_points, dst_points, mode=mode, size=dst_img_shape)
+        else:
+            tform = warping.get_transform(src_points, dst_points, mode=mode)
+        params = tform.params
+
+        # Save the transform
+        print("Saving transform to:", save_path)
+        if save_path.endswith(".npy"):
+            np.save(save_path, params)
+        else:
+            params = params.reshape(2, -1).T
+            np.savetxt(save_path, params, delimiter=delimiter, header=f"Transform mode: {mode}, Shape: {params.shape}", comments="#")
 
     ### Coords stuff ###
     def add_coords(self, pos, event):
@@ -543,14 +588,17 @@ class App(tk.Tk):
             c_slice = slice(cstart, cend)
         return r_slice, c_slice
 
-    def apply(self):
+    def apply(self, mode="tps"):
         """Applies the correction algorithm and calls the interactive view"""
-        crop_to_distorted_grid = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the corrected output to match the distorted grid?")
-        if crop_to_distorted_grid is None:
+        crop_choice = ArbitraryMessageBox(self, title="Crop", msg="Select the grid to crop the transformed output to.", options=["Source (EBSD)", "Destination (BSE)", "None"])
+        if crop_choice == False:
             return
+        else:
+            crop_choice = ["src", "dst", "none"][crop_choice.choice]
+        print("Crop choice:", crop_choice)
         
         # im0, im1 = self._run_in_background("Applying correction...", self._apply, crop_to_distorted_grid)
-        im0, im1 = self._apply(crop_to_distorted_grid)
+        im0, im1 = self._apply(crop_choice, mode=mode)
         if (im0.shape[0] > 2000) or (im0.shape[1] > 2000):
             result = tk.messagebox.askyesnocancel("Resize?", "The images are large, would you like to resize for the preview? (Recommended)")
             if result is None:
@@ -591,14 +639,27 @@ class App(tk.Tk):
         else:
             SAVE_PATH_BSE = os.path.splitext(SAVE_PATH_EBSD)[0] + "_dst" + extension
 
-        print("Saving EBSD to:", SAVE_PATH_EBSD)
-        print("Saving BSE to:", SAVE_PATH_BSE)
+        # Get the mode choice
+        mode = ArbitraryMessageBox(
+            self, title="Mode",
+            msg="Select the mode to use for the correction.",
+            options=["Thin-Plate Spline", "Thin-Plate Spline (Affine only)", "Euclidean", "Similarity", "Affine", "Piecewise-affine", "Projective"],
+            orientation="vertical",
+        )
+        if mode == False:
+            return
+        else:
+            mode = ["tps", "tps affine", "euclidean", "similarity", "affine", "piecewise-affine", "projective"][mode.choice]
+        print("Mode choice:", mode)
+        
 
         # Ask if the user wants to crop the corrected image to match the distorted grid
-        crop_to_distorted_grid = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
-        self.update()
-        if crop_to_distorted_grid is None:
+        crop_choice = ArbitraryMessageBox(self, title="Crop", msg="Select the grid to crop the transformed output to.", options=["Source (EBSD)", "Destination (BSE)", "None"])
+        if crop_choice == False:
             return
+        else:
+            crop_choice = ["src", "dst", "none"][crop_choice.choice]
+        print("Crop choice:", crop_choice)
 
         # Get the modality keys
         ebsd_keys = list(self.ebsd_data.keys())
@@ -607,14 +668,11 @@ class App(tk.Tk):
 
         # Apply the correction
         # dst_img, src_imgs = self._run_in_background("Applying correction to all EBSD modes...", self._apply_multiple, crop_to_distorted_grid)
-        dst_imgs, src_imgs, params = self._apply_multiple(crop_to_distorted_grid)
-        print("Destination image shape:", dst_imgs.shape)
-        print("Source image shape:", src_imgs.shape)
-        print("Parameters shape:", params.shape)
+        dst_imgs, src_imgs = self._apply_multiple(crop_choice, mode=mode)
 
         # Handle dtype of images
-        for i, key in enumerate(ebsd_keys):
-            src_imgs[i] = core.handle_dtype(src_imgs[i], self.ebsd_data[key].dtype)
+        # for i, key in enumerate(ebsd_keys):
+        #     src_imgs[i] = core.handle_dtype(src_imgs[i], self.ebsd_data[key].dtype)
 
         # Get the ang header
         _, _, col_names, res, header_string, _ = Inputs.read_ang_header(self.ang_path)
@@ -654,12 +712,13 @@ class App(tk.Tk):
             h5.attrs.create(name="resolution", data=res)
             h5.attrs.create(name="header", data=header_string)
             for i, key in enumerate(ebsd_keys):
-                h5.create_dataset(name=key, data=src_imgs[i])
+                print("Saving key:", key, src_imgs[i].shape, src_imgs[i].dtype)
+                h5.create_dataset(name=key, data=src_imgs[i], dtype=src_imgs[i].dtype)
                 h5[key].attrs.create(name="name", data=key)
                 h5[key].attrs.create(name="dtype", data=str(src_imgs[i].dtype))
                 h5[key].attrs.create(name="shape", data=src_imgs[i].shape)
             for i, key in enumerate(bse_keys):
-                h5.create_dataset(name=f"{key}", data=dst_imgs[i])
+                h5.create_dataset(name=f"{key}", data=dst_imgs[i], dtype=dst_imgs[i].dtype)
                 h5[f"{key}"].attrs.create(name="name", data=f"{key}")
                 h5[f"{key}"].attrs.create(name="dtype", data=str(dst_imgs[i].dtype))
                 h5[f"{key}"].attrs.create(name="shape", data=dst_imgs[i].shape)
@@ -672,13 +731,10 @@ class App(tk.Tk):
                 SAVE_PATH_BSE = os.path.splitext(SAVE_PATH_BSE)[0] + f"_{key}." + extension
                 io.imsave(SAVE_PATH_BSE, dst_imgs[i])
 
-        # Save the parameters of the solution in the same location as the EBSD file
-        params_path = os.path.splitext(self.ang_path)[0] + "_params.txt"
-        np.savetxt(params_path, params.reshape(2, -1), delimiter=" ", header="# Parameters for the TPS correction", comments="")
-
         print("Correction complete!")
 
-    def _apply(self, crop_to_distorted_grid):
+    def _apply(self, crop_choice, mode="tps"):
+        print("Transforming image using mode:", mode)
         # Get the bse image and process
         dst_img = self.bse_data[self.bse_mode.get()][0]
         src_img = self.ebsd_data[self.ebsd_mode.get()][0]
@@ -693,17 +749,19 @@ class App(tk.Tk):
             dst_img = CLAHE(dst_img)
         if self.clahe_active_ebsd:
             src_img = CLAHE(src_img)
-        if dst_img.shape[0] < src_img.shape[0]:
-            dst_img = np.pad(dst_img, ((0, src_img.shape[0] - dst_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
-        if dst_img.shape[1] < src_img.shape[1]:
-            dst_img = np.pad(dst_img, ((0, 0), (0, src_img.shape[1] - dst_img.shape[1])), mode="constant", constant_values=0)
-        print("Processed destination (BSE) data")
+        # if dst_img.shape[0] < src_img.shape[0]:
+        #     dst_img = np.pad(dst_img, ((0, src_img.shape[0] - dst_img.shape[0]), (0, 0)), mode="constant", constant_values=0)
+        # if dst_img.shape[1] < src_img.shape[1]:
+        #     dst_img = np.pad(dst_img, ((0, 0), (0, src_img.shape[1] - dst_img.shape[1])), mode="constant", constant_values=0)
 
         # Warp all the EBSD modes
-        warped_src = warping.transform_image(src_img, dst_points, src_points, output_shape=dst_img.shape, mode="tps", size=dst_img.shape)
+        if "tps" in mode.lower():
+            warped_src = warping.transform_image(src_img, src_points, dst_points, output_shape=dst_img.shape, mode=mode, size=dst_img.shape)
+        else:
+            warped_src = warping.transform_image(src_img, src_points, dst_points, output_shape=dst_img.shape, mode=mode)
 
         # Crop to the center of the corrected image if desired
-        if crop_to_distorted_grid:
+        if crop_choice == "src":
             print("Cropping to match distorted grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
             dummy = np.ones(src_img.shape)
@@ -712,15 +770,22 @@ class App(tk.Tk):
             rslc, cslc = self._get_cropping_slice((rc, cc), src_img.shape, dst_img.shape)
             dst_img = dst_img[rslc, cslc]
             warped_src = warped_src[rslc, cslc]
+        elif crop_choice == "dst":
+            print("Cropping to match destination grid")
+            warped_src = warped_src[:dst_img.shape[0], :dst_img.shape[1]]
+        else:
+            print("Not cropping, leaving destination and warped source as is.")
 
         print("Finished processing")
         return dst_img, warped_src
 
-    def _apply_multiple(self, crop_to_distorted_grid):
+    def _apply_multiple(self, crop_choice, mode="tps"):
         # Get the bse image and process
         src_img_shape = self.ebsd_data[self.ebsd_mode.get()][0].shape
         dst_img_shape = self.bse_data[self.bse_mode.get()][0].shape
         dst_imgs = [self.bse_data[key][0] for key in self.bse_data.keys()]
+        print("SRC shape:", src_img_shape)
+        print("DST shape:", dst_img_shape)
 
         # Get the points and perform alignment
         src_points = np.array(self.points["ebsd"][0])
@@ -728,15 +793,16 @@ class App(tk.Tk):
         print("Gathered data for correction")
 
         # Process
-        if dst_img_shape[0] < src_img_shape[0]:
-            dst_imgs = [np.pad(img, ((0, src_img_shape[0] - img.shape[0]), (0, 0)), mode="constant", constant_values=0) for img in dst_imgs]
-        if dst_img_shape[1] < src_img_shape[1]:
-            dst_imgs = [np.pad(img, ((0, 0), (0, src_img_shape[1] - img.shape[1])), mode="constant", constant_values=0) for img in dst_imgs]
-        print("Processed destination (BSE) data")
+        # if dst_img_shape[0] < src_img_shape[0]:
+        #     dst_imgs = [np.pad(img, ((0, src_img_shape[0] - img.shape[0]), (0, 0)), mode="constant", constant_values=0) for img in dst_imgs]
+        # if dst_img_shape[1] < src_img_shape[1]:
+        #     dst_imgs = [np.pad(img, ((0, 0), (0, src_img_shape[1] - img.shape[1])), mode="constant", constant_values=0) for img in dst_imgs]
 
         # Get the transform for the EBSD data
-        src_img = self.ebsd_data[self.ebsd_mode.get()][0]
-        tform = warping.get_transform(src_points, dst_points, mode="tps", size=dst_img_shape)
+        if "tps" in mode.lower():
+            tform = warping.get_transform(src_points, dst_points, mode=mode, size=dst_img_shape)
+        else:
+            tform = warping.get_transform(src_points, dst_points, mode=mode)
 
         # Warp all the EBSD modes
         warped_srcs = []
@@ -747,10 +813,9 @@ class App(tk.Tk):
             src_img = self.ebsd_data[ebsd_mode][0]
             warped_src_img = transform.warp(src_img, tform, mode="constant", cval=0, order=0, output_shape=dst_img_shape)
             warped_srcs.append(warped_src_img)
-        print([img.shape for img in warped_srcs])
 
         # Crop to the center of the corrected image if desired
-        if crop_to_distorted_grid:
+        if crop_choice == "src":
             print("Cropping to match source (EBSD) grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
             dummy = np.ones(src_img_shape)
@@ -759,9 +824,14 @@ class App(tk.Tk):
             rslc, cslc = self._get_cropping_slice((rc, cc), src_img_shape, dst_img_shape)
             dst_imgs = [img[rslc, cslc] for img in dst_imgs]
             warped_srcs = [img[rslc, cslc] for img in warped_srcs]
+        elif crop_choice == "dst":
+            print("Cropping to match destination grid")
+            warped_srcs = [img[:dst_img_shape[0], :dst_img_shape[1]] for img in warped_srcs]
+        else:
+            print("Not cropping, leaving destination and warped source as is.")
 
         print("Finished processing")
-        return np.array(dst_imgs), np.array(warped_srcs), warping.get_transform_params(tform)
+        return dst_imgs, warped_srcs
 
     def clahe(self, viewer):
         if viewer == "ebsd":
@@ -906,6 +976,69 @@ class ProgressWindow(tk.Toplevel):
         self.progress = ttk.Progressbar(self.f, orient="horizontal", length=300, mode="indeterminate")
         self.progress.grid(row=1, column=0, sticky="nsew", padx=2, pady=2)
         self.progress.start()
+
+
+class ArbitraryMessageBox(object):
+    # Adapted from 
+    # https://stackoverflow.com/questions/29619418/how-to-create-a-custom-messagebox-using-tkinter-in-python-with-changing-message
+    def __init__(self, master, title='Mess', msg='', options=["OK"], orientation="horizontal"):
+        # Required Data of Init Function
+        self.master = master
+        self.title = title
+        self.msg = msg
+        self.options = options
+        n_options = len(self.options)
+        self.choice = ''
+
+        # Just the colors for my messagebox
+        self.bgcolor = self.master.bg
+        self.bgcolor2 = self.master.hl
+        self.textcolor = self.master.fg
+
+        # Creating Dialogue for messagebox
+        self.root = tk.Toplevel(self.master)
+        self.root.title(self.title)
+        # self.root.geometry("300x120+100+100")
+        self.root.rowconfigure(0, weight=2)
+        self.root.rowconfigure(1, weight=1)
+        self.root.columnconfigure(list(range(n_options)), weight=1)
+    
+        # Setting Background color of Dialogue
+        self.root.config(bg=self.bgcolor)
+
+        # Creating Label For message
+        self.msg = tk.Label(self.root, text=msg)
+        if orientation == "horizontal":
+            self.msg.grid(row=0, column=0, columnspan=n_options, padx=10, pady=10)
+        elif orientation == "vertical":
+            self.msg.grid(row=0, column=0, padx=10, pady=10)
+
+        # Creating Buttons
+        if orientation == "horizontal":
+            rows = [1 for _ in range(n_options)]
+            columns = list(range(n_options))
+        elif orientation == "vertical":
+            rows = list(range(1, n_options + 1))
+            columns = [0 for _ in range(n_options)]
+        for i in range(n_options):
+            B = tk.Button(self.root, text=self.options[i], command=lambda i=i: self.click(i))
+            B.grid(row=rows[i], column=columns[i], padx=10, pady=10, sticky="nsew")
+
+        # Making MessageBox Visible
+        self.root.resizable(0,0)
+        self.root.protocol("WM_DELETE_WINDOW", self.closed)
+        self.root.wait_window()
+
+    # Function on Closeing MessageBox
+    def closed(self):
+        self.root.destroy()
+        self.choice = False
+        
+    # Function on pressing B1
+    def click(self, i):
+        self.root.destroy()
+        self.choice = i
+
 
 
 if __name__ == "__main__":
