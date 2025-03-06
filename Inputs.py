@@ -494,7 +494,36 @@ def read_ang(path):
         else:
             out[key] = out[key].transpose((1, 0, 2))
         out[key] = out[key].reshape((1,) + out[key].shape)
+    
+    # Get the grain file if it exists
+    dirname = os.path.dirname(path)
+    basenames = [os.path.splitext(os.path.basename(path))[0] + "_Grain.txt",
+                 os.path.splitext(os.path.basename(path))[0] + "_grain.txt"]
+    grain_file_exists = [os.path.exists(os.path.join(dirname, basename)) for basename in basenames]
+    if any(grain_file_exists):
+        grain_path = os.path.join(dirname, basenames[grain_file_exists.index(True)])
+        grain_data = read_grainFile(grain_path)
+        out["GrainIDs"] = grain_data.reshape((1,) + (nrows, ncols))
     return out, res
+
+def read_grainFile(path):
+    with open(path, "r") as f:
+        for line in f:
+            if line[0] != "#":
+                break
+            if "Grain ID" in line:
+                column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
+                break
+    grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
+    f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
+    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(int)
+    grainIDs[grainIDs <= 0] = 0
+    # Randomize grain IDs
+    # unique_grainIDs = np.unique(grainIDs)
+    # unique_grainIDs[1:] = np.random.permutation(unique_grainIDs[1:])
+    # for i, gid in enumerate(unique_grainIDs):
+    #     grainIDs[grainIDs == gid] = i
+    return grainIDs
 
 def read_h5(path):
     h5 = h5py.File(path, "r")
@@ -546,7 +575,10 @@ def read_many_images(path, ext):
     return imgs
 
 def read_points(path):
-    points = np.loadtxt(path, delimiter=" ", dtype=int)
+    points = np.loadtxt(path, dtype=int)
+    if points.shape[1] != 3:
+        print("No z value found in the points file. Assuming all points are in the same slice.")
+        points = np.hstack((np.zeros((points.shape[0], 1)), points))
     if points.ndim == 1:
         points = points.reshape((1, -1))
     z, y, x = points[:, 0], points[:, 1], points[:, 2]

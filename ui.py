@@ -6,12 +6,12 @@ UI for running distortion correction
 
 # Python packages
 import os
+from pathlib import Path
 # from threading import Thread
 from multiprocessing.pool import ThreadPool
 import shutil
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
-import traceback
 from copy import deepcopy
 
 # 3rd party packages
@@ -19,29 +19,43 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import io, exposure, transform
+import torch
+from torchvision.transforms.functional import resize as RESIZE
+from torchvision.transforms import InterpolationMode
+from kornia.enhance import equalize_clahe
 
 # Local files
 import core
 import Inputs
 import InteractiveView as IV
 
-### TODO: Fix cropping in output
+
+def CLAHE(im, clip_limit=20.0, kernel_size=(8, 8)):
+    tensor = torch.tensor(im).unsqueeze(0).unsqueeze(0).float()
+    tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
+    tensor = equalize_clahe(tensor, clip_limit, kernel_size)
+    tensor = torch.round(255 * (tensor - tensor.min()) / (tensor.max() - tensor.min()),
+                         decimals=0)
+    return np.squeeze(tensor.detach().numpy().astype(np.uint8)).reshape(im.shape)
+
+
 class App(tk.Tk):
     def __init__(self, screenName=None, baseName=None):
         super().__init__(screenName, baseName)
         self._style_call("dark")
-        # handle main folder
+        #
+        # Starting stuff
         self.update_idletasks()
         self.withdraw()
         self.folder = os.getcwd()
         self.deiconify()
         self.title("Distortion Correction")
-        # Setup structure of window
-        # frames
-        # frame_w = 1920
-        # frame_h = 1080
-        # self.geometry(f"{frame_w}x{frame_h}")
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        # self.geometry(f"{int(screen_width*2/3)}x{int(screen_height*2/3)}")
         self.resizable(False, False)
+        #
+        # Frames
         self.columnconfigure((0, 2), weight=5)
         self.columnconfigure(1, weight=1)
         self.rowconfigure((0, 4), weight=5)
@@ -78,10 +92,9 @@ class App(tk.Tk):
         applymenu = tk.Menu(self.menu, tearoff=0)
         applymenu.add_command(label="TPS", command=lambda: self.apply("TPS"))
         applymenu.add_command(label="TPS 3D", command=lambda: self.apply_3D("TPS"))
-        dole_state = {True: "normal", False: "disabled"}[core.TORCH_INSTALLED]
-        applymenu.add_command(label="DoLE", command=self.automatic_apply, state=dole_state)
         self.menu.add_cascade(label="View", menu=applymenu, state="disabled")
         self.config(menu=self.menu)
+        #
         # setup top
         self.show_points = tk.IntVar()
         self.show_points.set(1)
@@ -122,13 +135,8 @@ class App(tk.Tk):
         # setup viewer_left
         l = ttk.Label(self.viewer_left, text="EBSD/Distorted image", anchor=tk.CENTER)
         l.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=600, height=600)
+        self.ebsd = tk.Canvas(self.viewer_left, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.45), height=int(screen_height*.7))
         self.ebsd.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
-        if os.name == 'posix':
-            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
-        else:
-            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
-        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
         self.ebsd_hscroll = ttk.Scrollbar(self.viewer_left, orient=tk.HORIZONTAL, command=self.ebsd.xview, cursor="sb_h_double_arrow")
         self.ebsd_hscroll.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         self.ebsd_vscroll = ttk.Scrollbar(self.viewer_left, orient=tk.VERTICAL, command=self.ebsd.yview, cursor="sb_v_double_arrow")
@@ -138,18 +146,37 @@ class App(tk.Tk):
         # setup viewer right
         l = ttk.Label(self.viewer_right, text="BSE/Control image", anchor=tk.CENTER)
         l.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=600, height=600)
+        self.bse = tk.Canvas(self.viewer_right, highlightbackground=self.bg, bg=self.bg, bd=1, highlightthickness=0.2, cursor='tcross', width=int(screen_width*.45), height=int(screen_height*.7))
         self.bse.grid(row=1, column=0, pady=5, padx=5, sticky="nsew")
-        if os.name == 'posix':
-            self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
-        else:
-            self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
-        self.bse.bind("<ButtonPress-1>", lambda arg: self.add_coords("bse", arg))
         self.bse_hscroll = ttk.Scrollbar(self.viewer_right, orient=tk.HORIZONTAL, command=self.bse.xview, cursor="sb_h_double_arrow")
         self.bse_hscroll.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         self.bse_vscroll = ttk.Scrollbar(self.viewer_right, orient=tk.VERTICAL, command=self.bse.yview, cursor="sb_v_double_arrow")
         self.bse_vscroll.grid(row=1, column=1, sticky="ns", padx=5, pady=5)
         self.bse.config(xscrollcommand=self.bse_hscroll.set, yscrollcommand=self.bse_vscroll.set)
+        #
+        # Bindings on viewers
+        if os.name == 'posix':
+            self.ebsd.bind("<Button 2>", lambda arg: self.remove_coords("ebsd", arg))
+            self.ebsd.bind('<MouseWheel>', lambda event: self.ebsd.yview_scroll(int(-1*(event.delta)), "units"))
+            self.ebsd.bind('<Shift-MouseWheel>', lambda event: self.ebsd.xview_scroll(int(-1*(event.delta)), "units"))
+            self.bse.bind("<Button 2>", lambda arg: self.remove_coords("bse", arg))
+            self.bse.bind('<MouseWheel>', lambda event: self.bse.yview_scroll(int(-1*(event.delta)), "units"))
+            self.bse.bind('<Shift-MouseWheel>', lambda event: self.bse.xview_scroll(int(-1*(event.delta)), "units"))
+        else:
+            self.ebsd.bind("<Button 3>", lambda arg: self.remove_coords("ebsd", arg))
+            self.ebsd.bind("<MouseWheel>", lambda event: self.ebsd.yview_scroll(int(-1*(event.delta/120)), "units"))
+            self.ebsd.bind("<Shift-MouseWheel>", lambda event: self.ebsd.xview_scroll(int(-1*(event.delta/120)), "units"))
+            self.bse.bind("<Button 3>", lambda arg: self.remove_coords("bse", arg))
+            self.bse.bind("<MouseWheel>", lambda event: self.bse.yview_scroll(int(-1*(event.delta/120)), "units"))
+            self.bse.bind("<Shift-MouseWheel>", lambda event: self.bse.xview_scroll(int(-1*(event.delta/120)), "units"))
+        self.ebsd.bind("<ButtonPress-1>", lambda arg: self.add_coords("ebsd", arg))
+        self.bse.bind("<ButtonPress-1>", lambda arg: self.add_coords("bse", arg))
+        self.bind('<Control-equal>', lambda event: self.change_zoom_event(+1), "units")
+        self.bind('<Control-minus>', lambda event: self.change_zoom_event(-1), "units")
+        # self.ebsd.bind('<Control-equal>', lambda event: self.change_zoom_event(+1, "ebsd"), "units")
+        # self.ebsd.bind('<Control-minus>', lambda event: self.change_zoom_event(-1, "ebsd"), "units")
+        # self.bse.bind('<Control-equal>', lambda event: self.change_zoom_event(+1, "bse"), "units")
+        # self.bse.bind('<Control-minus>', lambda event: self.change_zoom_event(-1, "bse"), "units")
         #
         # setup bottom left
         self.clear_ebsd_points = ttk.Button(self.bot_left, text="Clear points", command=lambda: self.clear_points("ebsd"), state="disabled")
@@ -184,7 +211,7 @@ class App(tk.Tk):
         sep.grid(row=0, column=2, sticky="ns")
 
         # Setup resizing
-        self.resize_options = [25, 50, 75, 100, 125, 150, 175, 200, 300, 400, 500]
+        self.resize_options = [1, 5, 10, 25, 50, 75, 100, 125, 150, 175, 200, 300, 400, 600]
         self.resize_var_ebsd = tk.StringVar()
         self.resize_var_bse = tk.StringVar()
         self.resize_var_ebsd.set(self.resize_options[3])
@@ -208,11 +235,6 @@ class App(tk.Tk):
         ### Additional things added
         self.points = {"ebsd": {}, "bse": {}}
         self.points_path = {"ebsd": "", "bse": ""}
-
-    # def report_callback_exception(self, exc, val, tb):
-    #     message = "Error Encountered:\n\n"
-    #     message += "".join(traceback.format_exception(exc, val, tb))
-    #     messagebox.showerror("Error", message=val)
     
     def _thread_function(self, function, *args):
         output = function(*args)
@@ -227,12 +249,21 @@ class App(tk.Tk):
         self.wait_window(self.w)
         return output.get()
 
+    def change_zoom_event(self, change):
+        print("Changing zoom !", change)
+        index = self.resize_options.index(int(self.resize_var_bse.get()))
+        index = max(0, min(len(self.resize_options) - 1, index + change))
+        self.resize_var_bse.set(self.resize_options[index])
+        index = self.resize_options.index(int(self.resize_var_ebsd.get()))
+        index = max(0, min(len(self.resize_options) - 1, index + change))
+        self.resize_var_ebsd.set(self.resize_options[index])
+
     ### IO
     def easy_start(self):
-        ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/EBSD.ang"
-        ebsd_points_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/distorted_pts.txt"
-        bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
-        bse_points_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/control_pts.txt"
+        ebsd_path = "./test_data/EBSD.ang"
+        ebsd_points_path = "./test_data/distorted_pts.txt"
+        bse_path = "./test_data/BSE.tif"
+        bse_points_path = "./test_data/control_pts.txt"
         # ebsd_points_path = "D:/Research/scripts/Alignment/CoNi67/distorted_pts.txt"
         # bse_points_path = "D:/Research/scripts/Alignment/CoNi67/control_pts.txt"
         # ebsd_path = "D:/Research/scripts/Alignment/CoNi67/CoNi67_aligned.dream3d"
@@ -321,7 +352,6 @@ class App(tk.Tk):
             else:
                 return
         
-
     def _handle_input(self, ebsd_path, bse_path, e_d, b_d, ebsd_points_path, bse_points_path, e_pts, b_pts, ebsd_res, bse_res):
         # Set the data
         self.points_path = {"ebsd": ebsd_points_path, "bse": bse_points_path}
@@ -528,45 +558,32 @@ class App(tk.Tk):
                 im2 = im2_temp
             return im2
     
-    def automatic_apply(self):
-        i = self.slice_num.get()
-        if self.clahe_active:
-            im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.1)
-        else:
-            im0 = self.bse_imgs[int(self.slice_num.get())]
-        im1 = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
-        im0 = self._check_sizes(im1, im0)
-        im1_small = self._check_sizes(im1, im1)
-        im1 = np.zeros(im0.shape, dtype=im1.dtype)
-        im1[:im1_small.shape[0], :im1_small.shape[1]] = im1_small[:, :, 0]
-        homography, src_pts, dst_pts, mask, inliers, lafs = self._run_in_background("Calculating homography...", core.do_dole, im0, im1)
-        print(src_pts.shape, dst_pts.shape, mask.shape)
-        src_good = src_pts[mask]
-        dst_good = dst_pts[mask]
-        fig, ax = plt.subplots(1, 2)
-        ax[0].imshow(im0, cmap="gray")
-        ax[1].imshow(im1, cmap="gray")
-        colors = plt.cm.jet(np.linspace(0, 1, len(src_good)))
-        for i in range(len(src_good)):
-            ax[0].scatter(src_good[i, 1], src_good[i, 0], 10, color=colors[i], marker="o")
-            ax[1].scatter(dst_good[i, 1], dst_good[i, 0], 10, color=colors[i], marker="o")
-        plt.savefig("test.png")
-        plt.close("all")
-        im1 = transform.warp(im1, homography, output_shape=im0.shape)
-        IV.Interactive2D(im0, im1, "2D Homography Correction")
-
-
     def apply(self, algo="TPS"):
         """Applies the correction algorithm and calls the interactive view"""
-        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
+        result = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the corrected output to match the distorted grid?")
         if result is None:
             return
+        im0, im1 = self._run_in_background("Applying correction...", self._apply, algo, result)
+        if (im0.shape[0] > 2000) or (im0.shape[1] > 2000):
+            result = tk.messagebox.askyesnocancel("Resize?", "The images are large, would you like to resize for the preview? (Recommended)")
+            if result is None:
+                pass
+            if result:
+                scale = int(max(im0.shape) / 2000)
+                im0 = im0[::scale, ::scale]
+                im1 = im1[::scale, ::scale]
+        # View
+        print("Creating interactive view")
+        IV.Interactive2D(im0, im1, "2D TPS Correction")
+        plt.close("all")
+
+    def _apply(self, algo, crop_to_distorted_grid):
         i = self.slice_num.get()
         # Get the bse and ebsd images
+        im0 = self.bse_imgs[int(self.slice_num.get())]
         if self.clahe_active:
-            im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
-        else:
-            im0 = self.bse_imgs[int(self.slice_num.get())]
+            # im0 = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
+            im0 = CLAHE(im0)
         ebsd_im = self.ebsd_data[self.ebsd_mode.get()][i, :, :]
         # Get the points and performa alignment
         referencePoints = np.array(self.points["bse"][i])
@@ -578,7 +595,7 @@ class App(tk.Tk):
         im0 = self._check_sizes(ebsd_im, im0)
         im1 = self._check_sizes(ebsd_im, im1)
         # Make sure there are no axes that are larger than the EBSD data (if there is, crop that axis, making sure to keep everything centered)
-        if result:
+        if crop_to_distorted_grid:
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
             dummy = np.ones(ebsd_im.shape)
             rc, cc = self._get_corrected_centroid(dummy, align)
@@ -589,17 +606,21 @@ class App(tk.Tk):
             im0 = im0[rslc, cslc]
             im1 = im1[rslc, cslc]
             print("Details", rslc, cslc, im1.shape, im0.shape, ebsd_im.shape)
-        # View
-        print("Creating interactive view")
-        IV.Interactive2D(im0, im1, "2D TPS Correction")
-        plt.close("all")
+        return im0, im1
 
     def apply_3D(self, algo="LR"):
         """Applies the correction algorithm and calls the interactive view"""
         crop_to_dist_grid = tk.messagebox.askyesnocancel("Crop?", "Would you like to crop the output to match the distorted grid (usually yes)?")
         if crop_to_dist_grid is None:
             return
-        self.config(cursor="watch")
+        bse_stack, ebsd_cStack = self._run_in_background("Applying correction...", self._apply_3D, algo, result)
+        # View
+        print("Creating interactive view")
+        # Make the cursor normal again
+        IV.Interactive3D(bse_stack, ebsd_cStack, "3D TPS Correction")
+        plt.close("all")
+
+    def _apply_3D(self, algo, crop_to_ebsd_grid):
         points = self.points
         ebsd_stack = np.sum(self.ebsd_data[self.ebsd_mode.get()][...], axis=3)
         ebsd_stack[ebsd_stack > 0] = np.sqrt(ebsd_stack[ebsd_stack > 0])
@@ -615,7 +636,7 @@ class App(tk.Tk):
         bse_stack = self._check_sizes(ebsd_stack, bse_stack, ndims=3)
         ebsd_cStack = self._check_sizes(ebsd_stack, ebsd_cStack, ndims=3)
         # Handle cropping and centering
-        if crop_to_dist_grid:
+        if crop_to_ebsd_grid:
             dummy = np.ones(ebsd_stack.shape)
             rc, cc = self._get_corrected_centroid(dummy, align, points)
             print("Centroid:", rc, cc)
@@ -625,12 +646,7 @@ class App(tk.Tk):
             ebsd_cStack = ebsd_cStack[:, rslc, cslc]
             bse_stack = bse_stack[:, rslc, cslc]
             print("Details", rslc, cslc, ebsd_cStack.shape, bse_stack.shape, ebsd_stack.shape)
-        # View
-        print("Creating interactive view")
-        # Make the cursor normal again
-        self.config(cursor="")
-        IV.Interactive3D(bse_stack, ebsd_cStack, "3D TPS Correction")
-        plt.close("all")
+        return bse_stack, ebsd_cStack
 
     ### Apply stuff for exporting
     def apply_correction_to_h5(self, algo):
@@ -721,10 +737,10 @@ class App(tk.Tk):
         distortedPoints = np.array(self.points["ebsd"][i])
         align = core.Alignment(referencePoints, distortedPoints, algorithm=algo)
         # Get BSE
+        bse_im = self.bse_imgs[int(self.slice_num.get())]
         if self.clahe_active:
-            bse_im = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
-        else:
-            bse_im = self.bse_imgs[int(self.slice_num.get())]
+            # bse_im = exposure.equalize_adapthist(self.bse_imgs[int(self.slice_num.get())], clip_limit=0.03)
+            bse_im = CLAHE(bse_im)
         # Create the output filename
         SAVE_PATH_EBSD = filedialog.asksaveasfilename(initialdir=os.path.basename(self.ebsd_path), title="Save corrected (from distorted) image", filetypes=[("TIF", "*.tif"), ("TIFF", "*.tiff"), ("ANG", "*.ang"), ("All files", "*.*")], defaultextension=".tiff")
         extension = os.path.splitext(SAVE_PATH_EBSD)[1]
@@ -737,8 +753,10 @@ class App(tk.Tk):
             if extension != ".ang":
                 # Get the images
                 ebsd_im = np.squeeze(self.ebsd_data[self.ebsd_mode.get()][int(self.slice_num.get())])
+                print("EBSD image grabbed")
                 # Align the image
                 align.get_solution(size=bse_im.shape)
+                print("Alignment solution found")
                 if len(ebsd_im.shape) == 3:
                     aligned = []
                     for i in range(ebsd_im.shape[-1]):
@@ -746,12 +764,15 @@ class App(tk.Tk):
                     aligned = np.moveaxis(np.array(aligned), 0, -1)
                 else:
                     aligned = align.apply(ebsd_im, out="array")
+                print("EBSD image aligned")
                 # Correct dtype
                 if aligned.dtype != ebsd_im.dtype:
                     aligned = core.handle_dtype(aligned, ebsd_im.dtype)
+                    print("EBSD image dtype corrected")
                 # Correct shape
                 aligned = self._check_sizes(ebsd_im, aligned)
                 bse_im = self._check_sizes(ebsd_im, bse_im)
+                print("EBSD image shape corrected")
                 if result:
                     # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
                     dummy = np.ones(ebsd_im.shape)
@@ -760,8 +781,10 @@ class App(tk.Tk):
                     rslc, cslc = self._get_cropping_slice((rc, cc), ebsd_im.shape, aligned.shape)
                     aligned = aligned[rslc, cslc]
                     bse_im = bse_im[rslc, cslc]
+                    print("EBSD image cropped")
                 # Save the image
                 io.imsave(SAVE_PATH_EBSD, aligned)
+                print("EBSD image saved")
             else:
                 data = deepcopy(self.ebsd_data)
                 del data["EulerAngles"]
@@ -889,7 +912,9 @@ class App(tk.Tk):
         # print(f"Updating viewers for slice {i} and mode {key}")
         bse_im = self.bse_imgs[i]
         ebsd_im = self.ebsd_data[key][i]
-        if self.clahe_active: bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)
+        if self.clahe_active:
+            # bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)
+            bse_im = CLAHE(bse_im)
         # Check if there are 3 dimensions in which the last one is not needed
         if len(ebsd_im.shape) == 3 and ebsd_im.shape[-1] == 1: ebsd_im = ebsd_im[:, :, 0]
         if len(bse_im.shape) == 3 and bse_im.shape[-1] == 1:   bse_im = bse_im[:, :, 0]
@@ -898,15 +923,29 @@ class App(tk.Tk):
         # Resize the images
         scale_ebsd = int(self.resize_vars["ebsd"].get()) / 100
         scale_bse = int(self.resize_vars["bse"].get()) / 100
-        if scale_ebsd != 1: ebsd_im = transform.resize(ebsd_im, (int(ebsd_im.shape[0] * scale_ebsd), int(ebsd_im.shape[1] * scale_ebsd)), anti_aliasing=True)
-        if scale_bse != 1: bse_im = transform.resize(bse_im, (int(bse_im.shape[0] * scale_bse), int(bse_im.shape[1] * scale_bse)), anti_aliasing=True)
+        if scale_ebsd != 1:
+            _t = torch.tensor(ebsd_im).unsqueeze(0).unsqueeze(0).float()
+            _out = RESIZE(_t, (int(ebsd_im.shape[0] * scale_ebsd), int(ebsd_im.shape[1] * scale_ebsd)), InterpolationMode.NEAREST)
+            ebsd_im = _out.detach().squeeze().numpy()
+        if scale_bse != 1:
+            _t = torch.tensor(bse_im).unsqueeze(0).unsqueeze(0).float()
+            _out = RESIZE(_t, (int(bse_im.shape[0] * scale_bse), int(bse_im.shape[1] * scale_bse)), InterpolationMode.NEAREST)
+            bse_im = _out.detach().squeeze().numpy()
+        # if scale_ebsd != 1: ebsd_im = transform.resize(ebsd_im, (int(ebsd_im.shape[0] * scale_ebsd), int(ebsd_im.shape[1] * scale_ebsd)), anti_aliasing=False)
+        # if scale_bse != 1: bse_im = transform.resize(bse_im, (int(bse_im.shape[0] * scale_bse), int(bse_im.shape[1] * scale_bse)), anti_aliasing=False)
         # Ensure dtype is uint8, accounting for RGB or greyscale
-        if ebsd_im.ndim == 3 and ebsd_im.dtype != np.uint8:   self.ebsd_im = np.around(255 * (ebsd_im - ebsd_im.min(axis=(0, 1))) / (ebsd_im.max(axis=(0, 1)) - ebsd_im.min(axis=(0, 1))), 0).astype(np.uint8)
-        elif ebsd_im.ndim == 2 and ebsd_im.dtype != np.uint8: self.ebsd_im = np.around(255 * (ebsd_im - ebsd_im.min()) / (ebsd_im.max() - ebsd_im.min()), 0).astype(np.uint8)
-        else: self.ebsd_im = ebsd_im
-        if bse_im.ndim == 3 and bse_im.dtype != np.uint8:     self.bse_im = np.around(255 * (bse_im - bse_im.min(axis=(0, 1))) / (bse_im.max(axis=(0, 1)) - bse_im.min(axis=(0, 1))), 0).astype(np.uint8)
-        elif bse_im.ndim == 2 and bse_im.dtype != np.uint8:   self.bse_im = np.around(255 * (bse_im - bse_im.min()) / (bse_im.max() - bse_im.min()), 0).astype(np.uint8)
-        else: self.bse_im = bse_im
+        if ebsd_im.ndim == 3 and ebsd_im.dtype != np.uint8:
+            self.ebsd_im = np.around(255 * (ebsd_im - ebsd_im.min(axis=(0, 1))) / (ebsd_im.max(axis=(0, 1)) - ebsd_im.min(axis=(0, 1))), 0).astype(np.uint8)
+        elif ebsd_im.ndim == 2 and ebsd_im.dtype != np.uint8:
+            self.ebsd_im = np.around(255 * (ebsd_im - ebsd_im.min()) / (ebsd_im.max() - ebsd_im.min()), 0).astype(np.uint8)
+        else:
+            self.ebsd_im = ebsd_im
+        if bse_im.ndim == 3 and bse_im.dtype != np.uint8:
+            self.bse_im = np.around(255 * (bse_im - bse_im.min(axis=(0, 1))) / (bse_im.max(axis=(0, 1)) - bse_im.min(axis=(0, 1))), 0).astype(np.uint8)
+        elif bse_im.ndim == 2 and bse_im.dtype != np.uint8:
+            self.bse_im = np.around(255 * (bse_im - bse_im.min()) / (bse_im.max() - bse_im.min()), 0).astype(np.uint8)
+        else:
+            self.bse_im = bse_im
         # Update the images and draw points
         self.bse.delete("all")
         self.ebsd.delete("all")
