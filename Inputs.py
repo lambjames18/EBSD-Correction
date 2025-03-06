@@ -14,6 +14,7 @@ from PIL import Image, ImageTk
 
 class DataInput(object):
     def __init__(self, parent, mode="3D"):
+        # Variables
         self.parent = parent
         self.mode = mode
         self.ebsd_path = ""
@@ -22,6 +23,9 @@ class DataInput(object):
         self.bse_points_path = ""
         self.directory = os.getcwd()
         self.clean_exit = False
+        self.ang = False
+
+        # Create the toplevel
         self.w = tk.Toplevel(parent)
         self.w.attributes("-topmost", True)
         self.w.title(f"Open {self.mode} Data")
@@ -266,10 +270,9 @@ class DataSummary(object):
         # BSE data
         self.bse_dims = ttk.Label(self.right, text=f"{self.bse_dims[0]} x {self.bse_dims[1]} x {self.bse_dims[2]}")
         self.bse_dims.grid(row=0, column=1, sticky="nsew")
-        self.bse_modalities = ttk.Label(self.right, text="Intensity")
-        ### TODO: Add BSE modalities
-        # self.bse_modalities = ttk.Combobox(self.right, values=self.bse_modalities, state="readonly", width=20)
+        self.bse_modalities = ttk.Combobox(self.right, values=self.bse_modalities, state="readonly", width=20)
         self.bse_modalities.grid(row=1, column=1, sticky="nsew")
+        self.bse_modalities.current(0)
         if self.bse_points is None:
             self.bse_points = ttk.Label(self.right, text="None")
         else:
@@ -305,12 +308,9 @@ class DataSummary(object):
 
     def parse_data(self, ebsd_data, bse_data, ebsd_points, bse_points):
         self.ebsd_modalities = list(ebsd_data.keys())
-        ### TODO: Add BSE modalities
-        # self.bse_modalities = list(bse_data.keys())
+        self.bse_modalities = list(bse_data.keys())
         self.ebsd_dims = ebsd_data[self.ebsd_modalities[0]].shape
-        ### TODO: Add BSE modalities
-        # self.bse_dims = bse_data[self.bse_modalities[0]].shape
-        self.bse_dims = bse_data.shape
+        self.bse_dims = bse_data[self.bse_modalities[0]].shape
         if ebsd_points is None:
             self.ebsd_points = None
         else:
@@ -457,27 +457,33 @@ class CropControl(object):
 # Functions for reading data
 ##########
 
-def read_ang(path):
-    """Reads an ang file into a numpy array"""
-    num_header_lines = 0
+def read_ang_header(path):
+    """Reads the header of an ang file"""
     col_names = None
+    header = ""
+    header_lines = 0
     with open(path, "r") as f:
         for line in f:
-            if line[0] == "#":
-                num_header_lines += 1
-                if "NCOLS_ODD" in line:
-                    ncols = int(line.split(": ")[1].strip())
-                elif "NROWS" in line:
-                    nrows = int(line.split(": ")[1].strip())
-                elif "COLUMN_HEADERS" in line:
-                    col_names = line.split(": ")[1].strip().split(", ")
-                elif "XSTEP" in line:
-                    res = float(line.split(": ")[1].strip())
-            else:
+            header += line
+            if "NCOLS_ODD" in line:
+                ncols = int(line.split(": ")[1].strip())
+            elif "NROWS" in line:
+                nrows = int(line.split(": ")[1].strip())
+            elif "COLUMN_HEADERS" in line:
+                col_names = line.replace("\n", "").split(": ")[1].strip().split(", ")
+            elif "XSTEP" in line:
+                res = float(line.split(": ")[1].strip())
+            elif "HEADER: End" in line:
                 break
+            header_lines += 1
     if col_names is None:
         col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
-    raw_data = np.genfromtxt(path, skip_header=num_header_lines)
+    return ncols, nrows, col_names, res, header, header_lines
+
+def read_ang(path):
+    """Reads an ang file into a numpy array"""
+    ncols, nrows, col_names, res, header, header_lines = read_ang_header(path)
+    raw_data = np.genfromtxt(path, skip_header=header_lines)
     n_entries = raw_data.shape[-1]
     if raw_data.shape[0] == ncols * nrows:
         data = raw_data.reshape((nrows, ncols, n_entries))
@@ -518,11 +524,6 @@ def read_grainFile(path):
     f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
     grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(int)
     grainIDs[grainIDs <= 0] = 0
-    # Randomize grain IDs
-    # unique_grainIDs = np.unique(grainIDs)
-    # unique_grainIDs[1:] = np.random.permutation(unique_grainIDs[1:])
-    # for i, gid in enumerate(unique_grainIDs):
-    #     grainIDs[grainIDs == gid] = i
     return grainIDs
 
 def read_h5(path):
@@ -559,7 +560,6 @@ def read_dream3d(path):
     return ebsd_data, res
 
 def read_many_images(path, ext):
-    ### TODO: Add multiple control images
     paths = sorted(
         [p for p in os.listdir(path) if os.path.splitext(p)[1] == ext],
         key=lambda x: int(x.replace(ext, "")),
@@ -596,6 +596,7 @@ def read_image(path):
 
 ##########
 def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
+    # Read in the EBSD data
     if ebsd_path.endswith(".ang"):
         print("Reading ang file")
         ebsd_data = read_ang(ebsd_path)[0]
@@ -611,16 +612,30 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         ebsd_data = {"Intensity": ebsd_data}
     else:
         raise ValueError(f"Unknown file type: {ebsd_path}")
+
+    # Read in the BSE data
     if "*" in bse_path:
-        print("Reading multiple BSE images")
+        # 3D data
         ext = os.path.splitext(bse_path)[1]
         folder = os.path.dirname(bse_path)
         bse_data = read_many_images(folder, ext)
         if bse_data.shape[0] != ebsd_data[list(ebsd_data.keys())[0]].shape[0]:
-            raise ValueError(f"The number of BSE images does not match the number of EBSD images. EBSD: {ebsd_data[list(ebsd_data.keys())[0]].shape[0]} BSE: {bse_data.shape[0]}")
+            raise ValueError("The number of BSE images does not match the number of EBSD images.")
+    elif ";" in bse_path:
+        # Multiple 2D images
+        paths = bse_path.split(";")
+        bse_data = [read_image(p) for p in paths]
+        bse_keys = [os.path.splitext(os.path.basename(p))[0] for p in paths]
+        common_prefix = os.path.commonprefix(bse_keys)
+        if common_prefix != "":
+            bse_keys = [k.replace(common_prefix, "") for k in bse_keys]
+        bse_data = {bse_keys[i]: bse_data[i] for i in range(len(bse_data))}
     else:
-        print("Reading BSE image")
+        # Single 2D image
         bse_data = read_image(bse_path)
+        bse_data = {"Intensity": bse_data}
+
+    # Read in the control points
     if ebsd_points_path == "":
         ebsd_points = None
     else:
@@ -629,15 +644,26 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         bse_points = None
     else:
         bse_points = read_points(bse_points_path)
+
     return ebsd_data, bse_data, ebsd_points, bse_points
 
 def rescale_control(bse_data, bse_res, ebsd_res):
     downscale = bse_res / ebsd_res
     print("Current BSE resolution:", bse_res, "Target EBSD resolution:", ebsd_res)
     print("BSE needs to be downscaled by a factor of", downscale, "to match EBSD resolution.")
-    rescaled_bse = np.array([tf.rescale(bse_data[i], downscale, anti_aliasing=True) for i in range(bse_data.shape[0])])
-    rescaled_bse = np.around(255 * (rescaled_bse - rescaled_bse.min()) / (rescaled_bse.max() - rescaled_bse.min()), 0).astype(np.uint8)
-    return rescaled_bse
+    for key in bse_data.keys():
+        temp = np.array([tf.rescale(bse_data[key][i], downscale, anti_aliasing=True) for i in range(bse_data[key].shape[0])])
+        bse_data[key] = np.around(255 * (temp - temp.min()) / (temp.max() - temp.min()), 0).astype(np.uint8)
+    return bse_data
+
+def flip_rotate_control(bse_data, flip, r180):
+    if flip:
+        for key in bse_data.keys():
+            bse_data[key] = np.flip(bse_data[key], axis=1).copy(order='C')
+    if r180:
+        for key in bse_data.keys():
+            bse_data[key] = np.rot90(bse_data[key], 2, axes=(1,2)).copy(order='C')
+    return bse_data
 
 def _style_call(self, style='dark'):
     if style == 'dark':

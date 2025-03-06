@@ -1,83 +1,68 @@
 import os
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from skimage import io
+from skimage import io, transform
+
+import warping
+import tps
 
 
-def read_ang(path):
-    """Reads an ang file into a numpy array"""
-    num_header_lines = 0
-    col_names = None
-    with open(path, "r") as f:
-        for line in f:
-            if line[0] == "#":
-                num_header_lines += 1
-                if "NCOLS_ODD" in line:
-                    ncols = int(line.split(": ")[1].strip())
-                elif "NROWS" in line:
-                    nrows = int(line.split(": ")[1].strip())
-                elif "COLUMN_HEADERS" in line:
-                    col_names = line.split(": ")[1].strip().split(", ")
-                elif "XSTEP" in line:
-                    res = float(line.split(": ")[1].strip())
-            else:
-                break
-    if col_names is None:
-        col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
-    raw_data = np.genfromtxt(path, skip_header=num_header_lines)
-    n_entries = raw_data.shape[-1]
-    if raw_data.shape[0] == ncols * nrows:
-        data = raw_data.reshape((nrows, ncols, n_entries))
-    elif raw_data.shape != ncols * nrows:
-        raise ValueError(f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). ")
-        
-    out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
-    out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    for key in out.keys():
-        if key not in ["EulerAngles"]:
-            out[key] = np.fliplr(np.rot90(out[key], k=3))
-        if len(out[key].shape) == 2:
-            out[key] = out[key].T
-        else:
-            out[key] = out[key].transpose((1, 0, 2))
-        out[key] = out[key].reshape((1,) + out[key].shape)
-    
-    # Get the grain file if it exists
-    dirname = os.path.dirname(path)
-    basename = os.path.splitext(os.path.basename(path))[0] + "_Grain.txt"
-    if os.path.exists(os.path.join(dirname, basename)):
-        grain_path = os.path.join(dirname, basename)
-        grain_data = read_grainFile(grain_path)
-        out["GrainIDs"] = grain_data.reshape((1,) + (nrows, ncols))
-    return out, res
+# Get the reference image
+dst = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/Step0_image.tif"
+dshape = io.imread(dst).shape
 
+# Get the transformation parameters
+params = np.load("/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/pre-post-transform.npy")
+tform = tps.ThinPlateSplineTransform()
+tform._estimated = True
+tform.params = params
 
-def read_grainFile(path):
-    with open(path, "r") as f:
-        for line in f:
-            if line[0] != "#":
-                break
-            if "Grain ID" in line:
-                column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
-                break
-    grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
-    f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
-    grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(int)
-    grainIDs[grainIDs <= 0] = 0
-    # Randomize grain IDs
-    # unique_grainIDs = np.unique(grainIDs)
-    # unique_grainIDs[1:] = np.random.permutation(unique_grainIDs[1:])
-    # for i, gid in enumerate(unique_grainIDs):
-    #     grainIDs[grainIDs == gid] = i
-    return grainIDs
+# Set the cropping and rescaling
+s_res = 0.16276
+d_res = 0.06201
+ratio = s_res / d_res
+crop = (slice(2100, 7800), slice(5100, 11800))
 
+# Get the source data
+src = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/EBSD-SEM.h5"
+old_h5 = h5py.File(src, "r")
+# io.imsave("/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CBS_cropped_resized.tif", old_h5["CBS"][...][crop])
+# exit()
 
+# Create the new h5 file
+src_new = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/EBSD-SEM_aligned_HDIC.h5"
+new_h5 = h5py.File(src_new, "w")
+new_h5.attrs.create(name="resolution", data=old_h5.attrs["resolution"])
+new_h5.attrs.create(name="header", data=old_h5.attrs["header"])
 
-path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
-data, _ = read_ang(path)
+# keys = list(old_h5.keys())
+keys = ["GrainIDs", "CBS", "ETD", "PRIAS Center Square"]
 
-print(data.keys())
-fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
-ax[0].imshow(data["IQ"][0], cmap="gray")
-ax[1].imshow(data["GrainIDs"][0], cmap="viridis")
-plt.show()
+for key in keys:
+
+    print(f"Processing {key} ({keys.index(key) + 1}/{len(keys)})")
+    src = old_h5[key][...]
+    src = src[crop]
+    src = transform.warp(src, tform, output_shape=dshape, order=0, mode="constant", cval=0)
+
+    if not np.allclose(src.shape, dshape):
+        print(key, src.shape, dshape)
+        break
+
+    new_h5.create_dataset(name=key, data=src)
+    new_h5[key].attrs.create(name="name", data=key)
+    new_h5[key].attrs.create(name="dtype", data=str(src.dtype))
+    new_h5[key].attrs.create(name="shape", data=src.shape)
+
+keys = ["phi1", "PHI", "phi2"]
+src = np.dstack([old_h5[key][()] for key in keys])
+src = src[crop]
+src = transform.warp(src, tform, output_shape=dshape, order=0, mode="constant", cval=0)
+new_h5.create_dataset(name="EulerAngles", data=src)
+new_h5["EulerAngles"].attrs.create(name="name", data="EulerAngles")
+new_h5["EulerAngles"].attrs.create(name="dtype", data=str(src.dtype))
+new_h5["EulerAngles"].attrs.create(name="shape", data=src.shape)
+
+old_h5.close()
+new_h5.close()
