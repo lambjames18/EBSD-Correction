@@ -1,12 +1,11 @@
-
 from matplotlib.widgets import Slider, RadioButtons
 import matplotlib.pyplot as plt
-import numpy as np    
+import numpy as np
 
 
 class Interactive3D:
     def __init__(self, stack0, stack1, title="Interactive View") -> None:
-    # def Interactive3D(stack0, stack1, title="Interactive View"):
+        # def Interactive3D(stack0, stack1, title="Interactive View"):
         """Creates an interactive view of the overlay created from the control points and the selected correction algorithm"""
         self.stack0 = stack0
         self.stack1 = stack1
@@ -16,7 +15,8 @@ class Interactive3D:
         self.max_c = self.stack1.shape[2]
         self.max_s = self.stack0.shape[0] - 1
         self.alphas = np.ones(self.stack0.shape[1:3])
-        if self.max_s == 0: self.max_s = 1
+        if self.max_s == 0:
+            self.max_s = 1
         # Generate the figure
         self.create_figure()
         # Show images
@@ -62,7 +62,7 @@ class Interactive3D:
         axcol = plt.axes([left, bot - 0.05, width, 0.05])
         axcol.set_ylabel("Y split point", fontsize=10)
         axslice = plt.axes([left + width + 0.05, bot, 0.05, height])
-        axradio = plt.axes([left + width + 0.11, bot + 0.1, 0.05, height/2])
+        axradio = plt.axes([left + width + 0.11, bot + 0.1, 0.05, height / 2])
         axradio.set_title("Plane", fontsize=10)
         self.row_slider = Slider(
             ax=axrow,
@@ -108,7 +108,7 @@ class Interactive3D:
         self.col_slider.on_changed(self.update_col)
         self.slice_slider.on_changed(self.change_image)
         self.radio.on_clicked(self.change_plane)
-    
+
     # Define update functions
     def update_row(self, val):
         self.active = 0
@@ -250,13 +250,15 @@ def Interactive2D(im0, im1, title="Interactive View"):
 
 if __name__ == "__main__":
     from skimage import data, filters
+
     im0 = data.human_mitosis()
     print(im0.shape)
     im1 = filters.gaussian(im0, sigma=2)
     # Interactive2D(im0, im1)
 
-    stack0 = np.stack([im0 for i in range(100)]) * (np.arange(100)/100 + 1)[:, None, None]
+    stack0 = (
+        np.stack([im0 for i in range(100)]) * (np.arange(100) / 100 + 1)[:, None, None]
+    )
     stack1 = filters.gaussian(stack0, sigma=4)
+
     Interactive3D(stack0, stack1)
-
-

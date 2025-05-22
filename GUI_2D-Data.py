@@ -33,9 +33,8 @@ import Inputs
 import InteractiveView as IV
 
 
-# TODO: Get a better 3D dataset test case
-# TODO: Make sure everything works with 3D data
-#       Interactive view, exporting
+# ACB needs to be fixed with 3D data
+# Exporting 3D data has not been tested
 
 
 def CLAHE(im, clip_limit=20.0, kernel_size=(8, 8)):
@@ -95,12 +94,18 @@ class App(tk.Tk):
         filemenu.add_command(
             label="Open 2D", command=lambda: self.select_data_popup("2D")
         )
-        filemenu.add_command(label="Export 2D", command=self.apply_and_export_2d)
+        filemenu.add_command(
+            label="Export 2D", command=self.apply_and_export_2d, state="disabled"
+        )
         filemenu.add_command(
             label="Open 3D", command=lambda: self.select_data_popup("3D")
         )
-        filemenu.add_command(label="Export 3D", command=self.apply_and_export_3d)
-        filemenu.add_command(label="Export transform", command=self.export_transform)
+        filemenu.add_command(
+            label="Export 3D", command=self.apply_and_export_3d, state="disabled"
+        )
+        filemenu.add_command(
+            label="Export transform", command=self.export_transform, state="disabled"
+        )
         filemenu.add_command(label="Quick start", command=self.easy_start)
         self.menu.add_cascade(label="File", menu=filemenu)
         applymenu2d = tk.Menu(self.menu, tearoff=0)
@@ -546,7 +551,6 @@ class App(tk.Tk):
                 # Flip or rotate 180 if desired
                 if self.w.flip or self.w.r180:
                     b_d = Inputs.flip_rotate_control(b_d, self.w.flip, self.w.r180)
-                    b_d = np.flip(b_d, axis=1).copy(order="C")
                 # Crop if desired
                 if self.w.crop:
                     im = b_d[list(b_d.keys())[0]][0]
@@ -599,20 +603,33 @@ class App(tk.Tk):
         self.slice_min = 0
         self.slice_max = self.ebsd_data[self.ebsd_mode_options[0]].shape[0] - 1
         self.slice_num.set(self.slice_min)
-        # self.ebsd_cStack = np.zeros(self.ebsd_data[self.ebsd_mode_options[0]].shape)
-        # Configure UI
-        self.slice_picker["state"] = "readonly"
+        # Update slice picker values
         self.slice_picker["values"] = list(
             np.arange(self.slice_min, self.slice_max + 1)
         )
-        if self.slice_max == self.slice_min:  # 2D data
-            self.slice_picker["state"] = "disabled"
-            self.menu.entryconfig("Apply transform (all images)", state="disabled")
+        # Turn on GUI elements that are always on
         self.menu.entryconfig("View transform (current image)", state="normal")
+        self.menu.nametowidget(self.menu.entrycget("File", "menu")).entryconfig(
+            "Export transform", state="normal"
+        )
+        self.menu.nametowidget(self.menu.entrycget("File", "menu")).entryconfig(
+            "Export 2D", state="normal"
+        )
+        # self.menu.entryconfig("Export transform", state="normal")
+        # self.menu.entryconfig("Export 2D", state="normal")
         self.ebsd_picker["state"] = "readonly"
         self.ebsd_picker["values"] = self.ebsd_mode_options
         self.bse_picker["state"] = "readonly"
         self.bse_picker["values"] = self.bse_mode_options
+        # Turn on dimensionality specific elements
+        if self.slice_max == self.slice_min:  # 2D data
+            self.slice_picker["state"] = "disabled"
+        else:  # 3D data
+            self.slice_picker["state"] = "readonly"
+            self.menu.entryconfig("Apply transform (all images)", state="normal")
+            self.menu.nametowidget(self.menu.entrycget("File", "menu")).entryconfig(
+                "Export 3D", state="normal"
+            )
         # Finish
         self.folder = os.path.dirname(ebsd_path)
         self._update_viewers()
@@ -735,6 +752,8 @@ class App(tk.Tk):
         self._show_points()
 
     def write_coords(self):
+        if self.points_path["ebsd"] == "" or self.points_path["bse"] == "":
+            return
         for mode in ["ebsd", "bse"]:
             path = self.points_path[mode]
             data = []
@@ -1043,18 +1062,22 @@ class App(tk.Tk):
         """Applies the correction algorithm and calls the interactive view"""
         crop_choice = self._get_crop_choice()
 
-        im0, im1 = self._run_in_background(
-            "Applying correction...", self._apply_3d, crop_choice, mode
-        )
-        # im0, im1 = self._apply_3d(crop_choice, mode)
+        # im0, im1 = self._run_in_background(
+        #     "Applying correction...", self._apply_3d, crop_choice, mode
+        # )
+        im0, im1 = self._apply_3d(crop_choice, mode)
         if im0 is None or im1 is None:
             messagebox.showerror(
                 "Error",
                 "No points selected for the transformation. Please select points.",
             )
             return
+        if im1.ndim > im0.ndim:
+            im0 = np.repeat(im0[:, :, :, np.newaxis], im1.shape[-1], axis=-1)
         # View
         print("Creating interactive view")
+        print("im0 shape:", im0.shape)
+        print("im1 shape:", im1.shape)
         IV.Interactive3D(im0, im1, "3D TPS Correction")
         plt.close("all")
 
@@ -1454,32 +1477,40 @@ class App(tk.Tk):
 
         # Get images
         image_stack = self.ebsd_data[self.ebsd_mode.get()]
-        reference_stack = self.bse_data[self.bse_mode.get()]
+        reference_stack = np.squeeze(self.bse_data[self.bse_mode.get()])
         print("SRC shape:", image_stack.shape)
         print("DST shape:", reference_stack.shape)
 
         # Get points
         src_points = []
         dst_points = []
-        for k in src_points.keys():
+        for k in self.points["ebsd"].keys():
             src = np.array(self.points["ebsd"][k]).reshape(-1, 2)
             dst = np.array(self.points["bse"][k]).reshape(-1, 2)
             src = np.hstack((np.ones((src.shape[0], 1)) * k, src))
             dst = np.hstack((np.ones((dst.shape[0], 1)) * k, dst))
             src_points.extend(src)
             dst_points.extend(dst)
-        src_points = np.array(src_points)
-        dst_points = np.array(dst_points)
+        src_points = np.array(src_points).astype(int)
+        dst_points = np.array(dst_points).astype(int)
 
         # Transform the image stack
         if "tps" in mode.lower():
             corrected_stack = warping.transform_image_stack(
-                image_stack, src_points, dst_points, mode, order=0, size=dst_img_shape
+                image_stack,
+                src_points,
+                dst_points,
+                dst_img_shape,
+                mode,
+                order=0,
+                size=dst_img_shape,
             )
         else:
             corrected_stack = warping.transform_image_stack(
-                image_stack, src_points, dst_points, mode, order=0
+                image_stack, src_points, dst_points, dst_img_shape, mode, order=0
             )
+        print("Corrected stack shape:", corrected_stack.shape)
+        print("Reference stack shape:", reference_stack.shape)
 
         # Crop to the center of the corrected image if desired
         if crop_choice == "src":
@@ -1490,11 +1521,17 @@ class App(tk.Tk):
             )
             if "tps" in mode.lower():
                 corrected_stack = warping.transform_image_stack(
-                    dummy, src_points, dst_points, mode, order=0, size=dst_img_shape
+                    dummy,
+                    src_points,
+                    dst_points,
+                    dst_img_shape[1:3],
+                    mode,
+                    order=0,
+                    size=dst_img_shape,
                 )
             else:
                 corrected_stack = warping.transform_image_stack(
-                    dummy, src_points, dst_points, mode, order=0
+                    dummy, src_points, dst_points, dst_img_shape[1:3], mode, order=0
                 )
             zc, yc, xc = (
                 np.array(np.where(dummy)).reshape(3, -1).T.mean(axis=0).astype(int)

@@ -96,7 +96,9 @@ def transform_image(
     return warped
 
 
-def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
+def transform_image_stack(
+    images, srcs, dsts, output_shape=None, mode="tps", order=0, *args, **kwargs
+):
     """
     Transform a stack of images from source to destination using thin plate spline or affine transformation.
 
@@ -121,6 +123,8 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
     (N, H, W, C) ndarray
         Transformed images.
     """
+    if output_shape is None:
+        output_shape = images.shape[1:3]
     # Parse the slices, cappping the first and last slices with the closest slice with points if necessary
     # The first and last slice need to have points in order to the interpolation below to work
     # The user should select points in the first and last slice, but this is a workaround if they don't
@@ -158,6 +162,11 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
     # Linear interpolation is done between the knots
     # Could change this to a more advanced interpolation
     params = np.zeros((images.shape[0], *param_shape))
+    print(
+        slice_numbers_with_points.shape,
+        slice_numbers_with_points.dtype,
+        slice_numbers_with_points,
+    )
     for slice_number in slice_numbers_with_points:
         src = srcs[srcs[:, 0] == slice_number, 1:]
         dst = dsts[dsts[:, 0] == slice_number, 1:]
@@ -182,7 +191,7 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
             tf.warp(
                 images[i],
                 tform,
-                output_shape=images[i].shape,
+                output_shape=output_shape,
                 mode="constant",
                 cval=0,
                 order=order,
