@@ -790,10 +790,13 @@ def read_image(path):
 def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
     # Read in the EBSD data
     if ebsd_path.endswith(".ang"):
+        print("Reading ang file")
         ebsd_data = read_ang(ebsd_path)[0]
     elif ebsd_path.endswith(".h5"):
+        print("Reading h5 file")
         ebsd_data = read_h5(ebsd_path)[0]
     elif ebsd_path.endswith(".dream3d"):
+        print("Reading dream3d file")
         ebsd_data = read_dream3d(ebsd_path)[0]
     elif (
         ebsd_path.endswith(".tif")
@@ -801,6 +804,7 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         or ebsd_path.endswith(".png")
         or ebsd_path.endswith(".jpg")
     ):
+        print("Reading image file")
         ebsd_data = read_image(ebsd_path)
         ebsd_data = {"Intensity": ebsd_data}
     else:
@@ -816,6 +820,7 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
             raise ValueError(
                 "The number of BSE images does not match the number of EBSD images."
             )
+        bse_data = {"Intensity": bse_data}
     elif ";" in bse_path:
         # Multiple 2D images
         paths = bse_path.split(";")

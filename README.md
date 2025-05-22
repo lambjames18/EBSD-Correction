@@ -2,7 +2,7 @@
 
 Contains python files for correcting distorted EBSD images using reference BSE images.
 
-**This repository is under development (alpha) and there may be bugs. Please post an issue or email me (jlamb@ucsb.edu) if something is not working.**
+**Disclaimer: This codebase is under development. Although I try to update the README when changes are made, this does not always happen in a timely manner. Please post an issue if something is not working.**
 
 
 ## Usage

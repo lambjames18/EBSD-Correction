@@ -3,6 +3,7 @@ from skimage import transform as tf
 
 from tps import ThinPlateSplineTransform
 
+
 def get_transform(src, dst, mode, *args, **kwargs):
     if mode.lower() == "tps":
         tform = ThinPlateSplineTransform()
@@ -51,7 +52,17 @@ def transform_coords(src, dst, mode="tps", return_params=False, *args, **kwargs)
     return warped
 
 
-def transform_image(image, src, dst, output_shape=None, mode="tps", order=0, return_params=False, *args, **kwargs):
+def transform_image(
+    image,
+    src,
+    dst,
+    output_shape=None,
+    mode="tps",
+    order=0,
+    return_params=False,
+    *args,
+    **kwargs
+):
     """
     Transform an image from source to destination using thin plate spline or affine transformation.
 
@@ -77,13 +88,17 @@ def transform_image(image, src, dst, output_shape=None, mode="tps", order=0, ret
     if output_shape is None:
         output_shape = image.shape
     tform = get_transform(src, dst, mode, *args, **kwargs)
-    warped = tf.warp(image, tform, mode="constant", cval=0, order=order, output_shape=output_shape)
+    warped = tf.warp(
+        image, tform, mode="constant", cval=0, order=order, output_shape=output_shape
+    )
     if return_params:
         return warped, get_transform_params(tform)
     return warped
 
 
-def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
+def transform_image_stack(
+    images, srcs, dsts, output_shape=None, mode="tps", order=0, *args, **kwargs
+):
     """
     Transform a stack of images from source to destination using thin plate spline or affine transformation.
 
@@ -91,9 +106,9 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
     ----------
     images : (N, H, W, C) ndarray
         Input images.
-    srcs : (N, M, 2) ndarray
+    srcs : (M, 3) ndarray
         Source coordinates.
-    dsts : (N, M, 2) ndarray
+    dsts : (M, 3) ndarray
         Destination coordinates.
     mode : str
         Transformation mode. One of euclidean, similarity, affine, piecewise-affine, projective, polynomial, tps.
@@ -105,10 +120,14 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
 
     Returns
     -------
-    (N, H, W) ndarray
+    (N, H, W, C) ndarray
         Transformed images.
     """
+    if output_shape is None:
+        output_shape = images.shape[1:3]
     # Parse the slices, cappping the first and last slices with the closest slice with points if necessary
+    # The first and last slice need to have points in order to the interpolation below to work
+    # The user should select points in the first and last slice, but this is a workaround if they don't
     slice_numbers = np.arange(images.shape[0])
     slice_numbers_with_points = np.unique(srcs[:, 0])
     if slice_numbers[0] not in slice_numbers_with_points:
@@ -128,7 +147,9 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
         dst_temp = np.concatenate([_0, dst_temp], axis=1)
         srcs = np.concatenate([srcs, src_temp], axis=0)
         dsts = np.concatenate([dsts, dst_temp], axis=0)
-        slice_numbers_with_points = np.concatenate([slice_numbers_with_points, [slice_numbers[-1]]])
+        slice_numbers_with_points = np.concatenate(
+            [slice_numbers_with_points, [slice_numbers[-1]]]
+        )
 
     # Determine the transformation parameters by running a single transformation
     src_temp = srcs[srcs[:, 0] == slice_numbers_with_points[0], 1:]
@@ -137,7 +158,15 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
     param_shape = get_transform_params(tform).shape
 
     # Fill in the parameters where the points are
+    # Here we create the "knots" along the z-axis
+    # Linear interpolation is done between the knots
+    # Could change this to a more advanced interpolation
     params = np.zeros((images.shape[0], *param_shape))
+    print(
+        slice_numbers_with_points.shape,
+        slice_numbers_with_points.dtype,
+        slice_numbers_with_points,
+    )
     for slice_number in slice_numbers_with_points:
         src = srcs[srcs[:, 0] == slice_number, 1:]
         dst = dsts[dsts[:, 0] == slice_number, 1:]
@@ -148,13 +177,26 @@ def transform_image_stack(images, srcs, dsts, mode, order=0, *args, **kwargs):
     for i in range(1, len(slice_numbers_with_points)):
         slice_number_0 = slice_numbers_with_points[i - 1]
         slice_number_1 = slice_numbers_with_points[i]
-        params[slice_number_0:slice_number_1] = np.linspace(params[slice_number_0], params[slice_number_1], slice_number_1 - slice_number_0)
+        params[slice_number_0:slice_number_1] = np.linspace(
+            params[slice_number_0],
+            params[slice_number_1],
+            slice_number_1 - slice_number_0,
+        )
 
     # Transform the images
     output = []
     for i in range(images.shape[0]):
         set_transform_params(tform, params[i])
-        output.append(tf.warp(images[i], tform, output_shape=images[i].shape, mode="constant", cval=0, order=order))
+        output.append(
+            tf.warp(
+                images[i],
+                tform,
+                output_shape=output_shape,
+                mode="constant",
+                cval=0,
+                order=order,
+            )
+        )
     return np.array(output)
 
 
@@ -170,18 +212,29 @@ if __name__ == "__main__":
     src_img = Inputs.read_ang(ebsd_path)[0]["GrainIDs"][0]
     dst_img = Inputs.read_image(bse_path)[0]
 
-    ebsd_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-src_pts.txt"
-    bse_points_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-dst_pts.txt"
+    ebsd_points_path = (
+        "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-src_pts.txt"
+    )
+    bse_points_path = (
+        "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-dst_pts.txt"
+    )
     src_points = np.loadtxt(ebsd_points_path, dtype=int)[:, 1:]
     dst_points = np.loadtxt(bse_points_path, dtype=int)[:, 1:]
 
     print("SRC", src_img.shape, src_img.dtype)
     print("DST", dst_img.shape, dst_img.dtype)
-    t_image = transform_image(src_img, dst_points, src_points, output_shape=dst_img.shape, mode="tps", order=0, size=dst_img.shape)
-    t_image = t_image[:dst_img.shape[0], :dst_img.shape[1]]
+    t_image = transform_image(
+        src_img,
+        dst_points,
+        src_points,
+        output_shape=dst_img.shape,
+        mode="tps",
+        order=0,
+        size=dst_img.shape,
+    )
+    t_image = t_image[: dst_img.shape[0], : dst_img.shape[1]]
     print("SRC", src_img.shape, src_img.dtype)
     t_image = core.handle_dtype(t_image, t_image.dtype)
-
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 5), sharex=True, sharey=True)
     ax[0].imshow(src_img, cmap="gray")
