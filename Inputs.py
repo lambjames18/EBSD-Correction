@@ -736,24 +736,6 @@ def read_dream3d(path):
     return ebsd_data, res
 
 
-def read_many_images(path, ext):
-    paths = sorted(
-        [p for p in os.listdir(path) if os.path.splitext(p)[1] == ext],
-        key=lambda x: int(x.replace(ext, "")),
-    )
-    imgs = []
-    for i in range(len(paths)):
-        p = os.path.join(path, paths[i])
-        im = io.imread(p, as_gray=True).astype(np.float32)
-        im = np.around(255 * (im - im.min()) / (im.max() - im.min()), 0).astype(
-            np.uint8
-        )
-        imgs.append(im)
-    imgs = np.array(imgs, dtype=np.uint8)
-    imgs = imgs.reshape(imgs.shape)
-    return imgs
-
-
 def read_points(path):
     points = np.loadtxt(path, dtype=int)
     if points.shape[1] != 3:
@@ -774,6 +756,26 @@ def read_points(path):
     return points_data
 
 
+def read_many_images(path, ext):
+    paths = sorted(
+        [p for p in os.listdir(path) if os.path.splitext(p)[1] == ext],
+        key=lambda x: int(x.replace(ext, "")),
+    )
+    imgs = []
+    for i in range(len(paths)):
+        p = os.path.join(path, paths[i])
+        im = io.imread(p, as_gray=True).astype(np.float32)
+        im = np.around(255 * (im - im.min()) / (im.max() - im.min()), 0).astype(
+            np.uint8
+        )
+        if im.ndim == 2:
+            im = im.reshape((im.shape[0], im.shape[1], 1))
+        imgs.append(im)
+    imgs = np.array(imgs, dtype=np.uint8)
+    imgs = imgs.reshape(imgs.shape)
+    return imgs
+
+
 def read_image(path):
     if path.endswith(".png") or path.endswith(".jpg"):
         print(
@@ -783,6 +785,8 @@ def read_image(path):
     im = np.around((im - np.min(im)) / (np.max(im) - np.min(im)) * 255, 0).astype(
         np.uint8
     )
+    if im.ndim == 2:
+        im = im.reshape((im.shape[0], im.shape[1], 1))
     return im.reshape((1,) + im.shape)
 
 

@@ -162,11 +162,6 @@ def transform_image_stack(
     # Linear interpolation is done between the knots
     # Could change this to a more advanced interpolation
     params = np.zeros((images.shape[0], *param_shape))
-    print(
-        slice_numbers_with_points.shape,
-        slice_numbers_with_points.dtype,
-        slice_numbers_with_points,
-    )
     for slice_number in slice_numbers_with_points:
         src = srcs[srcs[:, 0] == slice_number, 1:]
         dst = dsts[dsts[:, 0] == slice_number, 1:]

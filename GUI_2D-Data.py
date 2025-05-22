@@ -971,34 +971,8 @@ class App(tk.Tk):
         print("Crop choice:", crop_choice)
         return crop_choice
 
-    def _correct_dtype(self, data, dream3d_dtype):
-        # Convert dream3d dtype to numpy dtype
-        dream3d_dtypes = {
-            b"DataArray<uint8_t>": np.uint8,
-            b"DataArray<uint8>": np.uint8,
-            b"DataArray<int8_t>": np.int8,
-            b"DataArray<int8>": np.int8,
-            b"DataArray<uint16_t>": np.uint16,
-            b"DataArray<uint16>": np.uint16,
-            b"DataArray<int16_t>": np.int16,
-            b"DataArray<int16>": np.int16,
-            b"DataArray<uint32_t>": np.uint32,
-            b"DataArray<uint32>": np.uint32,
-            b"DataArray<int32_t>": np.int32,
-            b"DataArray<int32>": np.int32,
-            b"DataArray<uint64_t>": np.uint64,
-            b"DataArray<uint64>": np.uint64,
-            b"DataArray<int64_t>": np.int64,
-            b"DataArray<int64>": np.int64,
-            b"DataArray<float>": np.float32,
-            b"DataArray<float32>": np.float32,
-            b"DataArray<float64>": np.float64,
-            b"DataArray<double>": np.float64,
-            b"DataArray<bool>": bool,
-        }
-        dtype = dream3d_dtypes.get(dream3d_dtype, None)
-        if dtype is None:
-            raise ValueError(f"Unknown DREAM.3D dtype: {dream3d_dtype}")
+    def _correct_dtype(self, data, dtype):
+        print("Correcting dtype", dtype, data.dtype)
         # Fix integer types, leave float types as is
         try:
             # Succeeds if it tis an integer dtype
@@ -1023,7 +997,7 @@ class App(tk.Tk):
             if keys_0_lower[i] not in ["datacontainerbundles", "montages", "pipeline"]
         ][0]
         # Always only one key
-        key = key + f"/{h5[key].keys()[0]}"
+        key = key + f"/{list(h5[key].keys())[0]}"
         # Match
         keys = [key + f"/{k}" for k in h5[key].keys()]
         for k in keys:
@@ -1060,7 +1034,7 @@ class App(tk.Tk):
         im0 = np.squeeze(im0).astype(np.float32)
         im1 = np.squeeze(im1).astype(np.float32)
         if im1.ndim > im0.ndim:
-            im0 = np.repeat(im0[:, :, :, np.newaxis], im1.shape[-1], axis=-1)
+            im0 = np.repeat(im0[:, :, np.newaxis], im1.shape[-1], axis=-1)
         # Correct intensity ranges, normalize the data to 0-1 range
         im0 = (im0 - im0.min()) / (im0.max() - im0.min()) * im1.max()
         # View
@@ -1090,7 +1064,8 @@ class App(tk.Tk):
         if im1.ndim > im0.ndim:
             im0 = np.repeat(im0[:, :, :, np.newaxis], im1.shape[-1], axis=-1)
         # Correct intensity ranges, normalize the data to 0-1 range
-        im0 = (im0 - im0.min()) / (im0.max() - im0.min()) * im1.max()
+        im0 = (im0 - im0.min()) / (im0.max() - im0.min())
+        im1 = (im1 - im1.min()) / (im1.max() - im1.min())
 
         # View
         print("Creating interactive view")
@@ -1282,7 +1257,8 @@ class App(tk.Tk):
         mode = self._get_mode_choice()
 
         # Ask if the user wants to crop the corrected image to match the distorted grid
-        crop_choice = self._get_crop_choice()
+        # crop_choice = self._get_crop_choice()
+        crop_choice = "src"
 
         # If DREAM.3D file
         corrected_stack = self._apply_multiple_3d(crop_choice, mode)
@@ -1309,37 +1285,52 @@ class App(tk.Tk):
         else:
             # Copy old dream3d file and parse the structure
             shutil.copyfile(self.ebsd_path, SAVE_PATH_EBSD)
-            reference_stack = corrected_stack.pop(keys[keys_lower.index("reference")])
+            ref_index = keys_lower.index("reference")
+            reference_stack = corrected_stack.pop(keys[ref_index])
+            keys.pop(ref_index)
+            keys_lower.pop(ref_index)
             cell_data_key = self._get_dream3d_structure(SAVE_PATH_EBSD, keys)
 
             # Create a new grid for the output file
             if "x" in keys_lower or "y" in keys_lower:
                 x, y = np.meshgrid(
+                    np.arange(corrected_stack[keys[0]].shape[2]),
                     np.arange(corrected_stack[keys[0]].shape[1]),
-                    np.arange(corrected_stack[keys[0]].shape[0]),
                 )
-                x.flatten().astype(np.float32) * self.ebsd_res
-                y.flatten().astype(np.float32) * self.ebsd_res
+                x = x.astype(np.float32) * self.ebsd_res
+                y = y.astype(np.float32) * self.ebsd_res
+                x = x.reshape(1, *x.shape, 1)
+                y = y.reshape(1, *y.shape, 1)
                 if "x" in keys_lower:
-                    corrected_stack[keys[keys_lower.index("x")]] = x
+                    corrected_stack[keys[keys_lower.index("x")]] = np.repeat(
+                        x, corrected_stack[keys[0]].shape[0], axis=0
+                    )
                 if "y" in keys_lower:
-                    corrected_stack[keys[keys_lower.index("y")]] = y
+                    corrected_stack[keys[keys_lower.index("y")]] = np.repeat(
+                        y, corrected_stack[keys[0]].shape[0], axis=0
+                    )
 
             # Open the file and write the data
             h5 = h5py.File(SAVE_PATH_EBSD, "r+")
             for key in keys:
-                dream3d_dtype = h5[cell_data_key][key].dtype
-                dream3d_shape = h5[cell_data_key][key].shape
-                if dream3d_dtype == np.uint8 and dream3d_shape == reference_stack.shape:
+                print(
+                    "Saving key:",
+                    key,
+                    corrected_stack[key].shape,
+                    h5[cell_data_key][key].shape,
+                )
+                dtype = h5[cell_data_key][key].dtype
+                shape = h5[cell_data_key][key].shape
+                if dtype == np.uint8 and shape == reference_stack.shape:
                     ref_key = key
                 h5[cell_data_key][key][...] = self._correct_dtype(
-                    corrected_stack[key], dream3d_dtype
+                    corrected_stack[key], dtype
                 )
-            print("Reference key:", ref_key)
+            print("Reference key to copy:", ref_key)
 
             # Copy a h5py entry that is an 8 bit integer and replace it with the reference stack
             h5.copy(
-                cell_data_key + f"/{ref_key}",
+                f"{cell_data_key}/{ref_key}",
                 f"{cell_data_key}/BSE",
             )
             h5[cell_data_key + "/BSE"][...] = reference_stack
@@ -1373,13 +1364,17 @@ class App(tk.Tk):
                 src_img,
                 src_points,
                 dst_points,
-                output_shape=dst_img.shape,
+                output_shape=dst_img.shape[:2],
                 mode=mode,
-                size=dst_img.shape,
+                size=dst_img.shape[:2],
             )
         else:
             warped_src = warping.transform_image(
-                src_img, src_points, dst_points, output_shape=dst_img.shape, mode=mode
+                src_img,
+                src_points,
+                dst_points,
+                output_shape=dst_img.shape[:2],
+                mode=mode,
             )
 
         # Crop to the center of the corrected image if desired
@@ -1391,13 +1386,13 @@ class App(tk.Tk):
                 dummy,
                 dst_points,
                 src_points,
-                output_shape=dst_img.shape,
+                output_shape=dst_img.shape[:2],
                 mode="tps",
-                size=dst_img.shape,
+                size=dst_img.shape[:2],
             )
             rc, cc = np.array(np.where(dummy)).reshape(2, -1).T.mean(axis=0).astype(int)
             rslc, cslc = self._get_cropping_slice(
-                (rc, cc), src_img.shape, dst_img.shape
+                (rc, cc), src_img.shape, dst_img.shape[:2]
             )
             dst_img = dst_img[rslc, cslc]
             warped_src = warped_src[rslc, cslc]
@@ -1490,11 +1485,18 @@ class App(tk.Tk):
 
     def _apply_3d(self, crop_choice, mode="tps"):
         # Get shapes
-        src_img_shape = self.ebsd_data[self.ebsd_mode.get()][self.slice_num.get()].shape
-        dst_img_shape = self.bse_data[self.bse_mode.get()][self.slice_num.get()].shape
+        src_img_shape = self.ebsd_data[self.ebsd_mode.get()][
+            self.slice_num.get()
+        ].shape[:2]
+        dst_img_shape = self.bse_data[self.bse_mode.get()][self.slice_num.get()].shape[
+            :2
+        ]
 
         # Get images
         image_stack = self.ebsd_data[self.ebsd_mode.get()]
+        image_stack = np.concatenate(
+            (image_stack, np.ones_like(image_stack[..., :1])), axis=-1
+        )
         reference_stack = np.squeeze(self.bse_data[self.bse_mode.get()])
         print("SRC shape:", image_stack.shape)
         print("DST shape:", reference_stack.shape)
@@ -1534,23 +1536,7 @@ class App(tk.Tk):
         if crop_choice == "src":
             print("Cropping to match distorted grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-            dummy = np.ones(image_stack.shape[:-1]).reshape(
-                image_stack.shape[:-1] + (1,)
-            )
-            if "tps" in mode.lower():
-                corrected_stack = warping.transform_image_stack(
-                    dummy,
-                    src_points,
-                    dst_points,
-                    dst_img_shape[1:3],
-                    mode,
-                    order=0,
-                    size=dst_img_shape,
-                )
-            else:
-                corrected_stack = warping.transform_image_stack(
-                    dummy, src_points, dst_points, dst_img_shape[1:3], mode, order=0
-                )
+            dummy = corrected_stack[:, :, :, -1]
             zc, yc, xc = (
                 np.array(np.where(dummy)).reshape(3, -1).T.mean(axis=0).astype(int)
             )
@@ -1564,6 +1550,8 @@ class App(tk.Tk):
             corrected_stack = corrected_stack[:, : dst_img_shape[0], : dst_img_shape[1]]
         else:
             print("Not cropping, leaving destination and warped source as is.")
+        # Remove the last channel (the one with the ones)
+        corrected_stack = corrected_stack[:, :, :, :-1]
 
         print("Reference shape:", reference_stack.shape)
         print("Corrected shape:", corrected_stack.shape)
@@ -1572,14 +1560,22 @@ class App(tk.Tk):
 
     def _apply_multiple_3d(self, crop_choice, mode="tps"):
         # Get shapes
-        src_img_shape = self.ebsd_data[self.ebsd_mode.get()][self.slice_num.get()].shape
-        dst_img_shape = self.bse_data[self.bse_mode.get()][self.slice_num.get()].shape
+        src_img_shape = self.ebsd_data[self.ebsd_mode.get()][
+            self.slice_num.get()
+        ].shape[:2]
+        dst_img_shape = self.bse_data[self.bse_mode.get()][self.slice_num.get()].shape[
+            :2
+        ]
 
         # Get images
         keys = list(self.ebsd_data.keys())
         image_stack = self.ebsd_data[keys[0]]
         for k in keys[1:]:
-            image_stack = np.stack((image_stack, self.ebsd_data[k]), axis=3)
+            image_stack = np.concatenate((image_stack, self.ebsd_data[k]), axis=-1)
+        # Add a stack of ones for cropping the data afterwards
+        image_stack = np.concatenate(
+            (image_stack, np.ones(image_stack.shape[:-1] + (1,))), axis=-1
+        )
         reference_stack = self.bse_data[self.bse_mode.get()]
         print("SRC shape:", image_stack.shape)
         print("DST shape:", reference_stack.shape)
@@ -1587,41 +1583,36 @@ class App(tk.Tk):
         # Get points
         src_points = []
         dst_points = []
-        for k in src_points.keys():
+        for k in self.points["ebsd"].keys():
             src = np.array(self.points["ebsd"][k]).reshape(-1, 2)
             dst = np.array(self.points["bse"][k]).reshape(-1, 2)
             src = np.hstack((np.ones((src.shape[0], 1)) * k, src))
             dst = np.hstack((np.ones((dst.shape[0], 1)) * k, dst))
             src_points.extend(src)
             dst_points.extend(dst)
-        src_points = np.array(src_points)
-        dst_points = np.array(dst_points)
+        src_points = np.array(src_points).astype(int)
+        dst_points = np.array(dst_points).astype(int)
 
         # Transform the image stack
         if "tps" in mode.lower():
             corrected_stack = warping.transform_image_stack(
-                image_stack, src_points, dst_points, mode, order=0, size=dst_img_shape
+                image_stack,
+                src_points,
+                dst_points,
+                dst_img_shape,
+                mode,
+                order=0,
+                size=dst_img_shape,
             )
         else:
             corrected_stack = warping.transform_image_stack(
-                image_stack, src_points, dst_points, mode, order=0
+                image_stack, src_points, dst_points, dst_img_shape, mode, order=0
             )
 
         # Crop to the center of the corrected image if desired
         if crop_choice == "src":
             print("Cropping to match distorted grid")
-            # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-            dummy = np.ones(image_stack.shape[:-1]).reshape(
-                image_stack.shape[:-1] + (1,)
-            )
-            if "tps" in mode.lower():
-                corrected_stack = warping.transform_image_stack(
-                    dummy, src_points, dst_points, mode, order=0, size=dst_img_shape
-                )
-            else:
-                corrected_stack = warping.transform_image_stack(
-                    dummy, src_points, dst_points, mode, order=0
-                )
+            dummy = corrected_stack[:, :, :, -1]
             zc, yc, xc = (
                 np.array(np.where(dummy)).reshape(3, -1).T.mean(axis=0).astype(int)
             )
@@ -1635,6 +1626,9 @@ class App(tk.Tk):
             corrected_stack = corrected_stack[:, : dst_img_shape[0], : dst_img_shape[1]]
         else:
             print("Not cropping, leaving destination and warped source as is.")
+
+        # Remove the last channel (the one with the ones)
+        corrected_stack = corrected_stack[:, :, :, :-1]
 
         print("Reference shape:", reference_stack.shape)
         print("Corrected shape:", corrected_stack.shape)
@@ -1717,7 +1711,7 @@ class App(tk.Tk):
             )
             if ebsd_im.ndim == 3:
                 ebsd_im = np.transpose(ebsd_im, (1, 2, 0))
-        if scale_ebsd != 1:
+        if scale_bse != 1:
             if bse_im.ndim == 3:
                 _t = torch.tensor(np.transpose(bse_im, (2, 0, 1))).unsqueeze(0).float()
             else:

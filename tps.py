@@ -19,7 +19,6 @@ class ThinPlateSplineTransform:
         out = params[(coords[:, 1], coords[:, 0])]
         return out
 
-
     def estimate(self, src, dst, size):
         """Estimate optimal spline mappings between source and destination points.
 
@@ -48,7 +47,7 @@ class ThinPlateSplineTransform:
         xt = np.asarray(src[:, 0])
         yt = np.array(src[:, 1])
         n = len(xs)
-        print("Number of control points:", n)
+        # print("Number of control points:", n)
 
         # construct L
         L = self._TPS_makeL(cps)
@@ -93,7 +92,7 @@ class ThinPlateSplineTransform:
         # bending portion, but do it in parts for memory reasons
         bend = np.zeros((2, nx * ny))
         for i in range(n):
-            print("Calculating bending portion for control point {}...".format(i))
+            # print("Calculating bending portion for control point {}...".format(i))
             R = np.linalg.norm(pixels - cps[i], axis=1).reshape(-1, 1)
             Rsq = R * R
             Rsq[R == 0] = 1
@@ -101,7 +100,7 @@ class ThinPlateSplineTransform:
             bend += np.einsum("ij,jk->ik", U, wi[i].reshape(1, 2)).T
         bend = np.reshape(bend, (2, ny, nx))
 
-        print("Bending portion calculated...")
+        # print("Bending portion calculated...")
         if self.affine_only:
             self.params = affine
         else:
@@ -118,17 +117,20 @@ class ThinPlateSplineTransform:
         L = np.zeros((K + 3, K + 3))
         # make P in L
         L[:K, K] = 1
-        L[:K, K + 1: K + 3] = cp
+        L[:K, K + 1 : K + 3] = cp
         # make P.T in L
         L[K, :K] = 1
-        L[K + 1:, :K] = cp.T
+        L[K + 1 :, :K] = cp.T
         R = cdist(cp, cp, "euclidean")
         Rsq = R * R
-        Rsq[R == 0] = 1  # avoid log(0) undefined, will correct itself as log(1) = 0, so U(0) = 0
+        Rsq[R == 0] = (
+            1  # avoid log(0) undefined, will correct itself as log(1) = 0, so U(0) = 0
+        )
         U = Rsq * np.log(Rsq)
         np.fill_diagonal(U, 0)  # should be redundant
         L[:K, :K] = U
         return L
+
 
 if __name__ == "__main__":
     from core import Alignment
