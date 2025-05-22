@@ -31,6 +31,12 @@ import Inputs
 import InteractiveView as IV
 
 
+# TODO: Handle errors when reading in files
+# TODO: Fix toplevel behavior of IO windows
+# TODO: Add saving the state so that the user can come back to it later more easily (basically save the filepaths to everything)
+# TODO: Change the way the points are saved so that the filename is more clear
+
+
 def CLAHE(im, clip_limit=20.0, kernel_size=(8, 8)):
     tensor = torch.tensor(im).unsqueeze(0).unsqueeze(0).float()
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
