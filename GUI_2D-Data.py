@@ -33,10 +33,7 @@ import Inputs
 import InteractiveView as IV
 
 
-# ACB needs to be fixed with 3D data
-# Exporting 3D data has not been tested
-
-
+# TODO: Exporting 3D data has not been tested
 # TODO: Handle errors when reading in files
 # TODO: Fix toplevel behavior of IO windows
 # TODO: Add saving the state so that the user can come back to it later more easily (basically save the filepaths to everything)
@@ -1059,6 +1056,13 @@ class App(tk.Tk):
                 scale = int(max(im0.shape) / 2000)
                 im0 = im0[::scale, ::scale]
                 im1 = im1[::scale, ::scale]
+        # Handle multiple channels
+        im0 = np.squeeze(im0).astype(np.float32)
+        im1 = np.squeeze(im1).astype(np.float32)
+        if im1.ndim > im0.ndim:
+            im0 = np.repeat(im0[:, :, :, np.newaxis], im1.shape[-1], axis=-1)
+        # Correct intensity ranges, normalize the data to 0-1 range
+        im0 = (im0 - im0.min()) / (im0.max() - im0.min()) * im1.max()
         # View
         print("Creating interactive view")
         IV.Interactive2D(im0, im1, "2D TPS Correction")
@@ -1071,7 +1075,9 @@ class App(tk.Tk):
         # im0, im1 = self._run_in_background(
         #     "Applying correction...", self._apply_3d, crop_choice, mode
         # )
-        im0, im1 = self._apply_3d(crop_choice, mode)
+        im0, im1 = self._apply_3d(
+            crop_choice, mode
+        )  # im0-dst/control, im1-src/distorted
         if im0 is None or im1 is None:
             messagebox.showerror(
                 "Error",
@@ -1079,13 +1085,12 @@ class App(tk.Tk):
             )
             return
         # Handle multiple channels
-        im0 = np.squeeze(im0)
-        im1 = np.squeeze(im1)
+        im0 = np.squeeze(im0).astype(np.float32)
+        im1 = np.squeeze(im1).astype(np.float32)
         if im1.ndim > im0.ndim:
             im0 = np.repeat(im0[:, :, :, np.newaxis], im1.shape[-1], axis=-1)
         # Correct intensity ranges, normalize the data to 0-1 range
-        im0 = (im0 - im0.min()) / (im0.max() - im0.min())
-        im1 = (im1 - im1.min()) / (im1.max() - im1.min())
+        im0 = (im0 - im0.min()) / (im0.max() - im0.min()) * im1.max()
 
         # View
         print("Creating interactive view")
@@ -1682,38 +1687,56 @@ class App(tk.Tk):
         key = self.bse_mode.get()
         bse_im = np.squeeze(self.bse_data[key][i])
         if self.clahe_active_bse:
-            # bse_im = exposure.equalize_adapthist(bse_im, clip_limit=0.03)
             bse_im = CLAHE(bse_im)
         if self.clahe_active_ebsd:
-            # ebsd_im = exposure.equalize_adapthist(ebsd_im, clip_limit=0.03)
-            ebsd_im = CLAHE(ebsd_im)
-        # Convert to grayscale if RGB
-        if len(ebsd_im.shape) == 3:
-            ebsd_im = np.sum(ebsd_im**2, axis=-1)
+            if ebsd_im.ndim != 3 or (ebsd_im.ndim == 3 and ebsd_im.shape[-1] == 1):
+                ebsd_im = CLAHE(ebsd_im)
+        # Convert to grayscale if channels is more than 3
+        if len(ebsd_im.shape) == 3 and ebsd_im.shape[-1] > 3:
+            ebsd_im = np.sqrt(np.sum(ebsd_im**2, axis=-1))
         # Resize the images
         scale_ebsd = int(self.resize_vars["ebsd"].get()) / 100
         scale_bse = int(self.resize_vars["bse"].get()) / 100
         if scale_ebsd != 1:
-            _t = torch.tensor(ebsd_im).unsqueeze(0).unsqueeze(0).float()
-            _out = RESIZE(
-                _t,
-                (
-                    int(ebsd_im.shape[0] * scale_ebsd),
-                    int(ebsd_im.shape[1] * scale_ebsd),
-                ),
-                InterpolationMode.NEAREST,
+            if ebsd_im.ndim == 3:
+                _t = torch.tensor(np.transpose(ebsd_im, (2, 0, 1))).unsqueeze(0).float()
+            else:
+                _t = torch.tensor(ebsd_im).unsqueeze(0).unsqueeze(0).float()
+            ebsd_im = (
+                RESIZE(
+                    _t,
+                    (
+                        int(ebsd_im.shape[0] * scale_ebsd),
+                        int(ebsd_im.shape[1] * scale_ebsd),
+                    ),
+                    InterpolationMode.NEAREST,
+                )
+                .detach()
+                .squeeze()
+                .numpy()
             )
-            ebsd_im = _out.detach().squeeze().numpy()
-        if scale_bse != 1:
-            _t = torch.tensor(bse_im).unsqueeze(0).unsqueeze(0).float()
-            _out = RESIZE(
-                _t,
-                (int(bse_im.shape[0] * scale_bse), int(bse_im.shape[1] * scale_bse)),
-                InterpolationMode.NEAREST,
+            if ebsd_im.ndim == 3:
+                ebsd_im = np.transpose(ebsd_im, (1, 2, 0))
+        if scale_ebsd != 1:
+            if bse_im.ndim == 3:
+                _t = torch.tensor(np.transpose(bse_im, (2, 0, 1))).unsqueeze(0).float()
+            else:
+                _t = torch.tensor(bse_im).unsqueeze(0).unsqueeze(0).float()
+            bse_im = (
+                RESIZE(
+                    _t,
+                    (
+                        int(bse_im.shape[0] * scale_bse),
+                        int(bse_im.shape[1] * scale_bse),
+                    ),
+                    InterpolationMode.NEAREST,
+                )
+                .detach()
+                .squeeze()
+                .numpy()
             )
-            bse_im = _out.detach().squeeze().numpy()
-        # if scale_ebsd != 1: ebsd_im = transform.resize(ebsd_im, (int(ebsd_im.shape[0] * scale_ebsd), int(ebsd_im.shape[1] * scale_ebsd)), anti_aliasing=False)
-        # if scale_bse != 1: bse_im = transform.resize(bse_im, (int(bse_im.shape[0] * scale_bse), int(bse_im.shape[1] * scale_bse)), anti_aliasing=False)
+            if bse_im.ndim == 3:
+                bse_im = np.transpose(bse_im, (1, 2, 0))
         # Ensure dtype is uint8, accounting for RGB or greyscale
         with np.errstate(divide="ignore", invalid="ignore"):
             if ebsd_im.ndim == 3 and ebsd_im.dtype != np.uint8:
