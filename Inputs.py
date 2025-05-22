@@ -12,6 +12,7 @@ from PIL import Image, ImageTk
 ### TODO: Test reading in control points
 ### TODO: Test providing a control point path that doesn't exist so that it is created
 
+
 class DataInput(object):
     def __init__(self, parent, mode="3D"):
         # Variables
@@ -68,14 +69,18 @@ class DataInput(object):
         self.ebsd_points.grid(row=3, column=0, sticky="nse", pady=2)
         self.ebsd_points_entry = ttk.Entry(self.master, width=60)
         self.ebsd_points_entry.grid(row=3, column=1, sticky="nsew", pady=2)
-        self.ebsd_points_browse = ttk.Button(self.master, text="...", command=self.ebsd_points_browse)
+        self.ebsd_points_browse = ttk.Button(
+            self.master, text="...", command=self.ebsd_points_browse
+        )
         self.ebsd_points_browse.grid(row=3, column=2, sticky="ns", padx=4, pady=2)
         # BSE Points: "BSE control points" label, Entry for file path (3 columns), "Browse" button
         self.bse_points = ttk.Label(self.master, text="Control points")
         self.bse_points.grid(row=4, column=0, sticky="nse", pady=2)
         self.bse_points_entry = ttk.Entry(self.master, width=60)
         self.bse_points_entry.grid(row=4, column=1, sticky="nsew", pady=2)
-        self.bse_points_browse = ttk.Button(self.master, text="...", command=self.bse_points_browse)
+        self.bse_points_browse = ttk.Button(
+            self.master, text="...", command=self.bse_points_browse
+        )
         self.bse_points_browse.grid(row=4, column=2, sticky="ns", padx=4, pady=2)
         # Save/Cancel Buttons: "Save" button, "Cancel" button
         self.ebsd_res_l = ttk.Label(self.bot, text="Distorted Resolution (µm/px): ")
@@ -92,21 +97,58 @@ class DataInput(object):
         self.cancel_b.grid(row=0, column=3, rowspan=2, padx=2, pady=2)
         # Add info to the bottom
         self.separator = ttk.Separator(self.bot, orient="horizontal")
-        self.separator.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
+        self.separator.grid(
+            row=2, column=0, columnspan=4, sticky="nsew", padx=2, pady=2
+        )
         if self.mode == "3D":
-            self.info1 = ttk.Label(self.bot, text="Note: The distorted data must be a .dream3d file.")
-            self.info2 = ttk.Label(self.bot, text="Note: The control data must be a single image. It needs to be the first of all control images (png, tif, tiff).")
-            self.info3 = ttk.Label(self.bot, text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.")
-            self.info4 = ttk.Label(self.bot, text="Note: If a points file is passed that does not exist, a new file will be created with the given name.")
-            self.info5 = ttk.Label(self.bot, text="Note: If a points file is passed that does exist, the point data will be read in.")
-            self.info6 = ttk.Label(self.bot, text="Note: The control/distorted resolution is only used for rescaling the control image(s). It can be left blank if no resizing is desired.")
+            self.info1 = ttk.Label(
+                self.bot, text="Note: The distorted data must be a .dream3d file."
+            )
+            self.info2 = ttk.Label(
+                self.bot,
+                text="Note: The control data must be a single image. It needs to be the first of all control images (png, tif, tiff).",
+            )
+            self.info3 = ttk.Label(
+                self.bot,
+                text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.",
+            )
+            self.info4 = ttk.Label(
+                self.bot,
+                text="Note: If a points file is passed that does not exist, a new file will be created with the given name.",
+            )
+            self.info5 = ttk.Label(
+                self.bot,
+                text="Note: If a points file is passed that does exist, the point data will be read in.",
+            )
+            self.info6 = ttk.Label(
+                self.bot,
+                text="Note: The control/distorted resolution is only used for rescaling the control image(s). It can be left blank if no resizing is desired.",
+            )
         elif self.mode == "2D":
-            self.info1 = ttk.Label(self.bot, text="Note: The distorted data can be an ang, h5, or image file (tif, tiff, png, jpg).")
-            self.info2 = ttk.Label(self.bot, text="Note: The control data must be an image file (tif, tiff, png, jpg).")
-            self.info3 = ttk.Label(self.bot, text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.")
-            self.info4 = ttk.Label(self.bot, text="Note: If a points file is passed that does not exist, a new file will be created with the given name.")
-            self.info5 = ttk.Label(self.bot, text="Note: If a points file is passed that does exist, the point data will be read in.")
-            self.info6 = ttk.Label(self.bot, text="Note: The control/distorted resolution is only used for rescaling the control image(s). It can be left blank if no resizing is desired.")
+            self.info1 = ttk.Label(
+                self.bot,
+                text="Note: The distorted data can be an ang, h5, or image file (tif, tiff, png, jpg).",
+            )
+            self.info2 = ttk.Label(
+                self.bot,
+                text="Note: The control data must be an image file (tif, tiff, png, jpg).",
+            )
+            self.info3 = ttk.Label(
+                self.bot,
+                text="Note: The points files must be a text file. If not provided, they will be created in the directory of the distorted data.",
+            )
+            self.info4 = ttk.Label(
+                self.bot,
+                text="Note: If a points file is passed that does not exist, a new file will be created with the given name.",
+            )
+            self.info5 = ttk.Label(
+                self.bot,
+                text="Note: If a points file is passed that does exist, the point data will be read in.",
+            )
+            self.info6 = ttk.Label(
+                self.bot,
+                text="Note: The control/distorted resolution is only used for rescaling the control image(s). It can be left blank if no resizing is desired.",
+            )
         self.info1.grid(row=3, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         self.info2.grid(row=4, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
         self.info3.grid(row=5, column=0, columnspan=4, sticky="nsew", padx=2, pady=2)
@@ -118,9 +160,23 @@ class DataInput(object):
         # Open file dialog to select a .dream3d file
         self.w.attributes("-topmost", False)
         if self.mode == "3D":
-            path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .dream3d file", filetypes=(("dream3d files", "*.dream3d"), ("all files", "*.*")))
+            path = filedialog.askopenfilename(
+                initialdir=self.directory,
+                title="Select a .dream3d file",
+                filetypes=(("dream3d files", "*.dream3d"), ("all files", "*.*")),
+            )
         else:
-            path = filedialog.askopenfilename(initialdir=self.directory, title="Select a distorted (EBSD) file", filetypes=(("ang files", "*.ang"), ("h5 files", "*.h5"), ("tif files", "*.tif"), ("tiff files", "*.tiff"), ("all files", "*.*")))
+            path = filedialog.askopenfilename(
+                initialdir=self.directory,
+                title="Select a distorted (EBSD) file",
+                filetypes=(
+                    ("ang files", "*.ang"),
+                    ("h5 files", "*.h5"),
+                    ("tif files", "*.tif"),
+                    ("tiff files", "*.tiff"),
+                    ("all files", "*.*"),
+                ),
+            )
         # If a file is selected, update the entry box
         if path:
             self.ebsd_entry.delete(0, tk.END)
@@ -132,15 +188,35 @@ class DataInput(object):
         # Open file dialog to select a folder containing BSE images (.png, .tif, .tiff)
         self.w.attributes("-topmost", False)
         if self.mode == "3D":
-            path = filedialog.askopenfilename(initialdir=self.directory, title="Select the first control image", filetypes=(("tif files", "*.tif"), ("tiff files", "*.tiff"), ("png files", "*.png"), ("all files", "*.*")))
-            if path == "": return
+            path = filedialog.askopenfilename(
+                initialdir=self.directory,
+                title="Select the first control image",
+                filetypes=(
+                    ("tif files", "*.tif"),
+                    ("tiff files", "*.tiff"),
+                    ("png files", "*.png"),
+                    ("all files", "*.*"),
+                ),
+            )
+            if path == "":
+                return
             path = os.path.dirname(path) + "/*" + os.path.splitext(path)[1]
             self.directory = os.path.dirname(path)
             self.bse_entry.delete(0, tk.END)
             self.bse_entry.insert(0, path)
         else:
-            path = filedialog.askopenfilenames(initialdir=self.directory, title="Select a control image(s)", filetypes=(("tif files", "*.tif"), ("tiff files", "*.tiff"), ("png files", "*.png"), ("all files", "*.*")))
-            if path == "": return
+            path = filedialog.askopenfilenames(
+                initialdir=self.directory,
+                title="Select a control image(s)",
+                filetypes=(
+                    ("tif files", "*.tif"),
+                    ("tiff files", "*.tiff"),
+                    ("png files", "*.png"),
+                    ("all files", "*.*"),
+                ),
+            )
+            if path == "":
+                return
             self.directory = os.path.dirname(path[0])
             path = ";".join(path)
             self.bse_entry.delete(0, tk.END)
@@ -150,7 +226,11 @@ class DataInput(object):
     def ebsd_points_browse(self):
         # Open file dialog to select a .txt file containing EBSD control points
         self.w.attributes("-topmost", False)
-        path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .txt file containing distorted points", filetypes=(("txt files", "*.txt"), ("all files", "*.*")))
+        path = filedialog.askopenfilename(
+            initialdir=self.directory,
+            title="Select a .txt file containing distorted points",
+            filetypes=(("txt files", "*.txt"), ("all files", "*.*")),
+        )
         # If a file is selected, update the entry box
         if path:
             self.ebsd_points_entry.delete(0, tk.END)
@@ -161,7 +241,11 @@ class DataInput(object):
     def bse_points_browse(self):
         # Open file dialog to select a .txt file containing BSE control points
         self.w.attributes("-topmost", False)
-        path = filedialog.askopenfilename(initialdir=self.directory, title="Select a .txt file containing control points", filetypes=(("txt files", "*.txt"), ("all files", "*.*")))
+        path = filedialog.askopenfilename(
+            initialdir=self.directory,
+            title="Select a .txt file containing control points",
+            filetypes=(("txt files", "*.txt"), ("all files", "*.*")),
+        )
         # If a file is selected, update the entry box
         if path:
             self.bse_points_entry.delete(0, tk.END)
@@ -211,7 +295,10 @@ class DataSummary(object):
     Should show the slices that have points
     Shoud be two panels, one for EBSD and one for BSE
     Should use a dropdown box to view the modalities and the slices that have points"""
-    def __init__(self, parent, ebsd_data, bse_data, ebsd_points, bse_points, ebsd_res, bse_res) -> None:
+
+    def __init__(
+        self, parent, ebsd_data, bse_data, ebsd_points, bse_points, ebsd_res, bse_res
+    ) -> None:
         self.parent = parent
         self.clean_exit = False
         self.rescale = False
@@ -223,9 +310,23 @@ class DataSummary(object):
         self.w.rowconfigure(1, weight=1)
         self.w.columnconfigure((0, 1), weight=1)
         # Create frames
-        self.left = ttk.LabelFrame(self.w, text="Distorted Data", relief="groove", borderwidth=5, padding=5, labelanchor="n")
+        self.left = ttk.LabelFrame(
+            self.w,
+            text="Distorted Data",
+            relief="groove",
+            borderwidth=5,
+            padding=5,
+            labelanchor="n",
+        )
         self.left.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
-        self.right = ttk.LabelFrame(self.w, text="Control Data", relief="groove", borderwidth=5, padding=5, labelanchor="n")
+        self.right = ttk.LabelFrame(
+            self.w,
+            text="Control Data",
+            relief="groove",
+            borderwidth=5,
+            padding=5,
+            labelanchor="n",
+        )
         self.right.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         self.bot = ttk.Frame(self.w)
         self.bot.grid(row=1, column=0, columnspan=2, sticky="nse")
@@ -245,15 +346,22 @@ class DataSummary(object):
         self.ebsd_res_l = ttk.Label(self.left, text="Resolution (µm/px): ")
         self.ebsd_res_l.grid(row=3, column=0, sticky="nsew")
         # EBSD data
-        self.ebsd_dims = ttk.Label(self.left, text=f"{self.ebsd_dims[0]} x {self.ebsd_dims[1]} x {self.ebsd_dims[2]}")
+        self.ebsd_dims = ttk.Label(
+            self.left,
+            text=f"{self.ebsd_dims[0]} x {self.ebsd_dims[1]} x {self.ebsd_dims[2]}",
+        )
         self.ebsd_dims.grid(row=0, column=1, sticky="nsew")
-        self.ebsd_modalities = ttk.Combobox(self.left, values=self.ebsd_modalities, state="readonly", width=10)
+        self.ebsd_modalities = ttk.Combobox(
+            self.left, values=self.ebsd_modalities, state="readonly", width=10
+        )
         self.ebsd_modalities.grid(row=1, column=1, sticky="nsew")
         self.ebsd_modalities.current(0)
         if self.ebsd_points is None:
             self.ebsd_points = ttk.Label(self.left, text="None")
         else:
-            self.ebsd_points = ttk.Combobox(self.left, values=self.ebsd_points, state="readonly", width=5)
+            self.ebsd_points = ttk.Combobox(
+                self.left, values=self.ebsd_points, state="readonly", width=5
+            )
             self.ebsd_points.current(0)
         self.ebsd_points.grid(row=2, column=1, sticky="nsew")
         self.ebsd_res = ttk.Label(self.left, text=f"{ebsd_res}")
@@ -268,40 +376,66 @@ class DataSummary(object):
         self.bse_res_l = ttk.Label(self.right, text="Resolution (µm/px): ")
         self.bse_res_l.grid(row=3, column=0, sticky="nsew")
         # BSE data
-        self.bse_dims = ttk.Label(self.right, text=f"{self.bse_dims[0]} x {self.bse_dims[1]} x {self.bse_dims[2]}")
+        self.bse_dims = ttk.Label(
+            self.right,
+            text=f"{self.bse_dims[0]} x {self.bse_dims[1]} x {self.bse_dims[2]}",
+        )
         self.bse_dims.grid(row=0, column=1, sticky="nsew")
-        self.bse_modalities = ttk.Combobox(self.right, values=self.bse_modalities, state="readonly", width=20)
+        self.bse_modalities = ttk.Combobox(
+            self.right, values=self.bse_modalities, state="readonly", width=20
+        )
         self.bse_modalities.grid(row=1, column=1, sticky="nsew")
         self.bse_modalities.current(0)
         if self.bse_points is None:
             self.bse_points = ttk.Label(self.right, text="None")
         else:
-            self.bse_points = ttk.Combobox(self.right, values=self.bse_points, state="readonly", width=5)
+            self.bse_points = ttk.Combobox(
+                self.right, values=self.bse_points, state="readonly", width=5
+            )
             self.bse_points.current(0)
         self.bse_points.grid(row=2, column=1, sticky="nsew")
         self.bse_res = ttk.Label(self.right, text=f"{bse_res}")
         self.bse_res.grid(row=3, column=1, sticky="nsew")
         # Bottom
         self.crop = tk.BooleanVar()
-        self.crop_check = ttk.Checkbutton(self.bot, text="Crop Control Images?", variable=self.crop)
+        self.crop_check = ttk.Checkbutton(
+            self.bot, text="Crop Control Images?", variable=self.crop
+        )
         self.crop_check.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         self.flip = tk.BooleanVar()
-        self.flip_check = ttk.Checkbutton(self.bot, text="Flip (Up/Down) Control Images?", variable=self.flip)
+        self.flip_check = ttk.Checkbutton(
+            self.bot, text="Flip (Up/Down) Control Images?", variable=self.flip
+        )
         self.flip_check.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         self.r180 = tk.BooleanVar()
-        self.r180_check = ttk.Checkbutton(self.bot, text="Rotate Control Images 180º?", variable=self.r180)
+        self.r180_check = ttk.Checkbutton(
+            self.bot, text="Rotate Control Images 180º?", variable=self.r180
+        )
         self.r180_check.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
         self.rescale = tk.BooleanVar()
-        self.rescale_check = ttk.Checkbutton(self.bot, text="Rescale Control Images?", variable=self.rescale)
+        self.rescale_check = ttk.Checkbutton(
+            self.bot, text="Rescale Control Images?", variable=self.rescale
+        )
         self.rescale_check.grid(row=0, column=3, sticky="nsew", padx=2, pady=2)
         self.save = ttk.Button(self.bot, text="Continue", command=self.exit)
         self.save.grid(row=0, column=4, sticky="nsew", padx=2, pady=2)
         # Put in some information at the bottom
         self.separator = ttk.Separator(self.bot, orient="horizontal")
-        self.separator.grid(row=1, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
-        self.info1 = ttk.Label(self.bot, text="Note: Selecting the crop option will open a new window to select a region of the control image(s) (i.e. remove empty space around sample).")
-        self.info2 = ttk.Label(self.bot, text="Note: Rescale Control will attempt to match the pixel resolutions of the distorted and control images by downsampling the control image (you should do this).")
-        self.info3 = ttk.Label(self.bot, text="Note: Flip or rotate 180º is only applied to the control images if selected (often needed for TriBeam datasets).")
+        self.separator.grid(
+            row=1, column=0, columnspan=5, sticky="nsew", padx=2, pady=2
+        )
+        self.info1 = ttk.Label(
+            self.bot,
+            text="Note: Selecting the crop option will open a new window to select a region of the control image(s) (i.e. remove empty space around sample).",
+        )
+        self.info2 = ttk.Label(
+            self.bot,
+            text="Note: Rescale Control will attempt to match the pixel resolutions of the distorted and control images by downsampling the control image (you should do this).",
+        )
+        self.info3 = ttk.Label(
+            self.bot,
+            text="Note: Flip or rotate 180º is only applied to the control images if selected (often needed for TriBeam datasets).",
+        )
         self.info1.grid(row=2, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
         self.info2.grid(row=3, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
         self.info3.grid(row=4, column=0, columnspan=5, sticky="nsew", padx=2, pady=2)
@@ -319,7 +453,7 @@ class DataSummary(object):
             self.bse_points = None
         else:
             self.bse_points = list(bse_points.keys())
-    
+
     def exit(self):
         self.clean_exit = True
         self.rescale = self.rescale.get()
@@ -327,13 +461,14 @@ class DataSummary(object):
         self.flip = self.flip.get()
         self.r180 = self.r180.get()
         self.w.destroy()
-    
+
     def cancel(self):
         self.w.destroy()
 
 
 class CropControl(object):
     """Displays the control image and prompts the user to select a ROI for cropping"""
+
     def __init__(self, parent, im) -> None:
         self.parent = parent
         self.im = im
@@ -347,7 +482,9 @@ class CropControl(object):
         self.end = list(self.shape)
         self.w = tk.Toplevel(parent)
         self.w.attributes("-topmost", True)
-        self.w.title("Cropping the control image(s): Click and drag to select a region.")
+        self.w.title(
+            "Cropping the control image(s): Click and drag to select a region."
+        )
         # Configure the UI
         self.w.rowconfigure(0, weight=10)
         self.w.rowconfigure(1, weight=1)
@@ -401,39 +538,47 @@ class CropControl(object):
         self.reset_b.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
         # Update the details
         self.update_details()
-    
+
     def click(self, event):
         self.start = [int(event.y), int(event.x)]
         self.end = [int(event.y), int(event.x)]
         self.update_details()
-    
+
     def drag(self, event):
         self.end = [int(event.y), int(event.x)]
         self.update_details()
-    
+
     def release(self, event):
         self.end = [int(event.y), int(event.x)]
         self.update_details()
-    
+
     def reset(self):
         self.start = [0, 0]
         self.end = list(self.im.shape)
         self.update_details()
-    
+
     def read_entries(self, *args):
         self.start[0] = int(np.around(float(self.sre.get()) / self.scale_factor[0]))
         self.end[0] = int(np.around(float(self.ere.get()) / self.scale_factor[0]))
         self.start[1] = int(np.around(float(self.sce.get()) / self.scale_factor[0]))
         self.end[1] = int(np.around(float(self.ece.get()) / self.scale_factor[0]))
         self.update_details()
-    
+
     def update_details(self):
         self.start[0] = min(max(0, self.start[0]), self.shape[0])
         self.end[0] = min(max(0, self.end[0]), self.shape[0])
         self.start[1] = min(max(0, self.start[1]), self.shape[1])
         self.end[1] = min(max(0, self.end[1]), self.shape[1])
         self.canvas.delete("crop")
-        self.canvas.create_rectangle(self.start[1], self.start[0], self.end[1], self.end[0], outline="red", width=2, tag="crop")
+        self.canvas.create_rectangle(
+            self.start[1],
+            self.start[0],
+            self.end[1],
+            self.end[0],
+            outline="red",
+            width=2,
+            tag="crop",
+        )
         self.sre.delete(0, tk.END)
         self.sre.insert(0, int(np.around(self.start[0] * self.scale_factor[0])))
         self.ere.delete(0, tk.END)
@@ -442,7 +587,7 @@ class CropControl(object):
         self.sce.insert(0, int(np.around(self.start[1] * self.scale_factor[0])))
         self.ece.delete(0, tk.END)
         self.ece.insert(0, int(np.around(self.end[1] * self.scale_factor[0])))
-    
+
     def save(self):
         self.clean_exit = True
         self.start = np.around(np.array(self.start) * self.scale_factor).astype(int)
@@ -456,6 +601,7 @@ class CropControl(object):
 ##########
 # Functions for reading data
 ##########
+
 
 def read_ang_header(path):
     """Reads the header of an ang file"""
@@ -480,6 +626,7 @@ def read_ang_header(path):
         col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
     return ncols, nrows, col_names, res, header, header_lines
 
+
 def read_ang(path):
     """Reads an ang file into a numpy array"""
     ncols, nrows, col_names, res, header, header_lines = read_ang_header(path)
@@ -488,10 +635,14 @@ def read_ang(path):
     if raw_data.shape[0] == ncols * nrows:
         data = raw_data.reshape((nrows, ncols, n_entries))
     elif raw_data.shape != ncols * nrows:
-        raise ValueError(f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). ")
-        
+        raise ValueError(
+            f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). "
+        )
+
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
-    out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
+    out["EulerAngles"] = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(
+        float
+    )
     for key in out.keys():
         if key not in ["EulerAngles"]:
             out[key] = np.fliplr(np.rot90(out[key], k=3))
@@ -500,17 +651,22 @@ def read_ang(path):
         else:
             out[key] = out[key].transpose((1, 0, 2))
         out[key] = out[key].reshape((1,) + out[key].shape)
-    
+
     # Get the grain file if it exists
     dirname = os.path.dirname(path)
-    basenames = [os.path.splitext(os.path.basename(path))[0] + "_Grain.txt",
-                 os.path.splitext(os.path.basename(path))[0] + "_grain.txt"]
-    grain_file_exists = [os.path.exists(os.path.join(dirname, basename)) for basename in basenames]
+    basenames = [
+        os.path.splitext(os.path.basename(path))[0] + "_Grain.txt",
+        os.path.splitext(os.path.basename(path))[0] + "_grain.txt",
+    ]
+    grain_file_exists = [
+        os.path.exists(os.path.join(dirname, basename)) for basename in basenames
+    ]
     if any(grain_file_exists):
         grain_path = os.path.join(dirname, basenames[grain_file_exists.index(True)])
         grain_data = read_grainFile(grain_path)
         out["GrainIDs"] = grain_data.reshape((1,) + (nrows, ncols))
     return out, res
+
 
 def read_grainFile(path):
     with open(path, "r") as f:
@@ -518,13 +674,25 @@ def read_grainFile(path):
             if line[0] != "#":
                 break
             if "Grain ID" in line:
-                column = int(line.split(": ")[0].replace("#", "").replace("Column", "").strip())
+                column = int(
+                    line.split(": ")[0].replace("#", "").replace("Column", "").strip()
+                )
                 break
-    grain_data = np.genfromtxt(path, comments="#", delimiter="\n", skip_header=1, dtype=str)
-    f = lambda x: x.replace("      ", " ").replace("     ", " ").replace("    ", " ").replace("   ", " ").replace("  ", " ").split(" ")
+    grain_data = np.genfromtxt(
+        path, comments="#", delimiter="\n", skip_header=1, dtype=str
+    )
+    f = (
+        lambda x: x.replace("      ", " ")
+        .replace("     ", " ")
+        .replace("    ", " ")
+        .replace("   ", " ")
+        .replace("  ", " ")
+        .split(" ")
+    )
     grainIDs = np.array([f(x)[column - 1] for x in grain_data]).reshape(-1).astype(int)
     grainIDs[grainIDs <= 0] = 0
     return grainIDs
+
 
 def read_h5(path):
     h5 = h5py.File(path, "r")
@@ -539,10 +707,16 @@ def read_h5(path):
     ncols = h5[entry + "/EBSD/Header/nColumns"][0]
     res = h5[entry + "/EBSD/Header/Step X"][0]
     keys = list(ebsd_data.keys())
-    ebsd_data = {key.upper().replace(" ", "-"): ebsd_data[key][...].reshape(1, nrows, ncols, -1) for key in keys}
+    ebsd_data = {
+        key.upper().replace(" ", "-"): ebsd_data[key][...].reshape(1, nrows, ncols, -1)
+        for key in keys
+    }
     h5.close()
-    ebsd_data["EULERANGLES"] = np.stack((ebsd_data["PHI1"], ebsd_data["PHI"], ebsd_data["PHI2"]), axis=-1).astype(float)
+    ebsd_data["EULERANGLES"] = np.stack(
+        (ebsd_data["PHI1"], ebsd_data["PHI"], ebsd_data["PHI2"]), axis=-1
+    ).astype(float)
     return ebsd_data, res
+
 
 def read_dream3d(path):
     h5 = h5py.File(path, "r")
@@ -553,11 +727,14 @@ def read_dream3d(path):
         ebsd_data = h5["DataContainers/ImageDataContainer/CellData"]
         res = h5["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...][1]
     else:
-        raise ValueError("Could not find EBSD data in the dream3d file. The top level group should be 'DataStructure' or 'DataContainers'.")
+        raise ValueError(
+            "Could not find EBSD data in the dream3d file. The top level group should be 'DataStructure' or 'DataContainers'."
+        )
     ebsd_keys = list(ebsd_data.keys())
     ebsd_data = {key: ebsd_data[key][...] for key in ebsd_keys}
     h5.close()
     return ebsd_data, res
+
 
 def read_many_images(path, ext):
     paths = sorted(
@@ -568,29 +745,44 @@ def read_many_images(path, ext):
     for i in range(len(paths)):
         p = os.path.join(path, paths[i])
         im = io.imread(p, as_gray=True).astype(np.float32)
-        im = np.around(255 * (im - im.min()) / (im.max() - im.min()), 0).astype(np.uint8)
+        im = np.around(255 * (im - im.min()) / (im.max() - im.min()), 0).astype(
+            np.uint8
+        )
         imgs.append(im)
     imgs = np.array(imgs, dtype=np.uint8)
     imgs = imgs.reshape(imgs.shape)
     return imgs
 
+
 def read_points(path):
     points = np.loadtxt(path, dtype=int)
     if points.shape[1] != 3:
-        print("No z value found in the points file. Assuming all points are in the same slice.")
+        print(
+            "No z value found in the points file. Assuming all points are in the same slice."
+        )
         points = np.hstack((np.zeros((points.shape[0], 1)), points))
     if points.ndim == 1:
         points = points.reshape((1, -1))
     z, y, x = points[:, 0], points[:, 1], points[:, 2]
     unique_slices = np.unique(z)
-    points_data = {slice_num: np.hstack((y[z == slice_num].reshape(-1, 1), x[z == slice_num].reshape(-1, 1))) for slice_num in unique_slices}
+    points_data = {
+        slice_num: np.hstack(
+            (y[z == slice_num].reshape(-1, 1), x[z == slice_num].reshape(-1, 1))
+        )
+        for slice_num in unique_slices
+    }
     return points_data
+
 
 def read_image(path):
     if path.endswith(".png") or path.endswith(".jpg"):
-        print("Warning: The image is not grayscale. The image will be converted to grayscale.")
+        print(
+            "Warning: The image is not grayscale. The image will be converted to grayscale."
+        )
     im = io.imread(path, as_gray=True).astype(np.float32)
-    im = np.around((im - np.min(im)) / (np.max(im) - np.min(im)) * 255, 0).astype(np.uint8)
+    im = np.around((im - np.min(im)) / (np.max(im) - np.min(im)) * 255, 0).astype(
+        np.uint8
+    )
     return im.reshape((1,) + im.shape)
 
 
@@ -606,7 +798,12 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
     elif ebsd_path.endswith(".dream3d"):
         print("Reading dream3d file")
         ebsd_data = read_dream3d(ebsd_path)[0]
-    elif ebsd_path.endswith(".tif") or ebsd_path.endswith(".tiff") or ebsd_path.endswith(".png") or ebsd_path.endswith(".jpg"):
+    elif (
+        ebsd_path.endswith(".tif")
+        or ebsd_path.endswith(".tiff")
+        or ebsd_path.endswith(".png")
+        or ebsd_path.endswith(".jpg")
+    ):
         print("Reading image file")
         ebsd_data = read_image(ebsd_path)
         ebsd_data = {"Intensity": ebsd_data}
@@ -620,7 +817,10 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
         folder = os.path.dirname(bse_path)
         bse_data = read_many_images(folder, ext)
         if bse_data.shape[0] != ebsd_data[list(ebsd_data.keys())[0]].shape[0]:
-            raise ValueError("The number of BSE images does not match the number of EBSD images.")
+            raise ValueError(
+                "The number of BSE images does not match the number of EBSD images."
+            )
+        bse_data = {"Intensity": bse_data}
     elif ";" in bse_path:
         # Multiple 2D images
         paths = bse_path.split(";")
@@ -647,49 +847,88 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
 
     return ebsd_data, bse_data, ebsd_points, bse_points
 
+
 def rescale_control(bse_data, bse_res, ebsd_res):
     downscale = bse_res / ebsd_res
     print("Current BSE resolution:", bse_res, "Target EBSD resolution:", ebsd_res)
-    print("BSE needs to be downscaled by a factor of", downscale, "to match EBSD resolution.")
+    print(
+        "BSE needs to be downscaled by a factor of",
+        downscale,
+        "to match EBSD resolution.",
+    )
     for key in bse_data.keys():
-        temp = np.array([tf.rescale(bse_data[key][i], downscale, anti_aliasing=True) for i in range(bse_data[key].shape[0])])
-        bse_data[key] = np.around(255 * (temp - temp.min()) / (temp.max() - temp.min()), 0).astype(np.uint8)
+        temp = np.array(
+            [
+                tf.rescale(bse_data[key][i], downscale, anti_aliasing=True)
+                for i in range(bse_data[key].shape[0])
+            ]
+        )
+        bse_data[key] = np.around(
+            255 * (temp - temp.min()) / (temp.max() - temp.min()), 0
+        ).astype(np.uint8)
     return bse_data
+
 
 def flip_rotate_control(bse_data, flip, r180):
     if flip:
         for key in bse_data.keys():
-            bse_data[key] = np.flip(bse_data[key], axis=1).copy(order='C')
+            bse_data[key] = np.flip(bse_data[key], axis=1).copy(order="C")
     if r180:
         for key in bse_data.keys():
-            bse_data[key] = np.rot90(bse_data[key], 2, axes=(1,2)).copy(order='C')
+            bse_data[key] = np.rot90(bse_data[key], 2, axes=(1, 2)).copy(order="C")
     return bse_data
 
-def _style_call(self, style='dark'):
-    if style == 'dark':
+
+def _style_call(self, style="dark"):
+    if style == "dark":
         self.bg = "#333333"
         self.fg = "#ffffff"
         self.hl = "#007fff"
-        self.tk.call('source', r"./theme/dark.tcl")
+        self.tk.call("source", r"./theme/dark.tcl")
         s = ttk.Style(self)
         s.theme_use("azure-dark")
         s.configure("TFrame", background=self.bg)
         s.configure("TLabel", background=self.bg, foreground=self.fg)
         s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
-        s.configure("TLabelframe", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
-        s.configure("TLabelframe.Label", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
-    elif style == 'light':
+        s.configure(
+            "TLabelframe",
+            background=self.bg,
+            foreground=self.fg,
+            highlightcolor=self.hl,
+            highlightbackground=self.hl,
+        )
+        s.configure(
+            "TLabelframe.Label",
+            background=self.bg,
+            foreground=self.fg,
+            highlightcolor=self.hl,
+            highlightbackground=self.hl,
+        )
+    elif style == "light":
         self.bg = "#ffffff"
         self.fg = "#000000"
         self.hl = "#007fff"
-        self.tk.call('source', r"./theme/light.tcl")
+        self.tk.call("source", r"./theme/light.tcl")
         s = ttk.Style(self)
         s.theme_use("azure-light")
         s.configure("TFrame", background=self.bg)
         s.configure("TLabel", background=self.bg, foreground=self.fg)
         s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
-        s.configure("TLabelframe", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
-        s.configure("TLabelframe.Label", background=self.bg, foreground=self.fg, highlightcolor=self.hl, highlightbackground=self.hl)
+        s.configure(
+            "TLabelframe",
+            background=self.bg,
+            foreground=self.fg,
+            highlightcolor=self.hl,
+            highlightbackground=self.hl,
+        )
+        s.configure(
+            "TLabelframe.Label",
+            background=self.bg,
+            foreground=self.fg,
+            highlightcolor=self.hl,
+            highlightbackground=self.hl,
+        )
+
 
 if __name__ == "__main__":
     # root = tk.Tk()
@@ -705,17 +944,25 @@ if __name__ == "__main__":
     # bse_res = a.bse_res
     # if ebsd_path == "" or bse_path == "":
     #     exit()
-    ebsd_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/OIM.ang"
-    bse_path = "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
+    ebsd_path = (
+        "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/OIM.ang"
+    )
+    bse_path = (
+        "/Users/jameslamb/Documents/Research/scripts/EBSD-Correction/test_data/BSE.tif"
+    )
     ebsd_points_path = ""
     bse_points_path = ""
     ebsd_res = 1.5
     bse_res = 1.3
-    ebsd_data, bse_data, ebsd_points, bse_points = read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path)
+    ebsd_data, bse_data, ebsd_points, bse_points = read_data(
+        ebsd_path, bse_path, ebsd_points_path, bse_points_path
+    )
     # Display the data summary
     root = tk.Tk()
-    _style_call(root, style='dark')
-    b = DataSummary(root, ebsd_data, bse_data, ebsd_points, bse_points, ebsd_res, bse_res)
+    _style_call(root, style="dark")
+    b = DataSummary(
+        root, ebsd_data, bse_data, ebsd_points, bse_points, ebsd_res, bse_res
+    )
     root.mainloop()
     # If the user exited cleanly, continue
     if b.clean_exit:
@@ -723,7 +970,7 @@ if __name__ == "__main__":
             bse_data = rescale_control(bse_data, bse_res, ebsd_res)
         if b.crop:
             root = tk.Tk()
-            _style_call(root, style='dark')
+            _style_call(root, style="dark")
             c = CropControl(root, bse_data[0, :, :, 0])
             root.mainloop()
             if c.clean_exit:
