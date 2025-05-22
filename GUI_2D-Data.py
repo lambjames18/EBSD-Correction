@@ -1078,8 +1078,15 @@ class App(tk.Tk):
                 "No points selected for the transformation. Please select points.",
             )
             return
+        # Handle multiple channels
+        im0 = np.squeeze(im0)
+        im1 = np.squeeze(im1)
         if im1.ndim > im0.ndim:
             im0 = np.repeat(im0[:, :, :, np.newaxis], im1.shape[-1], axis=-1)
+        # Correct intensity ranges, normalize the data to 0-1 range
+        im0 = (im0 - im0.min()) / (im0.max() - im0.min())
+        im1 = (im1 - im1.min()) / (im1.max() - im1.min())
+
         # View
         print("Creating interactive view")
         print("im0 shape:", im0.shape)
