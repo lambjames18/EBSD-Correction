@@ -130,6 +130,7 @@ def transform_image_stack(
     # The user should select points in the first and last slice, but this is a workaround if they don't
     slice_numbers = np.arange(images.shape[0])
     slice_numbers_with_points = np.unique(srcs[:, 0])
+    print("Slice numbers with points:", slice_numbers_with_points)
     if slice_numbers[0] not in slice_numbers_with_points:
         src_temp = srcs[srcs[:, 0] == slice_numbers_with_points[0], 1:]
         dst_temp = dsts[dsts[:, 0] == slice_numbers_with_points[0], 1:]
@@ -140,9 +141,10 @@ def transform_image_stack(
         dsts = np.concatenate([dst_temp, dsts], axis=0)
         slice_numbers_with_points = np.concatenate([[0], slice_numbers_with_points])
     if slice_numbers[-1] not in slice_numbers_with_points:
+        print("Last slice does not have points, capping with closest slice with points")
         src_temp = srcs[srcs[:, 0] == slice_numbers_with_points[-1], 1:]
         dst_temp = dsts[dsts[:, 0] == slice_numbers_with_points[-1], 1:]
-        _0 = np.zeros((src_temp.shape[0], 1))
+        _0 = np.zeros((src_temp.shape[0], 1)) + slice_numbers[-1]
         src_temp = np.concatenate([_0, src_temp], axis=1)
         dst_temp = np.concatenate([_0, dst_temp], axis=1)
         srcs = np.concatenate([srcs, src_temp], axis=0)
@@ -150,6 +152,7 @@ def transform_image_stack(
         slice_numbers_with_points = np.concatenate(
             [slice_numbers_with_points, [slice_numbers[-1]]]
         )
+    print("Slice numbers with points:", slice_numbers_with_points)
 
     # Determine the transformation parameters by running a single transformation
     src_temp = srcs[srcs[:, 0] == slice_numbers_with_points[0], 1:]
@@ -196,49 +199,29 @@ def transform_image_stack(
 
 
 if __name__ == "__main__":
-    import Inputs
-    import h5py
-    import core
     import matplotlib.pyplot as plt
-    from skimage import io
+    import InteractiveView
 
-    ebsd_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
-    bse_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CBS.tif"
-    src_img = Inputs.read_ang(ebsd_path)[0]["GrainIDs"][0]
-    dst_img = Inputs.read_image(bse_path)[0]
-
-    ebsd_points_path = (
-        "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-src_pts.txt"
+    src = np.loadtxt(
+        "C:/Users/lambj/Downloads/distorted_pts.txt", delimiter=" ", dtype=int
     )
-    bse_points_path = (
-        "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-dst_pts.txt"
+    dst = np.loadtxt(
+        "C:/Users/lambj/Downloads/control_pts.txt", delimiter=" ", dtype=int
     )
-    src_points = np.loadtxt(ebsd_points_path, dtype=int)[:, 1:]
-    dst_points = np.loadtxt(bse_points_path, dtype=int)[:, 1:]
 
-    print("SRC", src_img.shape, src_img.dtype)
-    print("DST", dst_img.shape, dst_img.dtype)
-    t_image = transform_image(
-        src_img,
-        dst_points,
-        src_points,
-        output_shape=dst_img.shape,
+    bse_shape = (414, 621)
+    ebsd_shape = (380, 449)
+
+    fake_images = np.random.uniform(0, 1, size=(187, *ebsd_shape, 1))
+
+    fake_transformed = transform_image_stack(
+        fake_images,
+        src,
+        dst,
+        output_shape=bse_shape,
         mode="tps",
         order=0,
-        size=dst_img.shape,
+        size=bse_shape,
     )
-    t_image = t_image[: dst_img.shape[0], : dst_img.shape[1]]
-    print("SRC", src_img.shape, src_img.dtype)
-    t_image = core.handle_dtype(t_image, t_image.dtype)
 
-    fig, ax = plt.subplots(1, 3, figsize=(15, 5), sharex=True, sharey=True)
-    ax[0].imshow(src_img, cmap="gray")
-    ax[0].scatter(src_points[:, 0], src_points[:, 1], c="r", s=10)
-    ax[0].set_title("Source")
-    ax[1].imshow(dst_img, cmap="gray")
-    ax[1].scatter(dst_points[:, 0], dst_points[:, 1], c="b", s=10)
-    ax[1].set_title("Destination")
-    ax[2].imshow(t_image, cmap="gray")
-    ax[2].set_title("Transformed")
-    plt.tight_layout()
-    plt.show()
+    InteractiveView.Interactive3D(fake_transformed, fake_transformed)
