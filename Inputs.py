@@ -200,7 +200,9 @@ class DataInput(object):
             )
             if path == "":
                 return
-            path = os.path.dirname(path) + "/*" + os.path.splitext(path)[1]
+            ext = os.path.splitext(path)[1]
+            if ext in [".tif", ".tiff", ".png"]:
+                path = os.path.dirname(path) + "/*" + os.path.splitext(path)[1]
             self.directory = os.path.dirname(path)
             self.bse_entry.delete(0, tk.END)
             self.bse_entry.insert(0, path)
@@ -472,7 +474,7 @@ class CropControl(object):
     def __init__(self, parent, im) -> None:
         self.parent = parent
         self.im = im
-        self.shape = np.around(np.array(im.shape) / 2).astype(int)
+        self.shape = np.around(np.array(im.shape) / 3).astype(int)
         self.scale_factor = np.array(self.im.shape) / self.shape
         self.TK_im = Image.frombytes("L", (self.im.shape[1], self.im.shape[0]), self.im)
         self.TK_im = self.TK_im.resize((self.shape[1], self.shape[0]))
@@ -590,8 +592,8 @@ class CropControl(object):
 
     def save(self):
         self.clean_exit = True
-        self.start = np.around(np.array(self.start) * self.scale_factor).astype(int)
-        self.end = np.around(np.array(self.end) * self.scale_factor).astype(int)
+        self.start = np.around(np.array(self.start) * self.scale_factor[:2]).astype(int)
+        self.end = np.around(np.array(self.end) * self.scale_factor[:2]).astype(int)
         self.w.destroy()
 
     def cancel(self):
@@ -825,6 +827,9 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
                 "The number of BSE images does not match the number of EBSD images."
             )
         bse_data = {"Intensity": bse_data}
+    elif bse_path.endswith(".dream3d"):
+        print("Reading dream3d file")
+        bse_data, bse_res = read_dream3d(bse_path)
     elif ";" in bse_path:
         # Multiple 2D images
         paths = bse_path.split(";")

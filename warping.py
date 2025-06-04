@@ -199,29 +199,17 @@ def transform_image_stack(
 
 
 if __name__ == "__main__":
+    import os
     import matplotlib.pyplot as plt
     import InteractiveView
 
-    src = np.loadtxt(
-        "C:/Users/lambj/Downloads/distorted_pts.txt", delimiter=" ", dtype=int
+    folder = "E:/CoNi90-thin/sharpness/"
+    paths = sorted(
+        [os.path.join(folder, p) for p in os.listdir(folder)],
+        key=lambda x: int(x.split("_")[-2]),
     )
-    dst = np.loadtxt(
-        "C:/Users/lambj/Downloads/control_pts.txt", delimiter=" ", dtype=int
-    )
+    print(paths)
+    data = np.array([np.load(p) for p in paths])
+    print(data.shape)
 
-    bse_shape = (414, 621)
-    ebsd_shape = (380, 449)
-
-    fake_images = np.random.uniform(0, 1, size=(187, *ebsd_shape, 1))
-
-    fake_transformed = transform_image_stack(
-        fake_images,
-        src,
-        dst,
-        output_shape=bse_shape,
-        mode="tps",
-        order=0,
-        size=bse_shape,
-    )
-
-    InteractiveView.Interactive3D(fake_transformed, fake_transformed)
+    InteractiveView.Interactive3D(data, data)
