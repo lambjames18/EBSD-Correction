@@ -974,17 +974,20 @@ class App(tk.Tk):
     def _correct_dtype(self, data, dtype):
         print("Correcting dtype", dtype, data.dtype)
         # Fix integer types, leave float types as is
-        try:
-            # Succeeds if it tis an integer dtype
-            info = np.iinfo(dtype)
-            # Convert to 0-1 range and then scale to the max value of the dtype
-            data = (2**info.bits - 1) * data / data.max()
-            # Convert to the correct dtype
-            data += info.min
-            return np.around(data, 0).astype(dtype)
-        except ValueError:
-            # Fails if it is a float dtype
-            return data.astype(dtype)
+        if data.dtype == dtype:
+            return data
+        else:
+            try:
+                # Succeeds if it tis an integer dtype
+                info = np.iinfo(dtype)
+                # Convert to 0-1 range and then scale to the max value of the dtype
+                data = (2**info.bits - 1) * data / data.max()
+                # Convert to the correct dtype
+                data += info.min
+                return np.around(data, 0).astype(dtype)
+            except ValueError:
+                # Fails if it is a float dtype
+                return data.astype(dtype)
 
     def _get_dream3d_structure(self, path, data_keys):
         h5 = h5py.File(path, "r")
@@ -1252,91 +1255,63 @@ class App(tk.Tk):
         if SAVE_PATH_EBSD is None:
             print("Path not provided or invalid!")
             return
+        elif not SAVE_PATH_EBSD.endswith(".dream3d"):
+            raise ValueError("The save path must end with .dream3d for DREAM.3D files.")
 
         # Get the mode choice
         mode = self._get_mode_choice()
-
-        # Ask if the user wants to crop the corrected image to match the distorted grid
-        # crop_choice = self._get_crop_choice()
+        if mode is None:
+            print("Mode not selected!")
+            return
         crop_choice = "src"
 
-        # If DREAM.3D file
-        corrected_stack = self._apply_multiple_3d(crop_choice, mode)
+        # Copy old dream3d file and parse the structure
+        shutil.copyfile(self.ebsd_path, SAVE_PATH_EBSD)
+        cell_data_key = self._get_dream3d_structure(
+            SAVE_PATH_EBSD, self.ebsd_data.keys()
+        )
+        print("Cell data key:", cell_data_key)
 
-        # Get the modality keys
-        keys = list(corrected_stack.keys())
-        keys_lower = [k.lower() for k in keys]
-
-        # File type determines the save method
-        if not SAVE_PATH_EBSD.endswith(".dream3d"):
-            # No normalization for tiff files, 8-bit for others
-            if SAVE_PATH_EBSD.endswith(".tiff") or SAVE_PATH_EBSD.endswith(".tif"):
-                normalize = lambda x: x
-            else:
-                normalize = lambda x: np.around(
-                    (x - np.min(x)) / (np.max(x) - np.min(x)) * 255
-                ).astype(np.uint8)
-            for key in keys:
-                for i in range(corrected_stack[key].shape[0]):
-                    split = os.path.splitext(SAVE_PATH_EBSD)
-                    save_path = split[0] + f"_{key}_{i}" + split[1]
-                    io.imsave(save_path, normalize(corrected_stack[key][i]))
-            print("Images saved in folder", os.path.dirname(SAVE_PATH_EBSD))
-        else:
-            # Copy old dream3d file and parse the structure
-            shutil.copyfile(self.ebsd_path, SAVE_PATH_EBSD)
-            ref_index = keys_lower.index("reference")
-            reference_stack = corrected_stack.pop(keys[ref_index])
-            keys.pop(ref_index)
-            keys_lower.pop(ref_index)
-            cell_data_key = self._get_dream3d_structure(SAVE_PATH_EBSD, keys)
-
-            # Create a new grid for the output file
-            if "x" in keys_lower or "y" in keys_lower:
-                x, y = np.meshgrid(
-                    np.arange(corrected_stack[keys[0]].shape[2]),
-                    np.arange(corrected_stack[keys[0]].shape[1]),
-                )
-                x = x.astype(np.float32) * self.ebsd_res
-                y = y.astype(np.float32) * self.ebsd_res
-                x = x.reshape(1, *x.shape, 1)
-                y = y.reshape(1, *y.shape, 1)
-                if "x" in keys_lower:
-                    corrected_stack[keys[keys_lower.index("x")]] = np.repeat(
-                        x, corrected_stack[keys[0]].shape[0], axis=0
-                    )
-                if "y" in keys_lower:
-                    corrected_stack[keys[keys_lower.index("y")]] = np.repeat(
-                        y, corrected_stack[keys[0]].shape[0], axis=0
-                    )
-
-            # Open the file and write the data
-            h5 = h5py.File(SAVE_PATH_EBSD, "r+")
-            for key in keys:
-                print(
-                    "Saving key:",
-                    key,
-                    corrected_stack[key].shape,
-                    h5[cell_data_key][key].shape,
-                )
+        # Apply corrections
+        ref_written = False
+        rslc, cslc = None, None
+        params = None
+        with h5py.File(SAVE_PATH_EBSD, "r+") as h5:
+            for key in self.ebsd_data.keys():
+                print("Saving key:", key)
+                # Update current mode and correct the stack
                 dtype = h5[cell_data_key][key].dtype
                 shape = h5[cell_data_key][key].shape
-                if dtype == np.uint8 and shape == reference_stack.shape:
-                    ref_key = key
-                h5[cell_data_key][key][...] = self._correct_dtype(
-                    corrected_stack[key], dtype
+                self.ebsd_mode.set(key)
+                reference_stack, corrected_stack, rslc, cslc, params = self._apply_3d(
+                    crop_choice,
+                    mode,
+                    rslc=rslc,
+                    cslc=cslc,
+                    params=params,
+                    return_params=True,
                 )
-            print("Reference key to copy:", ref_key)
 
-            # Copy a h5py entry that is an 8 bit integer and replace it with the reference stack
-            h5.copy(
-                f"{cell_data_key}/{ref_key}",
-                f"{cell_data_key}/BSE",
-            )
-            h5[cell_data_key + "/BSE"][...] = reference_stack
-            h5.close()
+                # Store the corrected stack
+                h5[cell_data_key][key][...] = self._correct_dtype(
+                    corrected_stack, dtype
+                )
 
-            print("Saved DREAM.3D file to:", SAVE_PATH_EBSD)
+                # Check if the current key is a valid copy candidate for the reference stack
+                if (
+                    dtype == np.uint8
+                    and shape == reference_stack.shape
+                    and not ref_written
+                ):
+                    h5.copy(
+                        f"{cell_data_key}/{key}",
+                        f"{cell_data_key}/BSE",
+                    )
+                    h5[cell_data_key + "/BSE"][...] = reference_stack
+                    h5.close()
+                    ref_written = True
+
+        print("Saved DREAM.3D file to:", SAVE_PATH_EBSD)
 
     def _apply_2d(self, crop_choice, mode="tps"):
         print("Transforming image using mode:", mode)
@@ -1483,7 +1458,15 @@ class App(tk.Tk):
         print("Finished processing")
         return dst_imgs, warped_srcs
 
-    def _apply_3d(self, crop_choice, mode="tps"):
+    def _apply_3d(
+        self,
+        crop_choice,
+        mode="tps",
+        rslc=None,
+        cslc=None,
+        params=None,
+        return_params=False,
+    ):
         # Get shapes
         src_img_shape = self.ebsd_data[self.ebsd_mode.get()][
             self.slice_num.get()
@@ -1498,8 +1481,6 @@ class App(tk.Tk):
             (image_stack, np.ones_like(image_stack[..., :1])), axis=-1
         )
         reference_stack = np.squeeze(self.bse_data[self.bse_mode.get()])
-        print("SRC shape:", image_stack.shape)
-        print("DST shape:", reference_stack.shape)
 
         # Get points
         src_points = []
@@ -1524,37 +1505,41 @@ class App(tk.Tk):
                 mode,
                 order=0,
                 size=dst_img_shape,
+                params=params,
+                return_params=return_params,
             )
+            if return_params:
+                corrected_stack, params = corrected_stack
         else:
             corrected_stack = warping.transform_image_stack(
                 image_stack, src_points, dst_points, dst_img_shape, mode, order=0
             )
-        print("Corrected stack shape:", corrected_stack.shape)
-        print("Reference stack shape:", reference_stack.shape)
 
         # Crop to the center of the corrected image if desired
         if crop_choice == "src":
-            print("Cropping to match distorted grid")
-            # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-            dummy = corrected_stack[:, :, :, -1]
-            zc, yc, xc = (
-                np.array(np.where(dummy)).reshape(3, -1).T.mean(axis=0).astype(int)
-            )
-            rslc, cslc = self._get_cropping_slice(
-                (yc, xc), src_img_shape, dst_img_shape
-            )
+            print("\tCropping to match distorted grid")
+            if rslc is None or cslc is None:
+                # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
+                dummy = corrected_stack[:, :, :, -1]
+                zc, yc, xc = (
+                    np.array(np.where(dummy)).reshape(3, -1).T.mean(axis=0).astype(int)
+                )
+                rslc, cslc = self._get_cropping_slice(
+                    (yc, xc), src_img_shape, dst_img_shape
+                )
             reference_stack = reference_stack[:, rslc, cslc]
             corrected_stack = corrected_stack[:, rslc, cslc]
         elif crop_choice == "dst":
-            print("Cropping to match destination grid")
+            print("\tCropping to match destination grid")
             corrected_stack = corrected_stack[:, : dst_img_shape[0], : dst_img_shape[1]]
         else:
-            print("Not cropping, leaving destination and warped source as is.")
+            print("\tNot cropping, leaving destination and warped source as is.")
         # Remove the last channel (the one with the ones)
         corrected_stack = corrected_stack[:, :, :, :-1]
 
-        print("Reference shape:", reference_stack.shape)
-        print("Corrected shape:", corrected_stack.shape)
+        if return_params:
+            # Return the slices for the reference and corrected stacks
+            return reference_stack, corrected_stack, rslc, cslc, params
 
         return reference_stack, corrected_stack
 
