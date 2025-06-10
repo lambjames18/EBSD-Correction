@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.spatial import distance_matrix
 from scipy.spatial.distance import cdist
 from skimage import transform as tf
 

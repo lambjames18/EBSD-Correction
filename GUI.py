@@ -6,21 +6,18 @@ UI for running distortion correction
 
 # Python packages
 import os
-from enum import Enum
-from pathlib import Path
 
 # from threading import Thread
 from multiprocessing.pool import ThreadPool
 import shutil
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
-from copy import deepcopy
 
 # 3rd party packages
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from skimage import io, exposure, transform
+from skimage import io, transform
 import torch
 from torchvision.transforms.functional import resize as RESIZE
 from torchvision.transforms import InterpolationMode
@@ -28,7 +25,6 @@ from kornia.enhance import equalize_clahe
 
 # Local files
 import warping
-import core
 import Inputs
 import InteractiveView as IV
 
@@ -1354,7 +1350,7 @@ class App(tk.Tk):
 
         # Crop to the center of the corrected image if desired
         if crop_choice == "src":
-            print("Cropping to match distorted grid")
+            print("\tCropping to match distorted grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
             dummy = np.ones(src_img.shape)
             dummy = warping.transform_image(
@@ -1369,15 +1365,15 @@ class App(tk.Tk):
             rslc, cslc = self._get_cropping_slice(
                 (rc, cc), src_img.shape, dst_img.shape[:2]
             )
+            print("\tCropping slices:", rslc, cslc)
             dst_img = dst_img[rslc, cslc]
             warped_src = warped_src[rslc, cslc]
         elif crop_choice == "dst":
-            print("Cropping to match destination grid")
+            print("\tCropping to match destination grid")
             warped_src = warped_src[: dst_img.shape[0], : dst_img.shape[1]]
         else:
-            print("Not cropping, leaving destination and warped source as is.")
+            print("\tNot cropping, leaving destination and warped source as is.")
 
-        print("Finished processing")
         return dst_img, warped_src
 
     def _apply_multiple_2d(self, crop_choice, mode="tps"):
@@ -1527,6 +1523,7 @@ class App(tk.Tk):
                 rslc, cslc = self._get_cropping_slice(
                     (yc, xc), src_img_shape, dst_img_shape
                 )
+            print("\tCropping slices:", rslc, cslc)
             reference_stack = reference_stack[:, rslc, cslc]
             corrected_stack = corrected_stack[:, rslc, cslc]
         elif crop_choice == "dst":

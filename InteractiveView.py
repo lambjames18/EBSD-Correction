@@ -1,4 +1,3 @@
-from skimage import io
 from matplotlib.widgets import Slider, RadioButtons
 import matplotlib.pyplot as plt
 import numpy as np
