@@ -448,20 +448,20 @@ class App(tk.Tk):
         # flip = False
         # crop = False
         ebsd_points_path = (
-            "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-src_pts.txt"
+            "/Users/jameslamb/Documents/research/data/CoNi90-thin/distorted_pts.txt"
         )
         bse_points_path = (
-            "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/preDIC-dst_pts.txt"
+            "/Users/jameslamb/Documents/research/data/CoNi90-thin/control_pts.txt"
         )
         ebsd_path = (
-            "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.ang"
+            "/Users/jameslamb/Documents/research/data/CoNi90-thin/CoNi90-thin.dream3d"
         )
-        bse_path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CBS.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CLAHE_CBS.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_ETD.tif;/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_CLAHE_ETD.tif"
+        bse_path = "/Users/jameslamb/Documents/research/data/CoNi90-thin/CoNi90-thin_BSE_small.dream3d"
         ebsd_res = 1.0
         bse_res = 1.0
         rescale = False
         r180 = False
-        flip = False
+        flip = True
         crop = False
         self.ang_path = ebsd_path
         self.ebsd_res = ebsd_res
@@ -488,10 +488,8 @@ class App(tk.Tk):
         if rescale:
             b_d = Inputs.rescale_control(b_d, bse_res, ebsd_res)
         # Flip or rotate 180 if desired
-        if flip:
-            b_d = np.flip(b_d, axis=1).copy(order="C")
-        elif r180:
-            b_d = np.rot90(b_d, 2, axes=(1, 2)).copy(order="C")
+        if flip or r180:
+            b_d = Inputs.flip_rotate_control(b_d, flip, r180)
         # Crop if desired
         if crop:
             ### TODO: Add multiple control images
@@ -1314,6 +1312,7 @@ class App(tk.Tk):
         # Get the bse image and process
         dst_img = self.bse_data[self.bse_mode.get()][self.slice_num.get()]
         src_img = self.ebsd_data[self.ebsd_mode.get()][self.slice_num.get()]
+        print("SRC shape:", src_img.shape)
 
         # Get the points and perform alignment
         src_points = np.array(self.points["ebsd"][self.slice_num.get()])
@@ -1328,6 +1327,12 @@ class App(tk.Tk):
             dst_img = CLAHE(dst_img)
         if self.clahe_active_ebsd:
             src_img = CLAHE(src_img)
+
+        # Stack a dummy channel
+        dummy = np.ones(src_img[..., :1].shape, dtype=src_img.dtype)
+        print("Dummy shape:", dummy.shape)
+        src_img = np.concatenate((src_img, dummy), axis=-1)
+        print("Source image shape after stacking dummy channel:", src_img.shape)
 
         # Warp all the EBSD modes
         if "tps" in mode.lower():
@@ -1348,20 +1353,15 @@ class App(tk.Tk):
                 mode=mode,
             )
 
+        IV.Interactive2D(warped_src[..., 1], warped_src[..., 1], "Warped Source Image")
+
         # Crop to the center of the corrected image if desired
         if crop_choice == "src":
             print("\tCropping to match distorted grid")
             # Do this by correcting an empty image (all ones) and finding the centroid of the corrected image
-            dummy = np.ones(src_img.shape)
-            dummy = warping.transform_image(
-                dummy,
-                dst_points,
-                src_points,
-                output_shape=dst_img.shape[:2],
-                mode="tps",
-                size=dst_img.shape[:2],
-            )
+            dummy = warped_src[..., -1]
             rc, cc = np.array(np.where(dummy)).reshape(2, -1).T.mean(axis=0).astype(int)
+            print("\tCentroid of corrected image:", rc, cc)
             rslc, cslc = self._get_cropping_slice(
                 (rc, cc), src_img.shape, dst_img.shape[:2]
             )
@@ -1373,6 +1373,7 @@ class App(tk.Tk):
             warped_src = warped_src[: dst_img.shape[0], : dst_img.shape[1]]
         else:
             print("\tNot cropping, leaving destination and warped source as is.")
+        warped_src = warped_src[..., :-1]  # Remove the dummy channel
 
         return dst_img, warped_src
 
