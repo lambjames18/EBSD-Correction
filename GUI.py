@@ -111,18 +111,10 @@ class App(tk.Tk):
         labels = [
             "TPS",
             "Affine only TPS",
-            "Euclidean ",
-            "Similarity",
-            "Affine",
-            "Projective",
         ]
         keywords = [
             "tps",
             "tps affine",
-            "euclidean",
-            "similarity",
-            "affine",
-            "projective",
         ]
         for label, keyword in zip(labels, keywords):
             applymenu2d.add_command(
@@ -662,11 +654,6 @@ class App(tk.Tk):
             options=[
                 "Thin-Plate Spline",
                 "Thin-Plate Spline (Affine only)",
-                "Euclidean",
-                "Similarity",
-                "Affine",
-                "Piecewise-affine",
-                "Projective",
             ],
             orientation="vertical",
         )
@@ -678,11 +665,6 @@ class App(tk.Tk):
             mode = [
                 "tps",
                 "tps affine",
-                "euclidean",
-                "similarity",
-                "affine",
-                "piecewise-affine",
-                "projective",
             ][mode.choice]
         print("Mode choice:", mode)
 
@@ -927,11 +909,6 @@ class App(tk.Tk):
             options=[
                 "Thin-Plate Spline",
                 "Thin-Plate Spline (Affine only)",
-                "Euclidean",
-                "Similarity",
-                "Affine",
-                "Piecewise-affine",
-                "Projective",
             ],
             orientation="vertical",
         )
@@ -941,11 +918,6 @@ class App(tk.Tk):
             mode = [
                 "tps",
                 "tps affine",
-                "euclidean",
-                "similarity",
-                "affine",
-                "piecewise-affine",
-                "projective",
             ][mode.choice]
         print("Mode choice:", mode)
         return mode
@@ -1113,11 +1085,6 @@ class App(tk.Tk):
             options=[
                 "Thin-Plate Spline",
                 "Thin-Plate Spline (Affine only)",
-                "Euclidean",
-                "Similarity",
-                "Affine",
-                "Piecewise-affine",
-                "Projective",
             ],
             orientation="vertical",
         )
@@ -1127,11 +1094,6 @@ class App(tk.Tk):
             mode = [
                 "tps",
                 "tps affine",
-                "euclidean",
-                "similarity",
-                "affine",
-                "piecewise-affine",
-                "projective",
             ][mode.choice]
         print("Mode choice:", mode)
 
