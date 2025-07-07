@@ -50,15 +50,17 @@ At this point you are ready to select control points!
 
 ### Selecting control points
 
-Simply click on either image to place a reference point. Make sure that the order of the points is consistent between the two viewers (point 1 on distorted should connect to point 1 on control). Remove points by right cicking on them. The points can be cleared for the current pair of images using the "Clear Points" buttons. The view of the distorted data (typically EBSD data) can be changed using the "EBSD mode" dropdown under the distorted viewer. This allows you to view confidence index, image quality, IPF, color, etc.  The "Zoom" dropdown lets you zoom into either image. The scroll bars next to the viewers allow you to move around the image. Currently the scroll bars are the only way to move around.
+Simply click on either image to place a reference point. Make sure that the order of the points is consistent between the two viewers (point 1 on distorted should connect to point 1 on control). Remove points by right cicking on them. The points can be cleared for the current pair of images using the "Clear Points" buttons. The view of the distorted data (typically EBSD data) can be changed using the "EBSD mode" dropdown under the distorted viewer. This allows you to view confidence index, image quality, IPF, color, etc. The "Zoom" dropdown lets you zoom into either image. The scroll bars next to the viewers allow you to move around the image. Currently the scroll bars are the only way to move around.
 
-For 3D data, the "Slice number" dropdown allows you to scroll through the volume and select control points for various slices.
-
-The "Export control point images" button will save a pair of images that show where the control points are located for the two viewers. This is largely for illustrative purposes. The "View points" checkbutton lets you turn off the point overlays in case they are distracting.
+For 3D data, the "Slice number" dropdown allows you to scroll through the volume and select control points for various slices. A few things to note:
+- If only one slice has control points, the same transformation is applied to all slices.
+- If multiple slices have control points, the transformation is interpolated between the two closest slices with control points.
+- If the first and/or last slice does not have control points, the closest slice with control points in copied to all slices needing extrapolation.
+- Example: 10 slices, control points on slices 2 and 7. Slices 1 and 2 use the transformation from slice 2. Slices 3-6 are interpolated transformations from slices 2 and 7. Slices 7-10 use the transformation from slice 2.
 
 ### Viewing the alignment
 
-Under the "Apply" tab, TPS and TPS 3D allow you to view the corrected data in an interactive viewer either in 2D or 3D. 3D is only applicable for 3D data, obviously. A new window will appear with either 2 or 3 scrollbars that allow you to shift between corrected and control images (and the slice number if 3D). The DoLE selection is the automatic distortion correction function. Currently, it does not run well, but future iterations might be better.
+Under the "View transform (current image)" tab, you can select either a TPS or affine-only TPS to view the corrected data in an interactive viewer. "View transform (image stack)" tab provides the same for the entire image stack.
 
 ### Saving the data
 
@@ -71,20 +73,16 @@ Under the "File" tab, "Export 2D" will compute the alignment solution and save t
 
 ## Other files
 
-- `SIFT.py` is for future plans.
-- `core.py` this is the core of the alignment algorithms and is called from `ui.py`.
+- `Outputs.py` Code for saving an ANG file.
+- `Inputs.py` Code for reading in dream3d files, images, image stacks, ang files, h5 files, etc...
+- `warping.py` Code for converting a set of control point into a transformation between two images (or two stacks) and also applying the transformation.
+- `tps.py` Custom class for the Thin-Plate Spline transform.
 - `InteractiveView.py` this permits interactive viewing of the solutions.
-- `IO.py` this handles importing the data.
-- `rescale.py` this allows one to rescale individual images to match resolutions between two images. This is handle within the UI, but if one wants to do it separetly, this script can do that.
-- `put_BSE_in_h5.py` this is used to put control images into a Dream3D file.
-- `scratch.py` this is my own scratch file for testing random things. It can be ignored.
-- "original" this folder contains older scripts that are kept for potential updates.
 - "test_data" contains data one can use to test the UI.
 - "theme" this contains images and style files for the tkinter GUI and the README file.
+- `SIFT.py` is for future plans.
 
 ## Future plans
-
-Currently overhauling the UI to be more user friendly...
 
 - Adding h5 support for 2D EBSD data
 - Adding cropping/rescaling functionality within the UI

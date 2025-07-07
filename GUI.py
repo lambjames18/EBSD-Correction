@@ -131,7 +131,7 @@ class App(tk.Tk):
                 command=lambda keyword=keyword: self.apply_3d(keyword),
             )
         self.menu.add_cascade(
-            label="Apply transform (all images)", menu=applymenu3d, state="disabled"
+            label="View transform (image stack)", menu=applymenu3d, state="disabled"
         )
         self.config(menu=self.menu)
         #
