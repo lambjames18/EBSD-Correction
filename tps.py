@@ -1,13 +1,18 @@
 import numpy as np
 from scipy.spatial.distance import cdist
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import spsolve
 from skimage import transform as tf
+from tqdm import tqdm
 
 
 class ThinPlateSplineTransform:
-    def __init__(self, affine_only=False):
+    def __init__(self, affine_only=False, chunk_size=None, dtype=np.float32):
         self._estimated = False
         self.params = None
         self.affine_only = affine_only
+        self.chunk_size = chunk_size
+        self.dtype = dtype
 
     def __call__(self, coords):
         """Transform coordinates from source to destination using thin plate spline."""
@@ -18,7 +23,46 @@ class ThinPlateSplineTransform:
         out = params[(coords[:, 1], coords[:, 0])]
         return out
 
-    def estimate(self, src, dst, size):
+    def _estimate_chunk_size(self, n_pixels, n_control_points, available_memory_gb=2.0):
+        """
+        Estimate optimal chunk size based on memory constraints.
+
+        Parameters
+        ----------
+        n_pixels : int
+            Total number of pixels to process
+        n_control_points : int
+            Number of control points
+        available_memory_gb : float
+            Available memory in GB for the computation
+
+        Returns
+        -------
+        chunk_size : int
+            Optimal number of pixels to process per chunk
+        """
+        # Memory per chunk: chunk_size * n_control_points * bytes_per_float
+        bytes_per_element = np.dtype(self.dtype).itemsize
+
+        # Main memory consumers:
+        # 1. Distance matrix: chunk_size × n_control_points
+        # 2. U matrix: chunk_size × n_control_points
+        # 3. Intermediate arrays: ~2x the above for safety
+        memory_per_pixel = (
+            n_control_points * bytes_per_element * 4
+        )  # 4x for safety margin
+
+        available_bytes = available_memory_gb * 1024**3
+        chunk_size = int(available_bytes / memory_per_pixel)
+
+        # Clamp to reasonable bounds
+        chunk_size = max(
+            1000, min(chunk_size, n_pixels)
+        )  # At least 1000, at most all pixels
+
+        return chunk_size
+
+    def estimate(self, src, dst, size, available_memory_gb=2.0):
         """Estimate optimal spline mappings between source and destination points.
 
         Parameters
@@ -57,7 +101,7 @@ class ThinPlateSplineTransform:
         Y = np.vstack([xtAug, ytAug]).T
 
         # calculate unknown params in (W | a).T
-        params = np.dot(np.linalg.inv(L), Y)
+        params = np.linalg.solve(L, Y)
         wi = params[:n, :]
         a1 = params[n, :]
         ax = params[n + 1, :]
@@ -73,6 +117,7 @@ class ThinPlateSplineTransform:
         # for fineness of grid, if you want to fix all points, leave nx=lx, ny=ly
         nx = lx  # num points along reference x-direction, full correction will have nx = lx
         ny = ly  # num points along reference y-direction, full correction will have ny = ly
+        n_pixels = nx * ny
 
         # (x,y) coordinates from reference image
         x = np.linspace(1, lx, nx)
@@ -88,25 +133,58 @@ class ThinPlateSplineTransform:
         affine[1, :, :] += a1[1]
         del xgd, ygd, x, y
 
-        # bending portion, but do it in parts for memory reasons
-        bend = np.zeros((2, nx * ny))
-        for i in range(n):
-            # print("Calculating bending portion for control point {}...".format(i))
-            R = np.linalg.norm(pixels - cps[i], axis=1).reshape(-1, 1)
-            Rsq = R * R
-            Rsq[R == 0] = 1
-            U = Rsq * np.log(Rsq)
-            bend += np.einsum("ij,jk->ik", U, wi[i].reshape(1, 2)).T
-        bend = np.reshape(bend, (2, ny, nx))
-
-        # print("Bending portion calculated...")
+        tracemalloc.start()
         if self.affine_only:
             self.params = affine
         else:
-            self.params = affine + bend
+            # Determine chunk size
+            if self.chunk_size is None:
+                chunk_size = self._estimate_chunk_size(n_pixels, n, available_memory_gb)
+            else:
+                chunk_size = self.chunk_size
+
+            n_chunks = int(np.ceil(n_pixels / chunk_size))
+            print(
+                f"Processing {n_pixels:,} pixels in {n_chunks} chunk(s) of ~{chunk_size:,} pixels each"
+            )
+
+            # Compute bending portion in chunks
+            print("Computing bending transformation...")
+            bend = np.zeros((2, ny, nx), dtype=self.dtype)
+
+            for chunk_idx in tqdm(range(n_chunks)):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min((chunk_idx + 1) * chunk_size, n_pixels)
+                chunk_pixels = pixels[start_idx:end_idx]
+
+                # Vectorized distance calculation for this chunk
+                R = cdist(chunk_pixels, cps, "euclidean").astype(self.dtype)
+                Rsq = R * R
+                Rsq[R == 0] = 1  # Avoid log(0)
+                U = Rsq * np.log(Rsq)
+
+                # Matrix multiplication: (chunk_size, n) @ (n, 2) = (chunk_size, 2)
+                bend_chunk = U @ wi
+
+                # Reshape and place into output array
+                chunk_len = end_idx - start_idx
+                bend_chunk_reshaped = bend_chunk.T.reshape(2, chunk_len)
+
+                # Map flat indices back to 2D coordinates
+                y_indices = (start_idx + np.arange(chunk_len)) // nx
+                x_indices = (start_idx + np.arange(chunk_len)) % nx
+
+                bend[:, y_indices, x_indices] = bend_chunk_reshaped
+
+                # Clean up chunk memory
+                del R, Rsq, U, bend_chunk, bend_chunk_reshaped
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
         self.size = size
         self._estimated = True
-        return True
+        return peak
+        # return True
 
     def _TPS_makeL(self, cp):
         """Function to make the L matrix for thin plate spline calculation."""
@@ -132,26 +210,38 @@ class ThinPlateSplineTransform:
 
 
 if __name__ == "__main__":
-    from core import Alignment
-    from skimage import data
     import matplotlib.pyplot as plt
-
-    image = data.checkerboard()
-    src = np.loadtxt("src.txt", delimiter=",", dtype=int)[8:, 1:].astype(int)
-    dst = np.loadtxt("dst.txt", delimiter=",", dtype=int)[8:, 1:].astype(int)
+    import time
+    import tracemalloc
 
     tform = ThinPlateSplineTransform()
-    tform.estimate(src, dst, image.shape)
 
-    image_warped = tf.warp(image, tform)
+    Ns = [100, 1000, 5000]
+    results = []
+    for N in Ns:
+        np.random.seed(0)
+        src = np.random.rand(5000, 2) * N
+        dst = src + (np.random.rand(5000, 2) - 0.5) * 10  # small random displacement
+        size = (N, N)
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].imshow(image, cmap="gray")
-    ax[0].plot(dst[:, 0], dst[:, 1], "ro")
-    ax[1].imshow(image_warped, cmap="gray")
-    ax[1].plot(src[:, 0], src[:, 1], "ro")
-    ax[0].set_xlim(0, image.shape[1])
-    ax[0].set_ylim(image.shape[0], 0)
-    ax[1].set_xlim(0, image.shape[1])
-    ax[1].set_ylim(image.shape[0], 0)
+        start_time = time.time()
+        peak = tform.estimate(src, dst, size, available_memory_gb=20.0)
+        end_time = time.time()
+
+        results.append((N, end_time - start_time, peak / 10**6))
+
+    results = np.array(results)
+
+    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    ax2 = ax.twinx()
+
+    ax.plot(results[:, 0], results[:, 1], "o-", color="blue", label="Time (s)")
+    ax2.plot(results[:, 0], results[:, 2], "s--", color="red", label="Memory (MB)")
+    ax.set_xscale("log")
+    ax.set_xlabel("Number of Control Points")
+    ax.set_ylabel("Time (s)")
+    ax2.set_ylabel("Memory (MB)")
+    ax.legend(loc="upper left")
+    ax2.legend(loc="upper right")
+    plt.title("Thin Plate Spline Transform Performance")
     plt.show()
