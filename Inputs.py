@@ -632,7 +632,7 @@ def read_ang_header(path):
 def read_ang(path):
     """Reads an ang file into a numpy array"""
     ncols, nrows, col_names, res, header, header_lines = read_ang_header(path)
-    raw_data = np.genfromtxt(path, skip_header=header_lines)
+    raw_data = np.genfromtxt(path, skip_header=header_lines, dtype=float)
     n_entries = raw_data.shape[-1]
     if raw_data.shape[0] == ncols * nrows:
         data = raw_data.reshape((nrows, ncols, n_entries))
@@ -862,12 +862,12 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
 
 def rescale_control(bse_data, bse_res, ebsd_res):
     downscale = bse_res / ebsd_res
-    print("Current BSE resolution:", bse_res, "Target EBSD resolution:", ebsd_res)
-    print(
-        "BSE needs to be downscaled by a factor of",
-        downscale,
-        "to match EBSD resolution.",
-    )
+    # print("Current BSE resolution:", bse_res, "Target EBSD resolution:", ebsd_res)
+    # print(
+    #     "BSE needs to be downscaled by a factor of",
+    #     downscale,
+    #     "to match EBSD resolution.",
+    # )
     for key in bse_data.keys():
         temp = np.array(
             [
