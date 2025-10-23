@@ -133,7 +133,6 @@ class ThinPlateSplineTransform:
         affine[1, :, :] += a1[1]
         del xgd, ygd, x, y
 
-        tracemalloc.start()
         if self.affine_only:
             self.params = affine
         else:
@@ -178,13 +177,12 @@ class ThinPlateSplineTransform:
 
                 # Clean up chunk memory
                 del R, Rsq, U, bend_chunk, bend_chunk_reshaped
-        current, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+
+            self.params = affine + bend
 
         self.size = size
         self._estimated = True
-        return peak
-        # return True
+        return True
 
     def _TPS_makeL(self, cp):
         """Function to make the L matrix for thin plate spline calculation."""
@@ -212,7 +210,6 @@ class ThinPlateSplineTransform:
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import time
-    import tracemalloc
 
     tform = ThinPlateSplineTransform()
 
