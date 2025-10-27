@@ -5,9 +5,6 @@ This module defines the interface that any view implementation must follow.
 """
 
 ### TODO
-# Check that stack of images reads in correctly
-# Put in logic that makes sure a stack of images is the same shape
-# Put in logic to make sure that the source/destination have the same number of images for two stacks: Need to test now
 # Get export working for dream3d
 # Get 3D data working
 
