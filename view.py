@@ -5,6 +5,9 @@ This module defines the interface that any view implementation must follow.
 """
 
 ### TODO
+# Check that stack of images reads in correctly
+# Put in logic that makes sure a stack of images is the same shape
+# Put in logic to make sure that the source/destination have the same number of images for two stacks: Need to test now
 # Get export working for dream3d
 # Get 3D data working
 
@@ -91,51 +94,37 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         if style == "dark":
             self.bg = "#333333"
             self.fg = "#ffffff"
-            self.hl = "#007fff"
+            self.hl = "#229fff"
+            self.hl2 = "#00bb00"
             self.tk.call("source", r"./theme/dark.tcl")
             s = ttk.Style(self)
             s.theme_use("azure-dark")
-            s.configure("TFrame", background=self.bg)
-            s.configure("TLabel", background=self.bg, foreground=self.fg)
-            s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
-            s.configure(
-                "TLabelframe",
-                background=self.bg,
-                foreground=self.fg,
-                highlightcolor=self.hl,
-                highlightbackground=self.hl,
-            )
-            s.configure(
-                "TLabelframe.Label",
-                background=self.bg,
-                foreground=self.fg,
-                highlightcolor=self.hl,
-                highlightbackground=self.hl,
-            )
         elif style == "light":
             self.bg = "#ffffff"
             self.fg = "#000000"
             self.hl = "#007fff"
+            self.hl2 = "#00bb00"
             self.tk.call("source", r"./theme/light.tcl")
             s = ttk.Style(self)
             s.theme_use("azure-light")
-            s.configure("TFrame", background=self.bg)
-            s.configure("TLabel", background=self.bg, foreground=self.fg)
-            s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
-            s.configure(
-                "TLabelframe",
-                background=self.bg,
-                foreground=self.fg,
-                highlightcolor=self.hl,
-                highlightbackground=self.hl,
-            )
-            s.configure(
-                "TLabelframe.Label",
-                background=self.bg,
-                foreground=self.fg,
-                highlightcolor=self.hl,
-                highlightbackground=self.hl,
-            )
+
+        s.configure("TFrame", background=self.bg)
+        s.configure("TLabel", background=self.bg, foreground=self.fg)
+        s.configure("TCheckbutton", background=self.bg, foreground=self.fg)
+        s.configure(
+            "TLabelframe",
+            background=self.bg,
+            foreground=self.fg,
+            highlightcolor=self.hl,
+            highlightbackground=self.hl,
+        )
+        s.configure(
+            "TLabelframe.Label",
+            background=self.bg,
+            foreground=self.fg,
+            highlightcolor=self.hl,
+            highlightbackground=self.hl,
+        )
 
     def _setup_window(self):
         """Setup main window properties."""
@@ -162,9 +151,13 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.status_label.pack(side="left", fill="x", expand=True)
 
         self.progress_bar = ttk.Progressbar(
-            self.status_frame, mode="indeterminate", length=100
+            self.status_frame,
+            style="Niklas.Horizontal.TProgressbar",
+            mode="indeterminate",
+            length=200,
         )
         self.progress_bar.pack(side="right", padx=5)
+        print(self.progress_bar.winfo_class())
 
     def _create_menu(self):
         """Create application menu."""
@@ -249,6 +242,8 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         transform_menu.add_command(
             label="Apply to All Slices", command=self._on_apply_all
         )
+        transform_menu.add_separator()
+        transform_menu.add_command(label="Test", command=self._on_progress_test)
 
     def _create_main_layout(self):
         """Create main layout with image viewers."""
@@ -450,9 +445,14 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     # ========== Event Handlers ==========
 
+    def _on_progress_test(self):
+        """Test progress bar."""
+        self.show_progress(True)
+        self.after(2000, lambda: self.show_progress(False))
+
     def _on_open_source(self):
         """Handle opening source image."""
-        file_path = filedialog.askopenfilename(
+        file_paths = filedialog.askopenfilenames(
             title="Open Source Image",
             filetypes=[
                 ("All Supported", "*.ang *.h5 *.dream3d *.tif *.tiff *.png *.jpg"),
@@ -462,18 +462,23 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             ],
         )
 
-        if file_path:
+        if file_paths:
             self.show_progress(True)
-            self.set_status(f"Loading source image: {Path(file_path).name}")
-
-            if self.presenter.load_source_image(Path(file_path)):
-                self.set_status("Source image loaded successfully")
+            if len(file_paths) == 1:
+                file_path = file_paths[0]
+                self.set_status(f"Loading source image: {Path(file_path).name}")
+                if self.presenter.load_source_image(Path(file_path)):
+                    self.set_status("Source image loaded successfully")
+            else:
+                self.set_status(f"Loading {len(file_paths)} source images")
+                if self.presenter.load_source_image([Path(p) for p in file_paths]):
+                    self.set_status("Source image stack loaded successfully")
 
             self.show_progress(False)
 
     def _on_open_destination(self):
         """Handle opening destination image."""
-        file_path = filedialog.askopenfilename(
+        file_paths = filedialog.askopenfilenames(
             title="Open Destination Image",
             filetypes=[
                 ("Image Files", "*.tif *.tiff *.png *.jpg *.dream3d"),
@@ -481,12 +486,17 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             ],
         )
 
-        if file_path:
+        if file_paths:
             self.show_progress(True)
-            self.set_status(f"Loading destination image: {Path(file_path).name}")
-
-            if self.presenter.load_destination_image(Path(file_path)):
-                self.set_status("Destination image loaded successfully")
+            if len(file_paths) == 1:
+                file_path = file_paths[0]
+                self.set_status(f"Loading destination image: {Path(file_path).name}")
+                if self.presenter.load_destination_image(Path(file_path)):
+                    self.set_status("Destination image loaded successfully")
+            else:
+                self.set_status(f"Loading {len(file_paths)} destination images")
+                if self.presenter.load_destination_image([Path(p) for p in file_paths]):
+                    self.set_status("Destination image stack loaded successfully")
 
             self.show_progress(False)
 
@@ -990,7 +1000,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
     def show_progress(self, show: bool):
         """Show or hide progress indicator."""
         if show:
-            self.progress_bar.start(10)
+            self.progress_bar.start(1)
         else:
             self.progress_bar.stop()
 
