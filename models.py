@@ -358,21 +358,47 @@ class ImageLoader:
     }
 
     @classmethod
-    def load(cls, path: Union[str, Path], resolution: float = 1.0) -> ImageData:
+    def load(
+        cls, path: Union[str, Path, List, Tuple], resolution: float = 1.0
+    ) -> ImageData:
         """Load image data from file."""
-        path = Path(path)
+        if type(path) not in [list, tuple]:
+            path = Path(path)
 
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {path}")
 
-        suffix = path.suffix.lower()
-        if suffix not in cls.SUPPORTED_FORMATS:
-            raise ValueError(f"Unsupported file format: {suffix}")
+            suffix = path.suffix.lower()
+            if suffix not in cls.SUPPORTED_FORMATS:
+                raise ValueError(f"Unsupported file format: {suffix}")
 
-        loader_method = getattr(cls, cls.SUPPORTED_FORMATS[suffix])
+            loader_method = getattr(cls, cls.SUPPORTED_FORMATS[suffix])
+
+        else:
+            loader_method = cls.load_images
+            first_path = Path(path[0])
+            first_suffix = first_path.suffix.lower()
+            for i in range(len(path)):
+                _p = Path(path[i])
+
+                if not _p.exists():
+                    raise FileNotFoundError(f"File not found: {path}")
+
+                suffix = _p.suffix.lower()
+                if suffix not in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
+                    raise ValueError(
+                        f"When providing a list of images, all paths must be of image type"
+                    )
+
+                if suffix != suffix.lower():
+                    raise ValueError(
+                        f"When prividing a list of images, all images must have the same extension"
+                    )
+
+                path[i] = _p
 
         try:
-            logger.info(f"Loading {suffix} file: {path}")
+            logger.info(f"Loading {suffix} file(s)")
             data, res, metadata = loader_method(path)
 
             # Use provided resolution if loader didn't return one
@@ -512,6 +538,29 @@ class ImageLoader:
         im = im.reshape((1,) + im.shape)
 
         return {"Intensity": im}, None, None
+
+    @staticmethod
+    def load_images(paths: list) -> Tuple[Dict[str, np.ndarray], None]:
+        """Load a list of standard image formats."""
+        images = np.array(
+            [
+                io.imread(paths[i], as_gray=True).astype(np.float32)
+                for i in range(len(paths))
+            ]
+        )
+
+        # Put in a channel axis if needed
+        if images.ndim == 3:
+            images = images.reshape(images.shape + (1,))
+
+        # Normalize to 0-255 range
+        # mn = np.min(images, axis=(1, 2, 3), keepdims=True)
+        # mx = np.max(images, axis=(1, 2, 3), keepdims=True)
+        # rnge = mx - mn
+        # images = np.around(255 * (images - mn) / rnge, 0)
+        # images = images.astype(np.uint8)
+
+        return {"Intensity": images}, None, None
 
 
 class ImageWriter:
