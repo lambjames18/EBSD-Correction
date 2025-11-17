@@ -222,23 +222,19 @@ if __name__ == "__main__":
         size = (N, N)
 
         start_time = time.time()
-        peak = tform.estimate(src, dst, size, available_memory_gb=20.0)
+        tform.estimate(src, dst, size, available_memory_gb=20.0)
         end_time = time.time()
 
-        results.append((N, end_time - start_time, peak / 10**6))
+        results.append((N, end_time - start_time))
 
     results = np.array(results)
 
     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-    ax2 = ax.twinx()
 
     ax.plot(results[:, 0], results[:, 1], "o-", color="blue", label="Time (s)")
-    ax2.plot(results[:, 0], results[:, 2], "s--", color="red", label="Memory (MB)")
     ax.set_xscale("log")
     ax.set_xlabel("Number of Control Points")
     ax.set_ylabel("Time (s)")
-    ax2.set_ylabel("Memory (MB)")
     ax.legend(loc="upper left")
-    ax2.legend(loc="upper right")
-    plt.title("Thin Plate Spline Transform Performance")
+    plt.title("Thin Plate Spline Transform Performance (5k X 5k image)")
     plt.show()
