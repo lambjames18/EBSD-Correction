@@ -860,18 +860,18 @@ def read_data(ebsd_path, bse_path, ebsd_points_path, bse_points_path):
     return ebsd_data, bse_data, ebsd_points, bse_points
 
 
-def rescale_control(bse_data, bse_res, ebsd_res):
+def rescale_control(bse_data, bse_res, ebsd_res, channel_axis=None):
     downscale = bse_res / ebsd_res
-    # print("Current BSE resolution:", bse_res, "Target EBSD resolution:", ebsd_res)
-    # print(
-    #     "BSE needs to be downscaled by a factor of",
-    #     downscale,
-    #     "to match EBSD resolution.",
-    # )
     for key in bse_data.keys():
+
         temp = np.array(
             [
-                tf.rescale(bse_data[key][i], downscale, anti_aliasing=True)
+                tf.rescale(
+                    bse_data[key][i],
+                    downscale,
+                    anti_aliasing=True,
+                    channel_axis=channel_axis,
+                )
                 for i in range(bse_data[key].shape[0])
             ]
         )

@@ -6,7 +6,7 @@ This module acts as the intermediary between the model and view layers.
 
 import logging
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Optional, Tuple, Dict, Any, List, Union
 from enum import Enum
 import numpy as np
 
@@ -83,40 +83,69 @@ class ApplicationPresenter:
 
     # ========== Data Loading ==========
 
-    def load_source_image(self, path: Path, resolution: float = 1.0) -> bool:
+    def load_source_image(
+        self, path: Union[str, Path, List[Path], List[str]], resolution: float = 1.0
+    ) -> bool:
         """Load source (distorted) image."""
         try:
             self.source_image = ImageLoader.load(path, resolution)
             self.is_3d_mode = self.source_image.shape[0] > 1
+            if self.destination_image and self.is_3d_mode:
+                if self.destination_image.shape[0] != self.source_image.shape[0]:
+                    self.source_image = None
+                    self.is_3d_mode = False
+                    raise ValueError(
+                        "Source and destination images must have the same number of slices for 3D mode."
+                    )
 
             # Set default points path if not set
             if self.source_points_path is None:
+                if type(path) in {list, tuple}:
+                    path = Path(path[0])
                 self.source_points_path = path.parent / "distorted_pts.txt"
 
-            logger.info(f"Loaded source image: {path}")
+            if type(path) in {list, tuple}:
+                logger.info(f"Loaded source image stack: {len(path)} files")
+            else:
+                logger.info(f"Loaded source image: {path}")
             self._notify_view_data_loaded()
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load source image: {e}")
+            logger.error(f"Failed to load source image: {e} ({parse_error()})")
             self._notify_view_error(f"Failed to load source image: {str(e)}")
             return False
 
-    def load_destination_image(self, path: Path, resolution: float = 1.0) -> bool:
+    def load_destination_image(
+        self, path: Union[Path, List[Path]], resolution: float = 1.0
+    ) -> bool:
         """Load destination (control) image."""
         try:
             self.destination_image = ImageLoader.load(path, resolution)
+            self.is_3d_mode = self.destination_image.shape[0] > 1
+            if self.source_image and self.is_3d_mode:
+                if self.source_image.shape[0] != self.destination_image.shape[0]:
+                    self.destination_image = None
+                    self.is_3d_mode = False
+                    raise ValueError(
+                        "Source and destination images must have the same number of slices for 3D mode."
+                    )
 
             # Set default points path if not set
             if self.dest_points_path is None:
+                if type(path) in {list, tuple}:
+                    path = Path(path[0])
                 self.dest_points_path = path.parent / "control_pts.txt"
 
-            logger.info(f"Loaded destination image: {path}")
+            if type(path) in {list, tuple}:
+                logger.info(f"Loaded destination image stack: {len(path)} files")
+            else:
+                logger.info(f"Loaded destination image: {path}")
             self._notify_view_data_loaded()
             return True
 
         except Exception as e:
-            logger.error(f"Failed to load destination image: {e}")
+            logger.error(f"Failed to load destination image: {e} ({parse_error()})")
             self._notify_view_error(f"Failed to load destination image: {str(e)}")
             return False
 
@@ -153,6 +182,13 @@ class ApplicationPresenter:
                 self.point_manager.source_points.add_point(point)
                 self._notify_view_request_corresponding_point("destination")
             elif source == "destination" and self.destination_image is not None:
+                # Correct for matched resolutions
+                if self.match_resolutions:
+                    src_res, dst_res = self.get_resolutions()
+                    res_scale = src_res / dst_res
+                    point = Point(
+                        int(x * res_scale), int(y * res_scale), self.current_slice
+                    )
                 # Add destination point
                 self.point_manager.destination_points.add_point(point)
 
@@ -315,6 +351,14 @@ class ApplicationPresenter:
             if src_points.size == 0 or dst_points.size == 0:
                 self._notify_view_error("No control points defined for transformation")
                 return None
+
+            # Correct points for matched resolutions
+            if self.match_resolutions:
+                src_res, dst_res = self.get_resolutions()
+                res_scale = dst_res / src_res
+                dst_points = np.array(
+                    [(p[0] * res_scale, p[1] * res_scale) for p in dst_points]
+                )
 
             # Get current source image
             src_img, dst_img = self.get_current_images(normalize=normalize)
@@ -632,8 +676,8 @@ class ApplicationPresenter:
 
     def get_resolutions(self) -> Tuple[float, float]:
         """Get image resolutions."""
-        src_res = self.source_image.resolution if self.source_image else 0.0
-        dst_res = self.destination_image.resolution if self.destination_image else 0.0
+        src_res = self.source_image.resolution if self.source_image else 1.0
+        dst_res = self.destination_image.resolution if self.destination_image else 1.0
         return src_res, dst_res
 
     # ========== Private Helper Methods ==========
@@ -721,3 +765,12 @@ class ApplicationPresenter:
         """Notify view to request corresponding point from user."""
         if self.view:
             self.view.on_request_corresponding_point(target)
+
+
+def parse_error():
+    import sys
+    import os
+
+    exc_type, exc_obj, exc_tb = sys.exc_info()
+    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+    return (exc_type, fname, exc_tb.tb_lineno)

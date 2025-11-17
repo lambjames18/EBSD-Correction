@@ -369,7 +369,18 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.zoom_combo = ttk.Combobox(
             controls_frame,
             textvariable=self.zoom_var,
-            values=["25%", "50%", "75%", "100%", "150%", "200%", "300%"],
+            values=[
+                "5%",
+                "10%",
+                "25%",
+                "50%",
+                "75%",
+                "100%",
+                "150%",
+                "200%",
+                "300%",
+                "500%",
+            ],
             state="readonly",
             width=8,
         )
@@ -646,6 +657,14 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         x = int(event.x / scale)
         y = int(event.y / scale)
 
+        # Get scrollbar offsets
+        if canvas_type == "source":
+            canvas = self.left_canvas
+        else:
+            canvas = self.right_canvas
+        x += int(canvas.canvasx(0) / scale)
+        y += int(canvas.canvasy(0) / scale)
+
         if self.awaiting_corresponding_point == canvas_type:
             # Add corresponding point
             self.presenter.add_point(canvas_type, x, y)
@@ -703,7 +722,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_zoom_in(self):
         """Zoom in."""
-        zoom_levels = [25, 50, 75, 100, 150, 200, 300]
+        zoom_levels = [5, 10, 25, 50, 75, 100, 150, 200, 300, 500]
         current_idx = (
             zoom_levels.index(self.current_zoom)
             if self.current_zoom in zoom_levels
@@ -716,7 +735,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_zoom_out(self):
         """Zoom out."""
-        zoom_levels = [25, 50, 75, 100, 150, 200, 300]
+        zoom_levels = [5, 10, 25, 50, 75, 100, 150, 200, 300, 500]
         current_idx = (
             zoom_levels.index(self.current_zoom)
             if self.current_zoom in zoom_levels
@@ -923,19 +942,26 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _draw_points(self):
         """Draw control points on canvases."""
+        # Scale points for current zoom
         src_points, dst_points = self.presenter.get_points()
         scale = self.current_zoom / 100.0
+
+        # Scale destination points if resolutions are matched
+        if self.presenter.match_resolutions:
+            src_res, dst_res = self.presenter.get_resolutions()
+            res_scale = dst_res / src_res
+            dst_points = [(p[0] * res_scale, p[1] * res_scale) for p in dst_points]
 
         # Draw source points
         for i, point in enumerate(src_points):
             x, y = point[0] * scale, point[1] * scale
             self.left_canvas.create_oval(
-                x - 3,
-                y - 3,
-                x + 3,
-                y + 3,
-                fill="red",
-                outline="white",
+                x - 4,
+                y - 4,
+                x + 4,
+                y + 4,
+                fill="white",
+                outline="red",
                 tags=f"point_{i}",
             )
             self.left_canvas.create_text(
@@ -945,7 +971,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
                 fill="red",
                 anchor="sw",
                 tags=f"point_{i}",
-                font=("Arial", 9, "bold"),
+                font=("Arial", 11, "bold"),
             )
             self.left_canvas.create_text(
                 x + 5,
@@ -954,19 +980,19 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
                 fill="white",
                 anchor="sw",
                 tags=f"point_{i}",
-                font=("Arial", 8),
+                font=("Arial", 10),
             )
 
         # Draw destination points
         for i, point in enumerate(dst_points):
             x, y = point[0] * scale, point[1] * scale
             self.right_canvas.create_oval(
-                x - 3,
-                y - 3,
-                x + 3,
-                y + 3,
-                fill="green",
-                outline="white",
+                x - 4,
+                y - 4,
+                x + 4,
+                y + 4,
+                fill="white",
+                outline="green",
                 tags=f"point_{i}",
             )
             self.right_canvas.create_text(
@@ -976,7 +1002,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
                 fill="green",
                 anchor="sw",
                 tags=f"point_{i}",
-                font=("Arial", 9, "bold"),
+                font=("Arial", 11, "bold"),
             )
             self.right_canvas.create_text(
                 x + 5,
@@ -985,7 +1011,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
                 fill="white",
                 anchor="sw",
                 tags=f"point_{i}",
-                font=("Arial", 8),
+                font=("Arial", 10),
             )
 
     def set_status(self, message: str):
@@ -1027,8 +1053,8 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         se.grid(row=1, column=1, sticky="nsew", padx=3, pady=3)
 
         def on_ok():
-            result[0] = src_res.get()
-            result[1] = dst_res.get()
+            result[0] = float(src_res.get())
+            result[1] = float(dst_res.get())
             dialog.destroy()
 
         def on_cancel():
