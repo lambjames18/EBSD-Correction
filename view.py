@@ -73,7 +73,8 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.presenter.set_view(self)
 
         # UI state
-        self.current_zoom = 100  # percentage
+        self.current_src_zoom = 100  # percentage
+        self.current_dst_zoom = 100  # percentage
         self.show_points = True
         self.awaiting_corresponding_point = None
 
@@ -154,7 +155,6 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             length=200,
         )
         self.progress_bar.pack(side="right", padx=5)
-        print(self.progress_bar.winfo_class())
 
     def _create_menu(self):
         """Create application menu."""
@@ -315,7 +315,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             controls_frame,
             from_=0,
             to=0,
-            width=10,
+            width=7,
             textvariable=self.slice_var,
             state="disabled",
             command=self._on_slice_changed,
@@ -323,23 +323,23 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.slice_spinbox.pack(side="left", padx=5)
 
         # Mode selectors
-        ttk.Label(controls_frame, text="Source Mode:").pack(side="left", padx=(20, 5))
+        ttk.Label(controls_frame, text="Mode (src):").pack(side="left", padx=(20, 5))
         self.source_mode_var = tk.StringVar(value="Intensity")
         self.source_mode_combo = ttk.Combobox(
             controls_frame,
             textvariable=self.source_mode_var,
             state="readonly",
-            width=15,
+            width=12,
         )
         self.source_mode_combo.pack(side="left", padx=5)
         self.source_mode_combo.bind(
             "<<ComboboxSelected>>", self._on_source_mode_changed
         )
 
-        ttk.Label(controls_frame, text="Dest Mode:").pack(side="left", padx=(20, 5))
+        ttk.Label(controls_frame, text="Mode (dst):").pack(side="left", padx=(20, 5))
         self.dest_mode_var = tk.StringVar(value="Intensity")
         self.dest_mode_combo = ttk.Combobox(
-            controls_frame, textvariable=self.dest_mode_var, state="readonly", width=15
+            controls_frame, textvariable=self.dest_mode_var, state="readonly", width=12
         )
         self.dest_mode_combo.pack(side="left", padx=5)
         self.dest_mode_combo.bind("<<ComboboxSelected>>", self._on_dest_mode_changed)
@@ -348,7 +348,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.clahe_source_var = tk.BooleanVar(value=False)
         self.clahe_source_check = ttk.Checkbutton(
             controls_frame,
-            text="CLAHE Source",
+            text="CLAHE (src)",
             variable=self.clahe_source_var,
             command=lambda: self.presenter.toggle_clahe("source"),
         )
@@ -357,18 +357,18 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.clahe_dest_var = tk.BooleanVar(value=False)
         self.clahe_dest_check = ttk.Checkbutton(
             controls_frame,
-            text="CLAHE Dest",
+            text="CLAHE (dst)",
             variable=self.clahe_dest_var,
             command=lambda: self.presenter.toggle_clahe("destination"),
         )
         self.clahe_dest_check.pack(side="left", padx=5)
 
         # Zoom control
-        ttk.Label(controls_frame, text="Zoom:").pack(side="left", padx=(20, 5))
-        self.zoom_var = tk.StringVar(value="100%")
-        self.zoom_combo = ttk.Combobox(
+        ttk.Label(controls_frame, text="Zoom (src):").pack(side="left", padx=(20, 5))
+        self.zoom_src_var = tk.StringVar(value="100%")
+        self.zoom_src_combo = ttk.Combobox(
             controls_frame,
-            textvariable=self.zoom_var,
+            textvariable=self.zoom_src_var,
             values=[
                 "5%",
                 "10%",
@@ -384,14 +384,36 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             state="readonly",
             width=8,
         )
-        self.zoom_combo.pack(side="left", padx=5)
-        self.zoom_combo.bind("<<ComboboxSelected>>", self._on_zoom_changed)
+        self.zoom_src_combo.pack(side="left", padx=5)
+        self.zoom_src_combo.bind("<<ComboboxSelected>>", self._on_zoom_changed)
+        ttk.Label(controls_frame, text="Zoom (dst):").pack(side="left", padx=(20, 5))
+        self.zoom_dst_var = tk.StringVar(value="100%")
+        self.zoom_dst_combo = ttk.Combobox(
+            controls_frame,
+            textvariable=self.zoom_dst_var,
+            values=[
+                "5%",
+                "10%",
+                "25%",
+                "50%",
+                "75%",
+                "100%",
+                "150%",
+                "200%",
+                "300%",
+                "500%",
+            ],
+            state="readonly",
+            width=8,
+        )
+        self.zoom_dst_combo.pack(side="left", padx=5)
+        self.zoom_dst_combo.bind("<<ComboboxSelected>>", self._on_zoom_changed)
 
         # Match resolutions control
         self.match_resolutions_var = tk.BooleanVar(value=False)
         self.match_resolutions_check = ttk.Checkbutton(
             controls_frame,
-            text="Match Resolutions",
+            text="Match Res",
             variable=self.match_resolutions_var,
             command=self.presenter.toggle_match_resolutions,
         )
@@ -652,16 +674,17 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_canvas_click(self, event, canvas_type):
         """Handle canvas click for point placement."""
-        # Convert canvas coordinates to image coordinates
-        scale = self.current_zoom / 100.0
-        x = int(event.x / scale)
-        y = int(event.y / scale)
-
         # Get scrollbar offsets
         if canvas_type == "source":
+            scale = self.current_src_zoom / 100.0
             canvas = self.left_canvas
         else:
+            scale = self.current_dst_zoom / 100.0
             canvas = self.right_canvas
+
+        # Convert canvas coordinates to image coordinates
+        x = int(event.x / scale)
+        y = int(event.y / scale)
         x += int(canvas.canvasx(0) / scale)
         y += int(canvas.canvasy(0) / scale)
 
@@ -716,40 +739,62 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_zoom_changed(self, event=None):
         """Handle zoom change."""
-        zoom_str = self.zoom_var.get().rstrip("%")
-        self.current_zoom = int(zoom_str)
+        zoom_str_src = self.zoom_src_var.get().rstrip("%")
+        self.current_src_zoom = int(zoom_str_src)
+        zoom_str_dst = self.zoom_dst_var.get().rstrip("%")
+        self.current_dst_zoom = int(zoom_str_dst)
         self.update_display()
 
     def _on_zoom_in(self):
         """Zoom in."""
         zoom_levels = [5, 10, 25, 50, 75, 100, 150, 200, 300, 500]
-        current_idx = (
-            zoom_levels.index(self.current_zoom)
-            if self.current_zoom in zoom_levels
+        current_src_idx = (
+            zoom_levels.index(self.current_src_zoom)
+            if self.current_src_zoom in zoom_levels
             else 3
         )
-        if current_idx < len(zoom_levels) - 1:
-            self.current_zoom = zoom_levels[current_idx + 1]
-            self.zoom_var.set(f"{self.current_zoom}%")
+        current_dst_idx = (
+            zoom_levels.index(self.current_dst_zoom)
+            if self.current_dst_zoom in zoom_levels
+            else 3
+        )
+        if current_src_idx < len(zoom_levels) - 1:
+            self.current_src_zoom = zoom_levels[current_src_idx + 1]
+            self.zoom_src_var.set(f"{self.current_src_zoom}%")
+            self.update_display()
+        if current_dst_idx < len(zoom_levels) - 1:
+            self.current_dst_zoom = zoom_levels[current_dst_idx + 1]
+            self.zoom_dst_var.set(f"{self.current_dst_zoom}%")
             self.update_display()
 
     def _on_zoom_out(self):
         """Zoom out."""
         zoom_levels = [5, 10, 25, 50, 75, 100, 150, 200, 300, 500]
-        current_idx = (
-            zoom_levels.index(self.current_zoom)
-            if self.current_zoom in zoom_levels
+        current_src_idx = (
+            zoom_levels.index(self.current_src_zoom)
+            if self.current_src_zoom in zoom_levels
             else 3
         )
-        if current_idx > 0:
-            self.current_zoom = zoom_levels[current_idx - 1]
-            self.zoom_var.set(f"{self.current_zoom}%")
+        current_dst_idx = (
+            zoom_levels.index(self.current_dst_zoom)
+            if self.current_dst_zoom in zoom_levels
+            else 3
+        )
+        if current_src_idx > 0:
+            self.current_src_zoom = zoom_levels[current_src_idx - 1]
+            self.zoom_src_var.set(f"{self.current_src_zoom}%")
+            self.update_display()
+        if current_dst_idx > 0:
+            self.current_dst_zoom = zoom_levels[current_dst_idx - 1]
+            self.zoom_dst_var.set(f"{self.current_dst_zoom}%")
             self.update_display()
 
     def _on_zoom_reset(self):
         """Reset zoom to 100%."""
-        self.current_zoom = 100
-        self.zoom_var.set("100%")
+        self.current_src_zoom = 100
+        self.current_dst_zoom = 100
+        self.zoom_src_var.set("100%")
+        self.zoom_dst_var.set("100%")
         self.update_display()
 
     def _on_undo(self):
@@ -889,8 +934,12 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         #     return
 
         # Get current images
-        scale = self.current_zoom / 100.0
-        src_img, dst_img = self.presenter.get_current_images(scale)
+
+        src_scale = self.current_src_zoom / 100.0
+        dst_scale = self.current_dst_zoom / 100.0
+        src_img, dst_img = self.presenter.get_current_images(
+            src_scale=src_scale, dst_scale=dst_scale
+        )
 
         if src_img is not None:
             # Clear canvases
@@ -944,7 +993,8 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         """Draw control points on canvases."""
         # Scale points for current zoom
         src_points, dst_points = self.presenter.get_points()
-        scale = self.current_zoom / 100.0
+        src_scale = self.current_src_zoom / 100.0
+        dst_scale = self.current_dst_zoom / 100.0
 
         # Scale destination points if resolutions are matched
         if self.presenter.match_resolutions:
@@ -954,7 +1004,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         # Draw source points
         for i, point in enumerate(src_points):
-            x, y = point[0] * scale, point[1] * scale
+            x, y = point[0] * src_scale, point[1] * src_scale
             self.left_canvas.create_oval(
                 x - 4,
                 y - 4,
@@ -985,7 +1035,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         # Draw destination points
         for i, point in enumerate(dst_points):
-            x, y = point[0] * scale, point[1] * scale
+            x, y = point[0] * dst_scale, point[1] * dst_scale
             self.right_canvas.create_oval(
                 x - 4,
                 y - 4,

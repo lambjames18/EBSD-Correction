@@ -259,9 +259,26 @@ class ApplicationPresenter:
         self._notify_view_update_display()
 
     def get_current_images(
-        self, scale: float = 1.0, normalize=True
+        self,
+        scale: float = None,
+        src_scale: float = None,
+        dst_scale: float = None,
+        normalize=True,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Get current images for display."""
+        if scale is not None:
+            src_scale = scale
+            dst_scale = scale
+        elif src_scale is None and dst_scale is not None:
+            src_scale = dst_scale
+            logger.warning("Source scale not provided; using destination scale")
+        elif dst_scale is None and src_scale is not None:
+            dst_scale = src_scale
+            logger.warning("Destination scale not provided; using source scale")
+        elif src_scale is None and dst_scale is None:
+            src_scale = 1.0
+            dst_scale = 1.0
+            logger.info("Scaling factors not provided; using 1.0 for both")
 
         # Get the current source image
         if not self.source_image:
@@ -279,8 +296,8 @@ class ApplicationPresenter:
                     src_img = self.image_processor.apply_clahe(src_img)
 
                 # Resize if needed
-                if scale != 1.0:
-                    src_img = self.image_processor.resize_image(src_img, scale)
+                if src_scale != 1.0:
+                    src_img = self.image_processor.resize_image(src_img, src_scale)
 
                 if src_img.ndim == 2:
                     src_img = src_img.reshape(src_img.shape + (channels,))
@@ -316,8 +333,8 @@ class ApplicationPresenter:
                     dst_img = self.image_processor.apply_clahe(dst_img)
 
                 # Resize if needed
-                if scale != 1.0:
-                    dst_img = self.image_processor.resize_image(dst_img, scale)
+                if dst_scale != 1.0:
+                    dst_img = self.image_processor.resize_image(dst_img, dst_scale)
 
                 if dst_img.ndim == 2:
                     dst_img = dst_img.reshape(dst_img.shape + (channels,))

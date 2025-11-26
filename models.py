@@ -272,11 +272,11 @@ class PointManager:
             if data.shape[1] == 2:
                 # 2D points, assume slice 0
                 for x, y in data:
-                    point_set.add_point(Point(x, y, 0))
+                    point_set.add_point(Point(int(x), int(y), 0))
             elif data.shape[1] == 3:
                 # 3D points with slice information
                 for slice_idx, x, y in data:
-                    point_set.add_point(Point(x, y, slice_idx))
+                    point_set.add_point(Point(int(x), int(y), int(slice_idx)))
             else:
                 raise ValueError(f"Invalid point format in {path}")
 
