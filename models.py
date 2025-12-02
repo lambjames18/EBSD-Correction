@@ -912,6 +912,16 @@ class ProjectManager:
         self.metadata = {"version": "2.0", "created": None, "modified": None}
         logger.info("ProjectManager initialized")
 
+    def mark_modified(self) -> None:
+        """Mark the project as modified."""
+        self.is_modified = True
+
+    def reset(self) -> None:
+        """Reset project manager to initial state."""
+        self.project_path = None
+        self.is_modified = False
+        self.metadata = {"version": "2.0", "created": None, "modified": None}
+
     def save_project(
         self,
         path: Path,

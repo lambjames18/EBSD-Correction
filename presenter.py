@@ -81,6 +81,56 @@ class ApplicationPresenter:
         """Set the view reference."""
         self.view = view
 
+    def new_project(self) -> None:
+        """Create a new empty project."""
+        try:
+            # Reset all model components
+            self.point_manager = PointManager()
+            self.transform_manager = TransformManager()
+            self.project_manager = ProjectManager()
+            self.image_processor = ImageProcessor()
+            self.image_writer = ImageWriter()
+
+            # Clear data storage
+            self.source_image = None
+            self.destination_image = None
+            self.current_slice = 0
+            self.current_source_mode = "Intensity"
+            self.current_dest_mode = "Intensity"
+
+            # Reset state flags
+            self.is_3d_mode = False
+            self.clahe_active_source = False
+            self.clahe_active_dest = False
+            self.match_resolutions = False
+
+            # Clear paths
+            self.source_points_path = None
+            self.dest_points_path = None
+
+            logger.info("New project created")
+            self._notify_view_project_reset()
+
+        except Exception as e:
+            logger.error(f"Failed to create new project: {e}")
+            self._notify_view_error(f"Failed to create new project: {str(e)}")
+
+    def has_unsaved_changes(self) -> bool:
+        """Check if there are unsaved changes."""
+        # Check if there's any data loaded
+        has_data = (
+            self.source_image is not None
+            or self.destination_image is not None
+            or len(self.point_manager.source_points.points) > 0
+        )
+
+        # If there's data and no project path, consider it unsaved
+        if has_data and self.project_manager.project_path is None:
+            return True
+
+        # Check if project has been modified
+        return has_data and self.project_manager.is_modified
+
     # ========== Data Loading ==========
 
     def load_source_image(
@@ -108,6 +158,7 @@ class ApplicationPresenter:
                 logger.info(f"Loaded source image stack: {len(path)} files")
             else:
                 logger.info(f"Loaded source image: {path}")
+            self.project_manager.mark_modified()
             self._notify_view_data_loaded()
             return True
 
@@ -141,6 +192,7 @@ class ApplicationPresenter:
                 logger.info(f"Loaded destination image stack: {len(path)} files")
             else:
                 logger.info(f"Loaded destination image: {path}")
+            self.project_manager.mark_modified()
             self._notify_view_data_loaded()
             return True
 
@@ -193,6 +245,7 @@ class ApplicationPresenter:
                 self.point_manager.destination_points.add_point(point)
 
             self._save_points()
+            self.project_manager.mark_modified()
             self._notify_view_points_changed()
 
         except Exception as e:
@@ -208,6 +261,7 @@ class ApplicationPresenter:
 
             if success:
                 self._save_points()
+                self.project_manager.mark_modified()
                 self._notify_view_points_changed()
 
         except Exception as e:
@@ -223,6 +277,7 @@ class ApplicationPresenter:
                 self.point_manager.clear_points()
 
             self._save_points()
+            self.project_manager.mark_modified()
             self._notify_view_points_changed()
 
         except Exception as e:
@@ -782,6 +837,11 @@ class ApplicationPresenter:
         """Notify view to request corresponding point from user."""
         if self.view:
             self.view.on_request_corresponding_point(target)
+
+    def _notify_view_project_reset(self) -> None:
+        """Notify view that a new project has been created."""
+        if self.view:
+            self.view.on_project_reset()
 
 
 def parse_error():

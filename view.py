@@ -61,6 +61,11 @@ class ViewInterface(ABC):
         """Called when a corresponding point is needed."""
         pass
 
+    @abstractmethod
+    def on_project_reset(self) -> None:
+        """Called when a new project is created."""
+        pass
+
 
 class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
     """Modern implementation of the distortion correction GUI using MVP pattern."""
@@ -164,6 +169,8 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         # File menu
         file_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="New Project", command=self._on_new_project)
+        file_menu.add_separator()
         file_menu.add_command(
             label="Open Source Image...", command=self._on_open_source
         )
@@ -479,6 +486,21 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         """Test progress bar."""
         self.show_progress(True)
         self.after(2000, lambda: self.show_progress(False))
+
+    def _on_new_project(self):
+        """Handle creating a new project."""
+        if self.presenter.has_unsaved_changes():
+            response = messagebox.askyesnocancel(
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save the current project?",
+            )
+            if response is None:
+                return
+            elif response:
+                self._on_save_project()
+
+        self.presenter.new_project()
+        self.set_status("New project created")
 
     def _on_open_source(self):
         """Handle opening source image."""
@@ -925,6 +947,39 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         """Called when a corresponding point is needed."""
         self.awaiting_corresponding_point = target
         self.set_status(f"Click on {target} image to add corresponding point")
+
+    def on_project_reset(self):
+        """Called when a new project is created."""
+        # Clear canvases
+        self.left_canvas.delete("all")
+        self.right_canvas.delete("all")
+
+        # Reset UI state
+        self.current_src_zoom = 100
+        self.current_dst_zoom = 100
+        self.zoom_src_var.set("100%")
+        self.zoom_dst_var.set("100%")
+        self.show_points = True
+        self.awaiting_corresponding_point = None
+
+        # Reset slice control
+        self.slice_var.set(0)
+        self.slice_spinbox.config(from_=0, to=0, state="disabled")
+
+        # Reset mode selectors
+        self.source_mode_var.set("Intensity")
+        self.dest_mode_var.set("Intensity")
+        self.source_mode_combo["values"] = []
+        self.dest_mode_combo["values"] = []
+
+        # Reset CLAHE toggles
+        self.clahe_source_var.set(False)
+        self.clahe_dest_var.set(False)
+
+        # Reset match resolutions
+        self.match_resolutions_var.set(False)
+
+        self.set_status("Ready")
 
     # ========== Helper Methods ==========
 
