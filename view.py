@@ -504,7 +504,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_open_source(self):
         """Handle opening source image."""
-        file_path = filedialog.askopenfilename(
+        file_paths = filedialog.askopenfilenames(
             title="Open Source Image",
             filetypes=[
                 ("All Supported", "*.ang *.h5 *.dream3d *.tif *.tiff *.png *.jpg"),
@@ -514,26 +514,59 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             ],
         )
 
-        if file_path:
-            path = Path(file_path)
-            modality_name = None
+        if file_paths:
+            try:
+                self.show_progress(True)
+                if len(file_paths) == 1:
+                    path = Path(file_paths[0])
+                    modality_name = None
 
-            # Check if this is a single image file that needs a modality name
-            if path.suffix.lower() in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
-                # Ask for modality name
-                modality_name = self._get_modality_name_dialog(path.name)
-                if modality_name is None:
-                    return  # User cancelled
+                    # Check if this is a single image file that needs a modality name
+                    if path.suffix.lower() in [
+                        ".tif",
+                        ".tiff",
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                    ]:
+                        # Ask for modality name
+                        modality_name = self._get_modality_name_dialog(path.name)
+                        if modality_name is None:
+                            return  # User cancelled
 
-            self.show_progress(True)
-            self.set_status(f"Loading source image: {path.name}")
-            if self.presenter.load_source_image(path, modality_name=modality_name):
-                self.set_status("Source image loaded successfully")
-            self.show_progress(False)
+                    self.show_progress(True)
+                    self.set_status(f"Loading source image: {path.name}")
+                    if self.presenter.load_source_image(
+                        path, modality_name=modality_name
+                    ):
+                        self.set_status("Source image loaded successfully")
+
+                else:
+                    first_path = Path(file_paths[0])
+                    # Check if this is a single image file that needs a modality name
+                    if first_path.suffix.lower() in [
+                        ".tif",
+                        ".tiff",
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                    ]:
+                        # Ask for modality name
+                        modality_name = self._get_modality_name_dialog(first_path.name)
+                        if modality_name is None:
+                            return  # User cancelled
+
+                    self.set_status(f"Loading {len(file_paths)} source images")
+                    if self.presenter.load_source_image(
+                        file_paths, modality_name=modality_name
+                    ):
+                        self.set_status("Source image stack loaded successfully")
+            finally:
+                self.show_progress(False)
 
     def _on_open_destination(self):
         """Handle opening destination image."""
-        file_path = filedialog.askopenfilename(
+        file_paths = filedialog.askopenfilenames(
             title="Open Destination Image",
             filetypes=[
                 ("Image Files", "*.tif *.tiff *.png *.jpg *.dream3d"),
@@ -541,22 +574,54 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             ],
         )
 
-        if file_path:
-            path = Path(file_path)
-            modality_name = None
+        if file_paths:
+            try:
+                self.show_progress(True)
+                if len(file_paths) == 1:
+                    path = Path(file_paths[0])
+                    modality_name = None
 
-            # Check if this is a single image file that needs a modality name
-            if path.suffix.lower() in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
-                # Ask for modality name
-                modality_name = self._get_modality_name_dialog(path.name)
-                if modality_name is None:
-                    return  # User cancelled
+                    # Check if this is a single image file that needs a modality name
+                    if path.suffix.lower() in [
+                        ".tif",
+                        ".tiff",
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                    ]:
+                        # Ask for modality name
+                        modality_name = self._get_modality_name_dialog(path.name)
+                        if modality_name is None:
+                            return  # User cancelled
 
-            self.show_progress(True)
-            self.set_status(f"Loading destination image: {path.name}")
-            if self.presenter.load_destination_image(path, modality_name=modality_name):
-                self.set_status("Destination image loaded successfully")
-            self.show_progress(False)
+                    self.set_status(f"Loading destination image: {path.name}")
+                    if self.presenter.load_destination_image(
+                        path, modality_name=modality_name
+                    ):
+                        self.set_status("Destination image loaded successfully")
+
+                else:
+                    first_path = Path(file_paths[0])
+                    # Check if this is a single image file that needs a modality name
+                    if first_path.suffix.lower() in [
+                        ".tif",
+                        ".tiff",
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                    ]:
+                        # Ask for modality name
+                        modality_name = self._get_modality_name_dialog(first_path.name)
+                        if modality_name is None:
+                            return  # User cancelled
+
+                    self.set_status(f"Loading {len(file_paths)} destination images")
+                    if self.presenter.load_destination_image(
+                        file_paths, modality_name=modality_name
+                    ):
+                        self.set_status("Destination image stack loaded successfully")
+            finally:
+                self.show_progress(False)
 
     def _on_load_points(self):
         """Handle loading control points."""
@@ -856,7 +921,9 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         """Set image resolution."""
         ### TODO: Fix this
         src_res, dst_res = self._get_image_resolutions_dialog()
-        if src_res and dst_res:
+        if src_res is None or dst_res is None:
+            return
+        elif src_res and dst_res:
             # Update image resolutions
             self.presenter.set_image_resolutions(src_res, dst_res)
 
@@ -1182,6 +1249,8 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         def on_cancel():
             dialog.destroy()
+            result[0] = None
+            result[1] = None
 
         button_frame = ttk.Frame(dialog)
         button_frame.grid(row=2, column=0, columnspan=2, padx=3, pady=3)
@@ -1618,8 +1687,8 @@ class Interactive2DViewer:
 def setup_logging():
     """Setup application logging."""
     logging.basicConfig(
-        # level=logging.DEBUG,
-        level=logging.INFO,
+        level=logging.DEBUG,
+        # level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler("distortion_correction.log"),

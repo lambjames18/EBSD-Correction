@@ -376,7 +376,10 @@ class ImageLoader:
 
     @classmethod
     def load(
-        cls, path: Union[str, Path, List, Tuple], resolution: float = 1.0, modality_name: str = "Intensity"
+        cls,
+        path: Union[str, Path, List, Tuple],
+        resolution: float = 1.0,
+        modality_name: str = "Intensity",
     ) -> ImageData:
         """Load image data from file."""
         if type(path) not in [list, tuple]:
@@ -402,12 +405,7 @@ class ImageLoader:
                     raise FileNotFoundError(f"File not found: {path}")
 
                 suffix = _p.suffix.lower()
-                if suffix not in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
-                    raise ValueError(
-                        f"When providing a list of images, all paths must be of image type"
-                    )
-
-                if suffix != suffix.lower():
+                if suffix != first_suffix:
                     raise ValueError(
                         f"When prividing a list of images, all images must have the same extension"
                     )
@@ -417,7 +415,7 @@ class ImageLoader:
         try:
             logger.info(f"Loading {suffix} file(s)")
             # Pass modality_name for single image files
-            if loader_method == cls.load_image:
+            if loader_method == cls.load_image or loader_method == cls.load_images:
                 data, res, metadata = loader_method(path, modality_name)
             else:
                 data, res, metadata = loader_method(path)
@@ -545,7 +543,9 @@ class ImageLoader:
         return data, res, None
 
     @staticmethod
-    def load_image(path: Path, modality_name: str = "Intensity") -> Tuple[Dict[str, np.ndarray], None]:
+    def load_image(
+        path: Path, modality_name: str = "Intensity"
+    ) -> Tuple[Dict[str, np.ndarray], None]:
         """Load standard image formats with optional modality name."""
         im = io.imread(path, as_gray=True).astype(np.float32)
 
@@ -561,7 +561,9 @@ class ImageLoader:
         return {modality_name: im}, None, None
 
     @staticmethod
-    def load_images(paths: list) -> Tuple[Dict[str, np.ndarray], None]:
+    def load_images(
+        paths: list, modality_name: str = "Intensity"
+    ) -> Tuple[Dict[str, np.ndarray], None]:
         """Load a list of standard image formats."""
         images = np.array(
             [
@@ -581,7 +583,7 @@ class ImageLoader:
         # images = np.around(255 * (images - mn) / rnge, 0)
         # images = images.astype(np.uint8)
 
-        return {"Intensity": images}, None, None
+        return {modality_name: images}, None, None
 
 
 class ImageWriter:
@@ -905,6 +907,7 @@ class ImageProcessor:
 
         try:
             with np.errstate(divide="ignore", invalid="ignore"):
+                image = image.astype(np.float32)
                 if image.ndim == 3:
                     normalized = np.around(
                         255
