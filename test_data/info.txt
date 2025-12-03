@@ -1,0 +1,2 @@
+EBSD resolution: 1.5 microns/pixel
+BSE resolution: 0.52083333 microns/pixel (1600 microns / 3072 pixels)
