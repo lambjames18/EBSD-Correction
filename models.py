@@ -6,7 +6,7 @@ This module contains the core business logic separated from the UI.
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Dict, List, Self, Tuple, Optional, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
 import json
@@ -126,7 +126,7 @@ class ImageData:
 
     data: Dict[str, np.ndarray]
     resolution: float
-    path: Path
+    paths: Dict[str, Path]  # Maps modality name to file path
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -142,6 +142,13 @@ class ImageData:
         """Get list of available modalities."""
         return list(self.data.keys())
 
+    @property
+    def path(self) -> Path:
+        """Get the path of the first modality (for backward compatibility)."""
+        if self.paths:
+            return next(iter(self.paths.values()))
+        return Path(".")
+
     def get_slice(self, modality: str, slice_idx: int = 0) -> np.ndarray:
         """Get a specific slice of data."""
         if modality not in self.data:
@@ -155,22 +162,36 @@ class ImageData:
 
         return data[slice_idx]
 
-    def add_modality(self, modality_name: str, data: np.ndarray) -> None:
+    def add_modality(self, new_image_data: Self) -> None:
         """Add a new modality to the image data."""
-        if modality_name in self.data:
-            raise ValueError(f"Modality '{modality_name}' already exists")
+        modality_names = list(new_image_data.data.keys())
 
-        # Verify shape compatibility (should match existing modality shapes)
-        if self.data:
-            first_key = next(iter(self.data.keys()))
-            expected_shape = self.data[first_key].shape[:3]  # slices, height, width
-            if data.shape[:3] != expected_shape:
-                raise ValueError(
-                    f"New modality shape {data.shape[:3]} does not match existing shape {expected_shape}"
-                )
+        # Make sure only one modality is being added and formats match
+        if len(modality_names) != 1:
+            raise ValueError("New image data must contain exactly one modality")
+        # Check data format compatibility
+        elif new_image_data.metadata.get("dataformat") != self.metadata.get(
+            "dataformat"
+        ):
+            raise ValueError(
+                "New image data format does not match existing image data format"
+            )
+        # Check shape compatibility
+        elif new_image_data.shape != self.shape:
+            raise ValueError(
+                f"New image data shape {new_image_data.shape} does not match existing shape {self.shape}"
+            )
+
+        # Get the relevant data
+        modality_name = modality_names[0]
+        data = new_image_data.data[modality_name]
+        path = new_image_data.paths[
+            modality_name
+        ]  # Might be multiple if it is a stack of images for 3D
 
         self.data[modality_name] = data
-        logger.info(f"Added modality '{modality_name}' to image data")
+        self.paths[modality_name] = path
+        logger.info(f"Added modality '{modality_name}' from {path} to image data")
 
 
 class PointManager:
@@ -379,10 +400,17 @@ class ImageLoader:
         cls,
         path: Union[str, Path, List, Tuple],
         resolution: float = 1.0,
-        modality_name: str = "Intensity",
+        modality_name: str = None,
     ) -> ImageData:
         """Load image data from file."""
-        if type(path) not in [list, tuple]:
+        is_list = type(path) in [list, tuple]
+        if is_list and len(path) == 0:
+            raise ValueError("Provided empty list of image paths")
+        elif is_list and len(path) == 1:
+            is_list = False
+            path = path[0]
+
+        if not is_list:
             path = Path(path)
 
             if not path.exists():
@@ -414,11 +442,9 @@ class ImageLoader:
 
         try:
             logger.info(f"Loading {suffix} file(s)")
-            # Pass modality_name for single image files
-            if loader_method == cls.load_image or loader_method == cls.load_images:
-                data, res, metadata = loader_method(path, modality_name)
-            else:
-                data, res, metadata = loader_method(path)
+
+            # Call the appropriate loader method
+            data, res, metadata = loader_method(path, modality_name)
 
             # Use provided resolution if loader didn't return one
             if res is None:
@@ -427,14 +453,35 @@ class ImageLoader:
             if metadata is None:
                 metadata = {}
 
-            return ImageData(data=data, resolution=res, path=path, metadata=metadata)
+            # Create paths dictionary
+            # Paths dictionary follow the data structure:
+            # Mode
+            #   -> Slice 0 Path
+            #   -> Slice 1 Path
+            #   -> ...
+
+            paths = {}
+
+            # Default modality name
+            if modality_name is None:
+                modality_name = "data"
+
+            # Convert path to list for iteration
+            if not is_list:
+                path = [path]
+
+            paths[modality_name] = path
+
+            return ImageData(data=data, resolution=res, paths=paths, metadata=metadata)
 
         except Exception as e:
             logger.error(f"Failed to load {path}: {e}")
             raise
 
     @staticmethod
-    def load_ang(path: Path) -> Tuple[Dict[str, np.ndarray], float]:
+    def load_ang(
+        path: Path, modality_name: str = None
+    ) -> Tuple[Dict[str, np.ndarray], float, Dict[str, Any]]:
         """Load ANG file format."""
         col_names = None
         header = ""
@@ -484,11 +531,13 @@ class ImageLoader:
                 [out["phi1"], out["PHI"], out["phi2"]], axis=-1
             )
 
-        metadata = {"header": header}
+        metadata = {"header": header, "dataformat": DataFormat.ANG.value}
         return out, res, metadata
 
     @staticmethod
-    def load_h5(path: Path) -> Tuple[Dict[str, np.ndarray], float]:
+    def load_h5(
+        path: Path, modality_name: str = None
+    ) -> Tuple[Dict[str, np.ndarray], float, Dict[str, Any]]:
         """Load H5 file format."""
         with h5py.File(path, "r") as h5:
             # Find the EBSD data entry
@@ -518,10 +567,13 @@ class ImageLoader:
                     [data["PHI1"], data["PHI"], data["PHI2"]], axis=-1
                 ).astype(float)
 
-        return data, res, None
+        metadata = {"dataformat": DataFormat.H5.value}
+        return data, res, metadata
 
     @staticmethod
-    def load_dream3d(path: Path) -> Tuple[Dict[str, np.ndarray], float]:
+    def load_dream3d(
+        path: Path, modality_name: str = None
+    ) -> Tuple[Dict[str, np.ndarray], float, Dict[str, Any]]:
         """Load DREAM3D file format."""
         with h5py.File(path, "r") as h5:
             if "DataStructure" in h5.keys():
@@ -540,7 +592,8 @@ class ImageLoader:
             ebsd_keys = list(ebsd_data.keys())
             data = {key: ebsd_data[key][...] for key in ebsd_keys}
 
-        return data, res, None
+        metadata = {"dataformat": DataFormat.DREAM3D.value}
+        return data, res, metadata
 
     @staticmethod
     def load_image(
@@ -558,12 +611,13 @@ class ImageLoader:
 
         im = im.reshape((1,) + im.shape)
 
-        return {modality_name: im}, None, None
+        metadata = {"dataformat": DataFormat.IMAGE.value}
+        return {modality_name: im}, None, metadata
 
     @staticmethod
     def load_images(
         paths: list, modality_name: str = "Intensity"
-    ) -> Tuple[Dict[str, np.ndarray], None]:
+    ) -> Tuple[Dict[str, np.ndarray], None, Dict[str, Any]]:
         """Load a list of standard image formats."""
         images = np.array(
             [
@@ -583,7 +637,8 @@ class ImageLoader:
         # images = np.around(255 * (images - mn) / rnge, 0)
         # images = images.astype(np.uint8)
 
-        return {modality_name: images}, None, None
+        metadata = {"dataformat": DataFormat.IMAGE.value}
+        return {modality_name: images}, None, metadata
 
 
 class ImageWriter:
@@ -950,16 +1005,12 @@ class ProjectManager:
         self,
         path: Path,
         point_manager: PointManager,
-        src_image_path: Path,
-        dst_image_path: Path,
         settings: Dict[str, Any],
     ) -> None:
         """Save complete project state."""
         try:
             project_data = {
                 "metadata": self.metadata,
-                "source_image": str(src_image_path),
-                "destination_image": str(dst_image_path),
                 "source_points": point_manager.source_points.to_dict(),
                 "destination_points": point_manager.destination_points.to_dict(),
                 "settings": settings,

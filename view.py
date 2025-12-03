@@ -1000,6 +1000,9 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.slice_spinbox.config(from_=min_slice, to=max_slice)
         self.slice_spinbox.config(state="normal" if max_slice > 0 else "disabled")
 
+        # Update match resolutions checkbox
+        self.match_resolutions_var.set(self.presenter.match_resolutions)
+
         self.update_display()
 
     def on_points_changed(self):

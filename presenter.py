@@ -63,7 +63,6 @@ class ApplicationPresenter:
         self.current_dest_mode = "Intensity"
 
         # State flags
-        self.is_3d_mode = False
         self.clahe_active_source = False
         self.clahe_active_dest = False
         self.match_resolutions = False
@@ -99,7 +98,6 @@ class ApplicationPresenter:
             self.current_dest_mode = "Intensity"
 
             # Reset state flags
-            self.is_3d_mode = False
             self.clahe_active_source = False
             self.clahe_active_dest = False
             self.match_resolutions = False
@@ -113,7 +111,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to create new project: {e}")
-            self._notify_view_error(f"Failed to create new project: {str(e)}")
+            self._notify_view_error(
+                f"Failed to create new project: {str(e)}, ({parse_error()})"
+            )
 
     def has_unsaved_changes(self) -> bool:
         """Check if there are unsaved changes."""
@@ -172,7 +172,7 @@ class ApplicationPresenter:
                         "Source and destination images must have the same number of slices."
                     )
 
-            # If this is the first time reading a destination image, set it
+            # If this is the first time reading a source image, set it
             if self.source_image is None:
                 logger.debug(
                     f"New source image. Setting with modalities: {new_image_data.modalities}"
@@ -182,16 +182,22 @@ class ApplicationPresenter:
                 if self.source_points_path is None:
                     if isinstance(path, (list, tuple)):
                         path = Path(path[0])
-                    self.source_points_path = path.parent / "control_pts.txt"
+                    self.source_points_path = path.parent / "distorted_pts.txt"
+                # Set the current mode to the first available modality
+                if self.source_image and self.source_image.modalities:
+                    self.current_source_mode = self.source_image.modalities[0]
             else:
                 logger.debug(
                     f"Adding modality to existing source image: {new_image_data.modalities}"
                 )
                 # Add the new modality to existing image data
                 modality_key = list(new_image_data.data.keys())[0]
+                modality_path = list(new_image_data.paths.values())[0]
                 self.source_image.add_modality(
-                    modality_key, new_image_data.data[modality_key]
+                    modality_key, new_image_data.data[modality_key], modality_path
                 )
+                # Switch to the newly added modality
+                self.current_source_mode = modality_key
                 logger.info(
                     f"Added modality '{modality_key}' to source image and switched to it"
                 )
@@ -202,7 +208,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to load source image: {e} ({parse_error()})")
-            self._notify_view_error(f"Failed to load source image: {str(e)}")
+            self._notify_view_error(
+                f"Failed to load source image: {str(e)}, ({parse_error()})"
+            )
             return False
 
     def load_destination_image(
@@ -214,22 +222,10 @@ class ApplicationPresenter:
         """Load destination (control) image."""
         try:
             # Convert path to Path object if needed
-            is_single_image = True
             if isinstance(path, (list, tuple)):
                 path = [Path(p) if isinstance(p, str) else p for p in path]
-                is_single_image = False
             elif isinstance(path, str):
                 path = Path(path)
-
-            # Check if single image file (already determined for list case)
-            if is_single_image:
-                is_single_image = path.suffix.lower() in [
-                    ".tif",
-                    ".tiff",
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                ]
 
             # Read in the new data
             new_image_data = ImageLoader.load(path, resolution, modality_name)
@@ -252,14 +248,16 @@ class ApplicationPresenter:
                     if isinstance(path, (list, tuple)):
                         path = Path(path[0])
                     self.dest_points_path = path.parent / "control_pts.txt"
+                # Set the current mode to the first available modality
+                if self.destination_image and self.destination_image.modalities:
+                    self.current_dest_mode = self.destination_image.modalities[0]
             else:
                 # Add the new modality to existing image data
-                modality_key = list(new_image_data.data.keys())[0]
-                self.destination_image.add_modality(
-                    modality_key, new_image_data.data[modality_key]
-                )
+                self.destination_image.add_modality(new_image_data)
+                # Switch to the newly added modality
+                self.current_dest_mode = new_image_data.modalities[0]
                 logger.info(
-                    f"Added modality '{modality_key}' to destination image and switched to it"
+                    f"Added modality '{new_image_data.modalities[0]}' to destination image and switched to it"
                 )
 
             self.project_manager.mark_modified()
@@ -268,7 +266,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to load destination image: {e} ({parse_error()})")
-            self._notify_view_error(f"Failed to load destination image: {str(e)}")
+            self._notify_view_error(
+                f"Failed to load destination image: {str(e)}, ({parse_error()})"
+            )
             return False
 
     def load_points(
@@ -288,7 +288,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to load points: {e}")
-            self._notify_view_error(f"Failed to load points: {str(e)}")
+            self._notify_view_error(
+                f"Failed to load points: {str(e)}, ({parse_error()})"
+            )
             return False
 
     # ========== Point Management ==========
@@ -320,7 +322,7 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to add point: {e}")
-            self._notify_view_error(f"Failed to add point: {str(e)}")
+            self._notify_view_error(f"Failed to add point: {str(e)}, ({parse_error()})")
 
     def remove_point(self, point_index: int) -> None:
         """Remove a control point."""
@@ -336,7 +338,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to remove point: {e}")
-            self._notify_view_error(f"Failed to remove point: {str(e)}")
+            self._notify_view_error(
+                f"Failed to remove point: {str(e)}, ({parse_error()})"
+            )
 
     def clear_points(self, slice_only: bool = True) -> None:
         """Clear control points."""
@@ -352,7 +356,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to clear points: {e}")
-            self._notify_view_error(f"Failed to clear points: {str(e)}")
+            self._notify_view_error(
+                f"Failed to clear points: {str(e)}, ({parse_error()})"
+            )
 
     def get_points(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get current points for display."""
@@ -530,7 +536,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to apply transform: {e}")
-            self._notify_view_error(f"Failed to apply transform: {str(e)}")
+            self._notify_view_error(
+                f"Failed to apply transform: {str(e)}, ({parse_error()})"
+            )
             return None
 
     def apply_transform_3d(
@@ -564,7 +572,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to apply 3D transform: {e}")
-            self._notify_view_error(f"Failed to apply 3D transform: {str(e)}")
+            self._notify_view_error(
+                f"Failed to apply 3D transform: {str(e)}, ({parse_error()})"
+            )
             return None
 
     def export_data(
@@ -602,7 +612,7 @@ class ApplicationPresenter:
                 return True
 
             elif data_format == DataFormat.ANG:
-                if self.source_image.path.suffix.lower() != ".ang":
+                if self.source_image.metadata.get("dataformat") != DataFormat.ANG.value:
                     self._notify_view_error(
                         "Source image is not in .ang format; cannot export as .ang"
                     )
@@ -640,7 +650,7 @@ class ApplicationPresenter:
                 )
                 self.image_writer.save_ang(
                     src_imgs,
-                    path.with_name(path.stem + "_src.ang"),
+                    path.with_name(path.stem + "_original.ang"),
                     self.source_image.metadata["header"],
                     self.source_image.resolution,
                 )
@@ -651,7 +661,7 @@ class ApplicationPresenter:
             elif data_format == DataFormat.DREAM3D:
                 pass
             # Apply transformation
-            if self.is_3d_mode:
+            if self.source_image.shape[0] > 1:
                 warped_stack = self.apply_transform_3d(transform_type, crop_mode)
                 if warped_stack is None:
                     return False
@@ -666,7 +676,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to export data: {e}")
-            self._notify_view_error(f"Failed to export data: {str(e)}")
+            self._notify_view_error(
+                f"Failed to export data: {str(e)}, ({parse_error()})"
+            )
             return False
 
     def export_transform(self, path: Path, transform_type: TransformType) -> bool:
@@ -699,7 +711,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to export transform: {e}")
-            self._notify_view_error(f"Failed to export transform: {str(e)}")
+            self._notify_view_error(
+                f"Failed to export transform: {str(e)}, ({parse_error()})"
+            )
             return False
 
     # ========== Project Management ==========
@@ -707,23 +721,30 @@ class ApplicationPresenter:
     def save_project(self, path: Path) -> bool:
         """Save current project."""
         try:
+            source_paths = {
+                k: [str(p) for p in v] for k, v in self.source_image.paths.items()
+            }
+            destination_paths = {
+                k: [str(p) for p in v] for k, v in self.destination_image.paths.items()
+            }
+
             settings = {
                 "current_slice": self.current_slice,
                 "source_mode": self.current_source_mode,
                 "dest_mode": self.current_dest_mode,
                 "clahe_source": self.clahe_active_source,
                 "clahe_dest": self.clahe_active_dest,
-                "is_3d": self.is_3d_mode,
                 "match_resolutions": self.match_resolutions,
-                "source_resolution": self.source_image.resolution,
-                "destination_resolution": self.destination_image.resolution,
+                "source_resolution": str(self.source_image.resolution),
+                "destination_resolution": str(self.destination_image.resolution),
+                "source_paths": source_paths,
+                "destination_paths": destination_paths,
             }
 
+            # Use the first path for backward compatibility
             self.project_manager.save_project(
                 path,
                 self.point_manager,
-                self.source_image.path,
-                self.destination_image.path,
                 settings,
             )
 
@@ -731,7 +752,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to save project: {e}")
-            self._notify_view_error(f"Failed to save project: {str(e)}")
+            self._notify_view_error(
+                f"Failed to save project: {str(e)}, ({parse_error()})"
+            )
             return False
 
     def load_project(self, path: Path) -> bool:
@@ -740,15 +763,47 @@ class ApplicationPresenter:
             project_data = self.project_manager.load_project(path)
             settings = project_data.get("settings", {})
 
-            # Load images
-            self.load_source_image(
-                Path(project_data["source_image"]),
-                settings.get("source_resolution", 1.0),
-            )
-            self.load_destination_image(
-                Path(project_data["destination_image"]),
-                settings.get("destination_resolution", 1.0),
-            )
+            # Check if this is a new-style project with multiple paths per modality
+            source_paths_dict = settings.get("source_paths", {})
+            dest_paths_dict = settings.get("destination_paths", {})
+
+            if source_paths_dict:
+                # New-style project: load each modality separately
+                for modality_name, modality_path in source_paths_dict.items():
+                    path = [Path(p) for p in modality_path]
+                    self.load_source_image(
+                        path,
+                        float(settings.get("source_resolution", 1.0)),
+                        modality_name=modality_name,
+                    )
+                    # For .ang, .h5, .dream3d files, only load the first one as it contains all modalities
+                    if path[0].suffix.lower() in [".ang", ".h5", ".dream3d"]:
+                        break
+            else:
+                # Old-style project: load single image
+                self.load_source_image(
+                    Path(project_data["source_image"]),
+                    float(settings.get("source_resolution", 1.0)),
+                )
+
+            if dest_paths_dict:
+                # New-style project: load each modality separately
+                for modality_name, modality_path in dest_paths_dict.items():
+                    path = [Path(p) for p in modality_path]
+                    self.load_destination_image(
+                        path,
+                        float(settings.get("destination_resolution", 1.0)),
+                        modality_name=modality_name,
+                    )
+                    # For .ang, .h5, .dream3d files, only load the first one as it contains all modalities
+                    if path[0].suffix.lower() in [".ang", ".h5", ".dream3d"]:
+                        break
+            else:
+                # Old-style project: load single image
+                self.load_destination_image(
+                    Path(project_data["destination_image"]),
+                    float(settings.get("destination_resolution", 1.0)),
+                )
 
             # Load points
             self.point_manager.load_from_json(project_data)
@@ -759,7 +814,6 @@ class ApplicationPresenter:
             self.current_dest_mode = settings.get("dest_mode", "Intensity")
             self.clahe_active_source = settings.get("clahe_source", False)
             self.clahe_active_dest = settings.get("clahe_dest", False)
-            self.is_3d_mode = settings.get("is_3d", False)
             self.match_resolutions = settings.get("match_resolutions", False)
 
             self._notify_view_project_loaded()
@@ -767,7 +821,9 @@ class ApplicationPresenter:
 
         except Exception as e:
             logger.error(f"Failed to load project: {e}")
-            self._notify_view_error(f"Failed to load project: {str(e)}")
+            self._notify_view_error(
+                f"Failed to load project: {str(e)}, ({parse_error()})"
+            )
             return False
 
     # ========== Navigation ==========
