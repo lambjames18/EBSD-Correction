@@ -504,7 +504,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_open_source(self):
         """Handle opening source image."""
-        file_paths = filedialog.askopenfilenames(
+        file_path = filedialog.askopenfilename(
             title="Open Source Image",
             filetypes=[
                 ("All Supported", "*.ang *.h5 *.dream3d *.tif *.tiff *.png *.jpg"),
@@ -514,23 +514,26 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             ],
         )
 
-        if file_paths:
-            self.show_progress(True)
-            if len(file_paths) == 1:
-                file_path = file_paths[0]
-                self.set_status(f"Loading source image: {Path(file_path).name}")
-                if self.presenter.load_source_image(Path(file_path)):
-                    self.set_status("Source image loaded successfully")
-            else:
-                self.set_status(f"Loading {len(file_paths)} source images")
-                if self.presenter.load_source_image([Path(p) for p in file_paths]):
-                    self.set_status("Source image stack loaded successfully")
+        if file_path:
+            path = Path(file_path)
+            modality_name = None
 
+            # Check if this is a single image file that needs a modality name
+            if path.suffix.lower() in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
+                # Ask for modality name
+                modality_name = self._get_modality_name_dialog(path.name)
+                if modality_name is None:
+                    return  # User cancelled
+
+            self.show_progress(True)
+            self.set_status(f"Loading source image: {path.name}")
+            if self.presenter.load_source_image(path, modality_name=modality_name):
+                self.set_status("Source image loaded successfully")
             self.show_progress(False)
 
     def _on_open_destination(self):
         """Handle opening destination image."""
-        file_paths = filedialog.askopenfilenames(
+        file_path = filedialog.askopenfilename(
             title="Open Destination Image",
             filetypes=[
                 ("Image Files", "*.tif *.tiff *.png *.jpg *.dream3d"),
@@ -538,18 +541,21 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             ],
         )
 
-        if file_paths:
-            self.show_progress(True)
-            if len(file_paths) == 1:
-                file_path = file_paths[0]
-                self.set_status(f"Loading destination image: {Path(file_path).name}")
-                if self.presenter.load_destination_image(Path(file_path)):
-                    self.set_status("Destination image loaded successfully")
-            else:
-                self.set_status(f"Loading {len(file_paths)} destination images")
-                if self.presenter.load_destination_image([Path(p) for p in file_paths]):
-                    self.set_status("Destination image stack loaded successfully")
+        if file_path:
+            path = Path(file_path)
+            modality_name = None
 
+            # Check if this is a single image file that needs a modality name
+            if path.suffix.lower() in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
+                # Ask for modality name
+                modality_name = self._get_modality_name_dialog(path.name)
+                if modality_name is None:
+                    return  # User cancelled
+
+            self.show_progress(True)
+            self.set_status(f"Loading destination image: {path.name}")
+            if self.presenter.load_destination_image(path, modality_name=modality_name):
+                self.set_status("Destination image loaded successfully")
             self.show_progress(False)
 
     def _on_load_points(self):
@@ -900,15 +906,27 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             modes = self.presenter.get_source_modalities()
             self.source_mode_combo["values"] = modes
             if modes:
-                self.source_mode_var.set(modes[0])
-                self.presenter.current_source_mode = modes[0]
+                # Keep current mode if it still exists, otherwise use presenter's current mode
+                current_mode = self.presenter.current_source_mode
+                if current_mode in modes:
+                    self.source_mode_var.set(current_mode)
+                else:
+                    # Use the first mode if current doesn't exist
+                    self.source_mode_var.set(modes[0])
+                    self.presenter.current_source_mode = modes[0]
 
         if self.presenter.destination_image:
             modes = self.presenter.get_destination_modalities()
             self.dest_mode_combo["values"] = modes
             if modes:
-                self.dest_mode_var.set(modes[0])
-                self.presenter.current_destination_mode = modes[0]
+                # Keep current mode if it still exists, otherwise use presenter's current mode
+                current_mode = self.presenter.current_dest_mode
+                if current_mode in modes:
+                    self.dest_mode_var.set(current_mode)
+                else:
+                    # Use the first mode if current doesn't exist
+                    self.dest_mode_var.set(modes[0])
+                    self.presenter.current_dest_mode = modes[0]
 
         # Update slice control
         min_slice, max_slice = self.presenter.get_slice_range()
@@ -1282,6 +1300,59 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(
             side="left", padx=5
         )
+
+        dialog.wait_window()
+        return result[0]
+
+    def _get_modality_name_dialog(self, filename: str) -> Optional[str]:
+        """Show dialog to enter a modality name for an image."""
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Loading {filename}")
+        dialog.geometry("350x150")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill="both", expand=True)
+
+        # Label
+        ttk.Label(
+            main_frame, text=f"Enter a name for this image modality:", wraplength=300
+        ).pack(pady=(0, 10))
+
+        # Entry field
+        modality_var = tk.StringVar(value="")
+        entry = ttk.Entry(main_frame, textvariable=modality_var, width=25)
+        entry.pack(pady=5)
+        entry.focus()
+
+        result = [None]
+
+        def on_ok():
+            name = modality_var.get().strip()
+            if name:
+                result[0] = name
+                dialog.destroy()
+            else:
+                messagebox.showwarning(
+                    "Invalid Name", "Please enter a valid modality name."
+                )
+
+        def on_cancel():
+            dialog.destroy()
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(
+            side="left", padx=5
+        )
+
+        # Bind Enter key to OK
+        entry.bind("<Return>", lambda e: on_ok())
+        dialog.bind("<Escape>", lambda e: on_cancel())
 
         dialog.wait_window()
         return result[0]

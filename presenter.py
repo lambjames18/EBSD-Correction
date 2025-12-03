@@ -134,30 +134,68 @@ class ApplicationPresenter:
     # ========== Data Loading ==========
 
     def load_source_image(
-        self, path: Union[str, Path, List[Path], List[str]], resolution: float = 1.0
+        self,
+        path: Union[str, Path, List[Path], List[str]],
+        resolution: float = 1.0,
+        modality_name: str = None,
     ) -> bool:
         """Load source (distorted) image."""
         try:
-            self.source_image = ImageLoader.load(path, resolution)
-            self.is_3d_mode = self.source_image.shape[0] > 1
-            if self.destination_image and self.is_3d_mode:
-                if self.destination_image.shape[0] != self.source_image.shape[0]:
-                    self.source_image = None
-                    self.is_3d_mode = False
-                    raise ValueError(
-                        "Source and destination images must have the same number of slices for 3D mode."
-                    )
+            # Convert path to Path object if needed
+            if isinstance(path, str):
+                path = Path(path)
 
-            # Set default points path if not set
-            if self.source_points_path is None:
-                if type(path) in {list, tuple}:
-                    path = Path(path[0])
-                self.source_points_path = path.parent / "distorted_pts.txt"
+            # Determine if this is an image file that needs a modality name
+            is_single_image = isinstance(path, Path) and path.suffix.lower() in [
+                ".tif",
+                ".tiff",
+                ".png",
+                ".jpg",
+                ".jpeg",
+            ]
 
-            if type(path) in {list, tuple}:
-                logger.info(f"Loaded source image stack: {len(path)} files")
+            # If it's a single image and we already have source_image, add as new modality
+            if is_single_image and self.source_image is not None and modality_name:
+                new_image_data = ImageLoader.load(path, resolution, modality_name)
+                # Add the new modality to existing image data
+                modality_key = list(new_image_data.data.keys())[0]
+                self.source_image.add_modality(
+                    modality_key, new_image_data.data[modality_key]
+                )
+                # Switch to the newly added modality
+                self.current_source_mode = modality_key
+                logger.info(
+                    f"Added modality '{modality_key}' to source image and switched to it"
+                )
             else:
-                logger.info(f"Loaded source image: {path}")
+                # Load as new image (replaces existing)
+                self.source_image = ImageLoader.load(
+                    path, resolution, modality_name if modality_name else "Intensity"
+                )
+                self.is_3d_mode = self.source_image.shape[0] > 1
+                if self.destination_image and self.is_3d_mode:
+                    if self.destination_image.shape[0] != self.source_image.shape[0]:
+                        self.source_image = None
+                        self.is_3d_mode = False
+                        raise ValueError(
+                            "Source and destination images must have the same number of slices for 3D mode."
+                        )
+
+                # Set default points path if not set
+                if self.source_points_path is None:
+                    if type(path) in {list, tuple}:
+                        path = Path(path[0])
+                    self.source_points_path = path.parent / "distorted_pts.txt"
+
+                # Set the current mode to the first available modality
+                if self.source_image and self.source_image.modalities:
+                    self.current_source_mode = self.source_image.modalities[0]
+
+                if type(path) in {list, tuple}:
+                    logger.info(f"Loaded source image stack: {len(path)} files")
+                else:
+                    logger.info(f"Loaded source image: {path}")
+
             self.project_manager.mark_modified()
             self._notify_view_data_loaded()
             return True
@@ -168,30 +206,68 @@ class ApplicationPresenter:
             return False
 
     def load_destination_image(
-        self, path: Union[Path, List[Path]], resolution: float = 1.0
+        self,
+        path: Union[Path, List[Path]],
+        resolution: float = 1.0,
+        modality_name: str = None,
     ) -> bool:
         """Load destination (control) image."""
         try:
-            self.destination_image = ImageLoader.load(path, resolution)
-            self.is_3d_mode = self.destination_image.shape[0] > 1
-            if self.source_image and self.is_3d_mode:
-                if self.source_image.shape[0] != self.destination_image.shape[0]:
-                    self.destination_image = None
-                    self.is_3d_mode = False
-                    raise ValueError(
-                        "Source and destination images must have the same number of slices for 3D mode."
-                    )
+            # Convert path to Path object if needed
+            if isinstance(path, str):
+                path = Path(path)
 
-            # Set default points path if not set
-            if self.dest_points_path is None:
-                if type(path) in {list, tuple}:
-                    path = Path(path[0])
-                self.dest_points_path = path.parent / "control_pts.txt"
+            # Determine if this is an image file that needs a modality name
+            is_single_image = isinstance(path, Path) and path.suffix.lower() in [
+                ".tif",
+                ".tiff",
+                ".png",
+                ".jpg",
+                ".jpeg",
+            ]
 
-            if type(path) in {list, tuple}:
-                logger.info(f"Loaded destination image stack: {len(path)} files")
+            # If it's a single image and we already have destination_image, add as new modality
+            if is_single_image and self.destination_image is not None and modality_name:
+                new_image_data = ImageLoader.load(path, resolution, modality_name)
+                # Add the new modality to existing image data
+                modality_key = list(new_image_data.data.keys())[0]
+                self.destination_image.add_modality(
+                    modality_key, new_image_data.data[modality_key]
+                )
+                # Switch to the newly added modality
+                self.current_dest_mode = modality_key
+                logger.info(
+                    f"Added modality '{modality_key}' to destination image and switched to it"
+                )
             else:
-                logger.info(f"Loaded destination image: {path}")
+                # Load as new image (replaces existing)
+                self.destination_image = ImageLoader.load(
+                    path, resolution, modality_name if modality_name else "Intensity"
+                )
+                self.is_3d_mode = self.destination_image.shape[0] > 1
+                if self.source_image and self.is_3d_mode:
+                    if self.source_image.shape[0] != self.destination_image.shape[0]:
+                        self.destination_image = None
+                        self.is_3d_mode = False
+                        raise ValueError(
+                            "Source and destination images must have the same number of slices for 3D mode."
+                        )
+
+                # Set default points path if not set
+                if self.dest_points_path is None:
+                    if type(path) in {list, tuple}:
+                        path = Path(path[0])
+                    self.dest_points_path = path.parent / "control_pts.txt"
+
+                # Set the current mode to the first available modality
+                if self.destination_image and self.destination_image.modalities:
+                    self.current_dest_mode = self.destination_image.modalities[0]
+
+                if type(path) in {list, tuple}:
+                    logger.info(f"Loaded destination image stack: {len(path)} files")
+                else:
+                    logger.info(f"Loaded destination image: {path}")
+
             self.project_manager.mark_modified()
             self._notify_view_data_loaded()
             return True

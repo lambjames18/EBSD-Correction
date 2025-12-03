@@ -155,6 +155,23 @@ class ImageData:
 
         return data[slice_idx]
 
+    def add_modality(self, modality_name: str, data: np.ndarray) -> None:
+        """Add a new modality to the image data."""
+        if modality_name in self.data:
+            raise ValueError(f"Modality '{modality_name}' already exists")
+
+        # Verify shape compatibility (should match existing modality shapes)
+        if self.data:
+            first_key = next(iter(self.data.keys()))
+            expected_shape = self.data[first_key].shape[:3]  # slices, height, width
+            if data.shape[:3] != expected_shape:
+                raise ValueError(
+                    f"New modality shape {data.shape[:3]} does not match existing shape {expected_shape}"
+                )
+
+        self.data[modality_name] = data
+        logger.info(f"Added modality '{modality_name}' to image data")
+
 
 class PointManager:
     """Manages control points for image registration."""
@@ -359,7 +376,7 @@ class ImageLoader:
 
     @classmethod
     def load(
-        cls, path: Union[str, Path, List, Tuple], resolution: float = 1.0
+        cls, path: Union[str, Path, List, Tuple], resolution: float = 1.0, modality_name: str = "Intensity"
     ) -> ImageData:
         """Load image data from file."""
         if type(path) not in [list, tuple]:
@@ -399,7 +416,11 @@ class ImageLoader:
 
         try:
             logger.info(f"Loading {suffix} file(s)")
-            data, res, metadata = loader_method(path)
+            # Pass modality_name for single image files
+            if loader_method == cls.load_image:
+                data, res, metadata = loader_method(path, modality_name)
+            else:
+                data, res, metadata = loader_method(path)
 
             # Use provided resolution if loader didn't return one
             if res is None:
@@ -524,8 +545,8 @@ class ImageLoader:
         return data, res, None
 
     @staticmethod
-    def load_image(path: Path) -> Tuple[Dict[str, np.ndarray], None]:
-        """Load standard image formats."""
+    def load_image(path: Path, modality_name: str = "Intensity") -> Tuple[Dict[str, np.ndarray], None]:
+        """Load standard image formats with optional modality name."""
         im = io.imread(path, as_gray=True).astype(np.float32)
 
         # Normalize to 0-255 range
@@ -537,7 +558,7 @@ class ImageLoader:
 
         im = im.reshape((1,) + im.shape)
 
-        return {"Intensity": im}, None, None
+        return {modality_name: im}, None, None
 
     @staticmethod
     def load_images(paths: list) -> Tuple[Dict[str, np.ndarray], None]:
