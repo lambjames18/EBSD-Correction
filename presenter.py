@@ -722,10 +722,15 @@ class ApplicationPresenter:
                 raise NotImplementedError("H5 export not yet implemented")
 
             elif data_format == DataFormat.DREAM3D:
+                if crop_mode is not CropMode.SOURCE:
+                    self._notify_view_error(
+                        "Only source cropping is supported for DREAM.3D export"
+                    )
+                    return False
                 # loop over all modalities and export
                 warped_stacks = {}
-                src_stacks = {}
 
+                dst_modes = self.destination_image.modalities
                 for mode in self.source_image.modalities:
                     self.set_source_mode(mode)
                     self._notify_view_update_display()
@@ -739,7 +744,12 @@ class ApplicationPresenter:
                     if warped_stack is None:
                         return False
                     warped_stacks[mode] = warped_stack
-                    src_stacks[mode] = src_stack
+                    if self.current_dest_mode in dst_modes:
+                        dst_modes.remove(self.current_dest_mode)
+                        warped_stacks[self.current_dest_mode] = dst_stack
+                        if len(dst_modes) > 0:
+                            self.set_destination_mode(dst_modes)
+                            self._notify_view_update_display()
 
                 self.image_writer.save(warped_stack, path)
 

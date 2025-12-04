@@ -690,10 +690,215 @@ class ImageWriter:
     @staticmethod
     def save_dream3d(
         image_data: Dict[str, np.ndarray],
-        path: Path,
+        path: Union[str, Path],
+        original_path: Union[str, Path],
     ) -> None:
         """Save image data to DREAM3D format."""
-        raise NotImplementedError("Saving to DREAM3D format is not yet implemented.")
+        # Ensure paths are Path objects
+        if not isinstance(path, Path):
+            path = Path(path)
+        if not isinstance(original_path, Path):
+            original_path = Path(original_path)
+
+        # Get path to original xdmf file associated with the DREAM3D file
+        original_xdmf_path = original_path.with_suffix(".xdmf")
+        xdmf_path = path.with_suffix(".xdmf")
+
+        # First verify the original file exists
+        if not original_path.exists():
+            raise FileNotFoundError(f"Original DREAM3D file not found: {original_path}")
+        if not original_xdmf_path.exists():
+            raise FileNotFoundError(
+                f"Original XDMF file not found: {original_xdmf_path}"
+            )
+
+        # Copy the original to the new location
+        import shutil
+
+        shutil.copyfile(original_path, path)
+        shutil.copyfile(original_xdmf_path, xdmf_path)
+
+        # Replace the Dream3D file name in the XDMF file
+        def replace_dream3d_filename_in_xdmf(xdmf_path, new_dream3d_filename):
+            """Replaces the DREAM3D filename in the XDMF file with a new filename."""
+            with open(xdmf_path, "r") as file:
+                xdmf_content = file.readlines()
+
+            with open(xdmf_path, "w") as file:
+                for line in xdmf_content:
+                    if ".dream3d:/" in line:
+                        idx = line.index(":")
+                        line = " " * 8 + new_dream3d_filename + line[idx:]
+                    file.write(line)
+
+        replace_dream3d_filename_in_xdmf(xdmf_path, path.name)
+
+        # Function for determining the cell data path
+        first_modality = next(iter(image_data.keys()))
+
+        def recursive_search(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                if name.endswith(first_modality):
+                    return name
+                else:
+                    return None
+            for key, item in obj.items():
+                result = recursive_search(f"{name}/{key}", item)
+                if result:
+                    return result
+            return None
+
+        # Define Dream3d data types
+        dream3d_dtypes = {
+            np.uint8: "DataArray<uint8_t> ",
+            np.int8: "DataArray<int8_t> ",
+            np.uint16: "DataArray<uint16_t> ",
+            np.int16: "DataArray<int16_t> ",
+            np.uint32: "DataArray<uint32_t> ",
+            np.int32: "DataArray<int32_t> ",
+            np.uint64: "DataArray<uint64_t> ",
+            np.int64: "DataArray<int64_t> ",
+            np.float32: "DataArray<float> ",
+            np.float64: "DataArray<double> ",
+            bool: "DataArray<bool> ",
+        }
+        xdmf_dtype_formats = {  # (NumberType, Precision)
+            np.uint8: ("UChar", "1"),
+            np.int8: ("Char", "1"),
+            np.uint16: ("UInt", "2"),
+            np.int16: ("Int", "2"),
+            np.uint32: ("UInt", "4"),
+            np.int32: ("Int", "4"),
+            np.uint64: ("UInt", "8"),
+            np.int64: ("Int", "8"),
+            np.float32: ("Float", "4"),
+            np.float64: ("Float", "8"),
+            bool: ("uchar", "1"),
+        }
+
+        # Function to create a new dataset
+        def add_dataset_to_h5(h5group, name, data):
+            dtype = data.dtype.type
+            if dtype not in dream3d_dtypes:
+                raise ValueError(f"Unsupported data type for DREAM3D: {dtype}")
+            dset = h5group.create_dataset(name, data=data, dtype=dtype)
+            dset.attrs["ComponentDimensions"] = np.uint64([data.shape[-1]])
+            dset.attrs["Tuple Axis Dimensions"] = np.string_(
+                f"x={str(data.shape[2])},y={str(data.shape[1])},z={str(data.shape[0])} "
+            )
+            dset.attrs["DataArrayVersion"] = np.int32([2])
+            dset.attrs["ObjectType"] = np.string_(dream3d_dtypes[dtype])
+            dset.attrs["TupleDimensions"] = np.uint64(np.squeeze(data.shape[:-1][::-1]))
+
+            return dset
+
+        def add_dataset_to_xdmf(xdmf_path, dataset_name, data_array):
+            """Adds a new dataset to an existing XDMF file."""
+            # Read the existing XDMF file
+            with open(xdmf_path, "r") as file:
+                xdmf_content = file.readlines()
+
+            # Break the xdmf content into lines for easier manipulation
+            xdmf_content = [line.replace("\n", "") for line in xdmf_content]
+            for line in xdmf_content:
+                print(line)
+
+            # Make sure the shape of the data_array is compatible
+            if data_array.ndim == 3:
+                data_array = data_array.reshape(data_array.shape + (1,))
+            elif data_array.ndim < 3:
+                raise ValueError("data_array must be at least 3-dimensional")
+            elif data_array.ndim > 4:
+                raise ValueError("data_array must be at most 4-dimensional")
+            dimensions = (
+                xdmf_content[["<Topology" in line for line in xdmf_content].index(True)]
+                .split("Dimensions=")[1]
+                .split('"')[1]
+                .strip()
+            )
+            data_array_dims = " ".join(map(str, np.array(data_array.shape[0:3]) + 1))
+            if dimensions != data_array_dims:
+                raise ValueError(
+                    "data_array dimensions are not compatible with XDMF Topology dimensions"
+                )
+
+            # Make sure an entry with the same name does not already exist
+            for line in xdmf_content:
+                if f'Attribute Name="{dataset_name}"' in line:
+                    raise ValueError(
+                        f"An Attribute with the name '{dataset_name}' already exists"
+                    )
+
+            # Determine the insertion point (put the new entry at the end of the Grid section)
+            insertion_index = ["</Grid>" in line for line in xdmf_content].index(True)
+
+            # Gather relevant data for the new dataset
+            data_type, precision = xdmf_dtype_formats[data_array.dtype.type]
+            dimensions = " ".join(map(str, data_array.shape))
+            attribute_type = (
+                "Scalar"
+                if (data_array.ndim == 3)
+                or ((data_array.ndim == 4) and (data_array.shape[-1] == 1))
+                else "Vector"
+            )
+            file_path = (
+                xdmf_content[
+                    [".dream3d:/" in line for line in xdmf_content].index(True)
+                ]
+                .strip()
+                .split("/")
+            )
+            file_path[-1] = dataset_name
+            file_path = "/".join(file_path)
+
+            # Create the new DataItem entry
+            xdmf_content.insert(
+                insertion_index,
+                f'    <Attribute Name="{dataset_name}" AttributeType="{attribute_type}" Center="Cell">',
+            )
+            xdmf_content.insert(
+                insertion_index + 1,
+                f'      <DataItem Format="HDF" Dimensions="{dimensions}" NumberType="{data_type}" Precision="{precision}" >',
+            )
+            xdmf_content.insert(
+                insertion_index + 2,
+                f"        {file_path}",
+            )
+            xdmf_content.insert(insertion_index + 3, "      </DataItem>")
+            xdmf_content.insert(insertion_index + 4, "    </Attribute>")
+
+            # Write the modified content back to the XDMF file
+            with open(xdmf_path, "w") as file:
+                for line in xdmf_content:
+                    file.write(line + "\n")
+
+        # Now open the new file and write the new data
+        with h5py.File(path, "r+") as h5:
+            cell_data_path = recursive_search("", h5)
+            if cell_data_path is None:
+                raise ValueError(
+                    f"Could not find cell data for modality '{first_modality}' in DREAM3D file"
+                )
+            print(cell_data_path)
+            cell_data_path = cell_data_path.replace(f"/{first_modality}", "")
+            print(cell_data_path)
+
+            cell_data = h5[cell_data_path]
+
+            for modality, data in image_data.items():
+                if modality in cell_data:
+                    dataset = cell_data[modality]
+                    if dataset.shape != data.shape:
+                        raise ValueError(
+                            f"Data shape mismatch for modality '{modality}': expected {dataset.shape}, got {data.shape}"
+                        )
+                    dataset[...] = data
+                else:
+                    # Create new dataset
+                    logger.info(f"Creating new dataset for modality '{modality}'")
+                    # Add dataset to H5 and XDMF
+                    add_dataset_to_h5(cell_data, modality, data)
+                    add_dataset_to_xdmf(xdmf_path, modality, data)
 
     @staticmethod
     def save_ang(
