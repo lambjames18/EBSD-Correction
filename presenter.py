@@ -745,13 +745,13 @@ class ApplicationPresenter:
                         return False
                     warped_stacks[mode] = warped_stack
                     if self.current_dest_mode in dst_modes:
-                        dst_modes.remove(self.current_dest_mode)
                         warped_stacks[self.current_dest_mode] = dst_stack
+                        dst_modes.pop(dst_modes.index(self.current_dest_mode))
                         if len(dst_modes) > 0:
-                            self.set_destination_mode(dst_modes)
+                            self.set_destination_mode(dst_modes[0])
                             self._notify_view_update_display()
 
-                self.image_writer.save(warped_stack, path)
+                self.image_writer.save(warped_stacks, path, self.source_image.path[0])
 
         except Exception as e:
             logger.error(f"Failed to export data: {e}")

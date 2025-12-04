@@ -783,11 +783,11 @@ class ImageWriter:
                 raise ValueError(f"Unsupported data type for DREAM3D: {dtype}")
             dset = h5group.create_dataset(name, data=data, dtype=dtype)
             dset.attrs["ComponentDimensions"] = np.uint64([data.shape[-1]])
-            dset.attrs["Tuple Axis Dimensions"] = np.string_(
+            dset.attrs["Tuple Axis Dimensions"] = np.bytes_(
                 f"x={str(data.shape[2])},y={str(data.shape[1])},z={str(data.shape[0])} "
             )
             dset.attrs["DataArrayVersion"] = np.int32([2])
-            dset.attrs["ObjectType"] = np.string_(dream3d_dtypes[dtype])
+            dset.attrs["ObjectType"] = np.bytes_(dream3d_dtypes[dtype])
             dset.attrs["TupleDimensions"] = np.uint64(np.squeeze(data.shape[:-1][::-1]))
 
             return dset
@@ -800,8 +800,6 @@ class ImageWriter:
 
             # Break the xdmf content into lines for easier manipulation
             xdmf_content = [line.replace("\n", "") for line in xdmf_content]
-            for line in xdmf_content:
-                print(line)
 
             # Make sure the shape of the data_array is compatible
             if data_array.ndim == 3:
@@ -879,10 +877,7 @@ class ImageWriter:
                 raise ValueError(
                     f"Could not find cell data for modality '{first_modality}' in DREAM3D file"
                 )
-            print(cell_data_path)
             cell_data_path = cell_data_path.replace(f"/{first_modality}", "")
-            print(cell_data_path)
-
             cell_data = h5[cell_data_path]
 
             for modality, data in image_data.items():
