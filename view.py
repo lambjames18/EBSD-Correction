@@ -46,10 +46,10 @@ class ViewInterface(ABC):
         """Called when an error occurs."""
         pass
 
-    @abstractmethod
-    def on_show_preview(self, warped: np.ndarray, reference: np.ndarray) -> None:
-        """Called to show transformation preview."""
-        pass
+    #     @abstractmethod
+    #     def on_show_preview(self, warped: np.ndarray, reference: np.ndarray) -> None:
+    #         """Called to show transformation preview."""
+    #         pass
 
     @abstractmethod
     def on_project_loaded(self) -> None:
@@ -238,6 +238,14 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         transform_menu.add_command(
             label="Preview Affine TPS",
             command=lambda: self._on_preview_transform(TransformType.TPS_AFFINE),
+        )
+        transform_menu.add_command(
+            label="Preview TPS (3D)",
+            command=lambda: self._on_preview_transform(TransformType.TPS, True),
+        )
+        transform_menu.add_command(
+            label="Preview Affine TPS (3D)",
+            command=lambda: self._on_preview_transform(TransformType.TPS_AFFINE, True),
         )
         transform_menu.add_separator()
         transform_menu.add_command(
@@ -927,13 +935,18 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             # Update image resolutions
             self.presenter.set_image_resolutions(src_res, dst_res)
 
-    def _on_preview_transform(self, transform_type):
+    def _on_preview_transform(self, transform_type, is_3d=False):
         """Preview transformation."""
         crop_mode = self._get_crop_mode_dialog()
         if crop_mode is not None:
             self.show_progress(True)
             self.set_status(f"Generating {transform_type.value} preview...")
-            self.presenter.apply_transform(transform_type, crop_mode, preview=True)
+            if is_3d:
+                self.presenter.apply_transform_3d(
+                    transform_type, crop_mode, preview=True
+                )
+            else:
+                self.presenter.apply_transform(transform_type, crop_mode, preview=True)
             self.show_progress(False)
 
     def _on_apply_current(self):
@@ -1018,10 +1031,20 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         messagebox.showerror("Error", message)
         self.set_status(f"Error: {message}")
 
-    def on_show_preview(self, warped: np.ndarray, reference: np.ndarray):
+    def on_show_preview_2d(self, warped: np.ndarray, reference: np.ndarray):
         """Called to show transformation preview."""
         # Create preview window
         Viewer = Interactive2DViewer(self, warped, reference, "Transformation Preview")
+        self.set_status("Preview window opened")
+        Viewer.root.wait_window()
+        self.set_status("Preview window closed")
+
+    def on_show_preview_3d(self, warped_stack: np.ndarray, reference_stack: np.ndarray):
+        """Called to show transformation preview."""
+        # Create preview window
+        Viewer = Interactive3DViewer(
+            self, warped_stack, reference_stack, "Transformation Preview"
+        )
         self.set_status("Preview window opened")
         Viewer.root.wait_window()
         self.set_status("Preview window closed")
@@ -1306,7 +1329,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         """Show dialog to select crop mode."""
         dialog = tk.Toplevel(self)
         dialog.title("Select Crop Mode")
-        dialog.geometry("300x150")
+        dialog.geometry("290x130")
         dialog.transient(self)
         dialog.grab_set()
 
@@ -1428,6 +1451,341 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         dialog.wait_window()
         return result[0]
+
+
+class Interactive3DViewer:
+    """Tkinter implementation of an interactive 3D stack viewer with plane selection and split view controls"""
+
+    def __init__(self, master, stack0, stack1, title="Interactive View"):
+        """
+        Initialize the interactive 3D viewer
+
+        Parameters:
+        -----------
+        stack0 : numpy.ndarray
+            First image stack (4D: slices, rows, cols, channels or 3D: slices, rows, cols)
+        stack1 : numpy.ndarray
+            Second image stack (4D: slices, rows, cols, channels or 3D: slices, rows, cols)
+        title : str
+            Window title
+        """
+        self.master = master
+        self.stack0 = stack0
+        self.stack1 = stack1
+        self.title = title
+        self.active = 0  # 0 for row slider, 1 for col slider
+
+        # Initialize dimensions
+        self.max_r = self.stack0.shape[1]
+        self.max_c = self.stack0.shape[2]
+        self.max_s = self.stack0.shape[0] - 1
+        if self.max_s == 0:
+            self.max_s = 1
+
+        # Current state
+        self.current_slice = 0
+        self.current_plane = 0  # 0=XY, 1=XZ, 2=YZ
+        self.current_row_split = 0
+        self.current_col_split = 0
+
+        # Setup the GUI
+        self.setup_gui()
+
+    def get_limits(self, axis, shape):
+        """Update dimension limits based on selected plane"""
+        self.max_r = shape[0]
+        self.max_c = shape[1]
+        if axis == 0:
+            self.max_s = self.stack0.shape[0] - 1
+        elif axis == 1:
+            self.max_s = self.stack0.shape[1] - 1
+        elif axis == 2:
+            self.max_s = self.stack0.shape[2] - 1
+
+    def _create_slice(self, slice_num, axis, split_num, split_axis):
+        """Create a composite slice from the two stacks"""
+        # Extract slices from both stacks based on axis
+        if axis == 0:  # XY plane
+            im0 = self.stack0[slice_num]
+            im1 = self.stack1[slice_num]
+        elif axis == 1:  # XZ plane
+            im0 = self.stack0[:, slice_num]
+            im1 = self.stack1[:, slice_num]
+        elif axis == 2:  # YZ plane
+            im0 = self.stack0[:, :, slice_num]
+            im1 = self.stack1[:, :, slice_num]
+
+        # Adjust aspect ratio for thin slices
+        if im0.shape[0] < im0.shape[1] / 2:
+            repeat_factor = int(np.floor(im0.shape[1] / im0.shape[0]))
+            im0 = np.repeat(im0, repeat_factor, axis=0)
+            im1 = np.repeat(im1, repeat_factor, axis=0)
+        elif im0.shape[1] < im0.shape[0] / 2:
+            repeat_factor = int(np.floor(im0.shape[0] / im0.shape[1]))
+            im0 = np.repeat(im0, repeat_factor, axis=1)
+            im1 = np.repeat(im1, repeat_factor, axis=1)
+
+        # Create split view
+        if split_axis == 0:  # Row split
+            split_num = im0.shape[0] - split_num
+            image = np.vstack((im0[:split_num], im1[split_num:]))
+        elif split_axis == 1:  # Column split
+            image = np.hstack((im0[:, :split_num], im1[:, split_num:]))
+
+        return image
+
+    def _normalize_image(self, img):
+        """Normalize image to 0-255 range and ensure it's in the right format"""
+        if img.dtype == np.float64 or img.dtype == np.float32:
+            img = (img * 255).astype(np.uint8)
+        elif img.dtype != np.uint8:
+            img = img.astype(np.uint8)
+
+        # Convert grayscale to RGB if needed
+        if len(img.shape) == 2:
+            img = np.stack([img, img, img], axis=2)
+        elif len(img.shape) == 3 and img.shape[2] == 1:
+            img = np.concatenate([img, img, img], axis=2)
+
+        return img
+
+    def _get_window_size(self):
+        """Calculate appropriate window size based on image dimensions and screen size"""
+        display_height = self.root.winfo_screenheight()
+        display_width = self.root.winfo_screenwidth()
+
+        # Get current slice to determine aspect ratio
+        test_image = self._create_slice(0, self.current_plane, 0, 0)
+        ratio = test_image.shape[1] / test_image.shape[0]
+
+        if ratio >= 1:
+            width = min(display_width, int(display_height * ratio * 0.8))
+            height = int(display_height * 0.8)
+        else:
+            width = int(display_width * 0.8)
+            height = min(display_height, int(display_width * 0.8 / ratio))
+        return width, height
+
+    def setup_gui(self):
+        """Setup the tkinter GUI"""
+        # Create main window
+        self.root = tk.Toplevel(self.master)
+        self.root.title(self.title)
+        width, height = self._get_window_size()
+        self.root.geometry(f"{width}x{height}")
+
+        # Create main frame
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Configure grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+
+        # Create canvas for image display
+        self.canvas = tk.Canvas(main_frame, bg="gray")
+        self.canvas.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Left controls (row split slider)
+        left_controls = ttk.Frame(main_frame)
+        left_controls.grid(row=0, column=0, sticky=(tk.N, tk.S), padx=5)
+
+        ttk.Label(left_controls, text="Y split").pack(side=tk.TOP)
+        self.row_slider = ttk.Scale(
+            left_controls,
+            from_=self.max_r,
+            to=0,
+            orient=tk.VERTICAL,
+            value=self.max_r,
+            command=self.update_row_split,
+        )
+        self.row_slider.pack(side=tk.TOP, fill=tk.Y, expand=True)
+        self.row_value_label = ttk.Label(left_controls, text=str(self.max_r))
+        self.row_value_label.pack(side=tk.TOP)
+
+        # Bottom controls frame
+        bottom_frame = ttk.Frame(main_frame)
+        bottom_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5)
+
+        # Column split slider
+        col_controls = ttk.Frame(bottom_frame)
+        col_controls.pack(side=tk.TOP, fill=tk.X, expand=True)
+
+        ttk.Label(col_controls, text="X split:").pack(side=tk.LEFT)
+        self.col_slider = ttk.Scale(
+            col_controls,
+            from_=0,
+            to=self.max_c,
+            orient=tk.HORIZONTAL,
+            value=0,
+            command=self.update_col_split,
+        )
+        self.col_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.col_value_label = ttk.Label(col_controls, text="0")
+        self.col_value_label.pack(side=tk.LEFT)
+
+        # Slice and plane controls
+        control_row = ttk.Frame(bottom_frame)
+        control_row.pack(side=tk.TOP, fill=tk.X, pady=5)
+
+        # Slice control
+        ttk.Label(control_row, text="Slice:").pack(side=tk.LEFT, padx=5)
+        self.slice_slider = ttk.Scale(
+            control_row,
+            from_=0,
+            to=self.max_s,
+            orient=tk.HORIZONTAL,
+            value=0,
+            command=self.update_slice,
+        )
+        self.slice_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        self.slice_value_label = ttk.Label(control_row, text="0")
+        self.slice_value_label.pack(side=tk.LEFT)
+
+        # Plane selection
+        ttk.Label(control_row, text="Plane:").pack(side=tk.LEFT, padx=(20, 5))
+        self.plane_var = tk.StringVar(value="XY")
+        plane_combo = ttk.Combobox(
+            control_row,
+            textvariable=self.plane_var,
+            values=["XY", "XZ", "YZ"],
+            state="readonly",
+            width=5,
+        )
+        plane_combo.pack(side=tk.LEFT, padx=5)
+        plane_combo.bind("<<ComboboxSelected>>", self.change_plane)
+
+        # Reset button
+        ttk.Button(control_row, text="Reset", command=self.reset_controls).pack(
+            side=tk.RIGHT, padx=5
+        )
+
+        # Right controls (slice slider) - removed since we have it in bottom controls
+
+        # Initial display
+        self.update_display()
+
+        # Bind canvas resize event
+        self.canvas.bind("<Configure>", self.on_canvas_resize)
+
+    def reset_controls(self):
+        """Reset all controls to initial positions"""
+        self.row_slider.set(0)
+        self.col_slider.set(0)
+        self.slice_slider.set(0)
+        self.plane_var.set("XY")
+        self.current_plane = 0
+        self.update_display()
+
+    def update_row_split(self, val):
+        """Update function for row split slider"""
+        val = int(float(val))
+        self.current_row_split = val
+        self.active = 0
+        self.row_value_label.config(text=str(val))
+        self.update_display()
+
+    def update_col_split(self, val):
+        """Update function for column split slider"""
+        val = int(float(val))
+        self.current_col_split = val
+        self.active = 1
+        self.col_value_label.config(text=str(val))
+        self.update_display()
+
+    def update_slice(self, val):
+        """Update function for slice slider"""
+        val = int(float(val))
+        self.current_slice = val
+        self.slice_value_label.config(text=str(val))
+        self.update_display()
+
+    def change_plane(self, event=None):
+        """Handle plane selection change"""
+        plane_str = self.plane_var.get()
+        self.current_plane = ["XY", "XZ", "YZ"].index(plane_str)
+
+        # Get new dimensions
+        test_image = self._create_slice(0, self.current_plane, 0, 0)
+        self.get_limits(self.current_plane, test_image.shape)
+
+        # Update slider ranges
+        self.row_slider.config(to=self.max_r)
+        self.col_slider.config(to=self.max_c)
+        self.slice_slider.config(to=self.max_s)
+
+        # Reset splits
+        self.current_row_split = 0
+        self.current_col_split = 0
+        self.current_slice = 0
+        self.row_slider.set(0)
+        self.col_slider.set(0)
+        self.slice_slider.set(0)
+
+        self.update_display()
+
+    def update_display(self):
+        """Update the displayed image"""
+        # Create composite image
+        image = self._create_slice(
+            self.current_slice,
+            self.current_plane,
+            self.current_row_split if self.active == 0 else self.current_col_split,
+            self.active,
+        )
+
+        # Normalize image
+        image = self._normalize_image(image)
+
+        # Convert to PIL Image
+        pil_image = Image.fromarray(image)
+
+        # Get canvas size
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+
+        if canvas_width > 1 and canvas_height > 1:
+            # Calculate scaling to fit canvas while maintaining aspect ratio
+            scale_x = canvas_width / image.shape[1]
+            scale_y = canvas_height / image.shape[0]
+            scale = min(scale_x, scale_y)
+
+            new_width = int(image.shape[1] * scale)
+            new_height = int(image.shape[0] * scale)
+
+            # Resize image
+            pil_image = pil_image.resize(
+                (new_width, new_height), Image.Resampling.LANCZOS
+            )
+
+        # Convert to PhotoImage
+        self.photo = ImageTk.PhotoImage(pil_image)
+
+        # Clear canvas and display image
+        self.canvas.delete("all")
+        self.canvas.create_image(
+            canvas_width // 2 if canvas_width > 1 else 200,
+            canvas_height // 2 if canvas_height > 1 else 200,
+            image=self.photo,
+            anchor=tk.CENTER,
+        )
+
+        # Update title with current slice info
+        plane_name = ["XY", "XZ", "YZ"][self.current_plane]
+        self.root.title(
+            f"{self.title} - {plane_name} Plane (Slice {self.current_slice})"
+        )
+
+    def on_canvas_resize(self, event):
+        """Handle canvas resize event"""
+        self.update_display()
+
+    def run(self):
+        """Start the GUI main loop"""
+        self.root.after(100, self.update_display)
+        self.root.mainloop()
 
 
 class Interactive2DViewer:

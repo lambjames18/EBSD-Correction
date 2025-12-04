@@ -678,10 +678,10 @@ class ImageWriter:
             raise
 
     @staticmethod
-    def save_image(image: np.ndarray, path: Path) -> None:
+    def save_image(image_data: np.ndarray, path: Path) -> None:
         """Save image to file."""
         try:
-            io.imsave(path, image)
+            io.imsave(path, image_data)
             logger.info(f"Saved image to {path}")
         except Exception as e:
             logger.error(f"Failed to save image to {path}: {e}")
@@ -689,10 +689,10 @@ class ImageWriter:
 
     @staticmethod
     def save_dream3d(
-        image_data: Dict[str, np.ndarray], path: Path, header: str
+        image_data: Dict[str, np.ndarray],
+        path: Path,
     ) -> None:
         """Save image data to DREAM3D format."""
-        ### TODO: Implement saving to DREAM3D format
         raise NotImplementedError("Saving to DREAM3D format is not yet implemented.")
 
     @staticmethod
@@ -703,7 +703,6 @@ class ImageWriter:
         resolution: float,
     ) -> None:
         """Save image data to ANG format."""
-        ### TODO: Implement saving to ANG format
         # Create new x/y grid
         k = next(iter(image_data.keys()))
         x, y = np.meshgrid(
@@ -733,23 +732,7 @@ class ImageWriter:
         image_data: Dict[str, np.ndarray], path: Path, resolution: float
     ) -> None:
         """Save image data to HDF5 format."""
-        ### TODO: Implement saving to HDF5 format
         raise NotImplementedError("Saving to HDF5 format is not yet implemented.")
-        h5 = h5py.File(SAVE_PATH_EBSD, "w")
-        h5.attrs.create(name="resolution", data=res)
-        h5.attrs.create(name="header", data=header_string)
-        for i, key in enumerate(ebsd_keys):
-            print("Saving key:", key, src_imgs[i].shape, src_imgs[i].dtype)
-            h5.create_dataset(name=key, data=src_imgs[i], dtype=src_imgs[i].dtype)
-            h5[key].attrs.create(name="name", data=key)
-            h5[key].attrs.create(name="dtype", data=str(src_imgs[i].dtype))
-            h5[key].attrs.create(name="shape", data=src_imgs[i].shape)
-        for i, key in enumerate(bse_keys):
-            h5.create_dataset(name=f"{key}", data=dst_imgs[i], dtype=dst_imgs[i].dtype)
-            h5[f"{key}"].attrs.create(name="name", data=f"{key}")
-            h5[f"{key}"].attrs.create(name="dtype", data=str(dst_imgs[i].dtype))
-            h5[f"{key}"].attrs.create(name="shape", data=dst_imgs[i].shape)
-        h5.close()
 
 
 class TransformManager:
@@ -766,7 +749,7 @@ class TransformManager:
         src_points: np.ndarray,
         dst_points: np.ndarray,
         transform_type: TransformType,
-        **kwargs,
+        output_shape: Tuple[int, int],
     ) -> Any:
         """Estimate transformation parameters from point correspondences."""
         if src_points.size == 0 or dst_points.size == 0:
@@ -778,18 +761,16 @@ class TransformManager:
             )
 
         try:
-            if transform_type in [TransformType.TPS, TransformType.TPS_AFFINE]:
-                # Import TPS here to avoid circular dependency
-                from tps import ThinPlateSplineTransform
+            # Import TPS here to avoid circular dependency
+            from tps import ThinPlateSplineTransform
 
-                affine_only = transform_type == TransformType.TPS_AFFINE
-                tform = ThinPlateSplineTransform(affine_only=affine_only)
-                tform.estimate(src_points, dst_points, **kwargs)
-            else:
-                # Use skimage for other transforms
-                tform = transform.estimate_transform(
-                    transform_type.value, src_points, dst_points, **kwargs
-                )
+            affine_only = transform_type == TransformType.TPS_AFFINE
+            tform = ThinPlateSplineTransform(affine_only=affine_only)
+            tform.estimate(
+                src_points,
+                dst_points,
+                output_shape,
+            )
 
             self._last_transform = tform
             logger.debug(f"Estimated {transform_type.value} transform")
@@ -835,9 +816,9 @@ class TransformManager:
         transform_type: TransformType,
         output_shape: Optional[Tuple[int, int]] = None,
         order: int = 0,
-        **kwargs,
     ) -> np.ndarray:
         """Apply transformation to a stack of images with interpolation between slices."""
+        ### TODO there is an issue with a "size" argument not being present when calling the TPS function when transforming a stack
         if output_shape is None:
             output_shape = image_stack.shape[1:3]
 
@@ -851,7 +832,9 @@ class TransformManager:
             src_pts = src_points[mask, 1:]
             dst_pts = dst_points[mask, 1:]
 
-            tform = self.estimate_transform(src_pts, dst_pts, transform_type, **kwargs)
+            tform = self.estimate_transform(
+                src_pts, dst_pts, transform_type, output_shape
+            )
             transforms[slice_idx] = tform
 
         # Apply transforms with interpolation
@@ -909,13 +892,24 @@ class ImageProcessor:
     ) -> np.ndarray:
         """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)."""
         try:
-            tensor = torch.tensor(image).unsqueeze(0).unsqueeze(0).float()
+            tensor = torch.tensor(image).float()
+            if tensor.ndim == 2:
+                tensor = tensor.unsqueeze(0).unsqueeze(0)
+            elif tensor.ndim == 3:
+                tensor = tensor.permute(2, 0, 1).unsqueeze(0)
+            elif tensor.ndim == 4:
+                tensor = tensor.permute(0, 3, 1, 2).contiguous()
+
             tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
             tensor = equalize_clahe(tensor, clip_limit, kernel_size)
             tensor = torch.round(
                 255 * (tensor - tensor.min()) / (tensor.max() - tensor.min())
             )
             result = np.squeeze(tensor.detach().numpy().astype(np.uint8))
+            if result.ndim == 3:
+                result = np.transpose(result, (1, 2, 0))
+            elif result.ndim == 4:
+                result = np.transpose(result, (0, 2, 3, 1))
             result = result.reshape(image.shape)
 
             logger.debug(f"Applied CLAHE with clip_limit={clip_limit}")
@@ -932,20 +926,26 @@ class ImageProcessor:
             return image
 
         try:
-            if image.ndim == 3:
+            if image.ndim == 4:
+                tensor = torch.tensor(np.transpose(image, (0, 3, 1, 2))).float()
+            elif image.ndim == 3:
                 tensor = (
                     torch.tensor(np.transpose(image, (2, 0, 1))).unsqueeze(0).float()
                 )
             else:
                 tensor = torch.tensor(image).unsqueeze(0).unsqueeze(0).float()
 
-            new_size = (int(image.shape[0] * scale), int(image.shape[1] * scale))
+            new_size = (int(tensor.shape[2] * scale), int(tensor.shape[3] * scale))
 
             resized = RESIZE(tensor, new_size, InterpolationMode.NEAREST)
-            resized = resized.detach().squeeze().numpy()
+            resized = resized.detach().numpy()
 
-            if image.ndim == 3 and resized.ndim == 3:
-                resized = np.transpose(resized, (1, 2, 0))
+            if image.ndim == 4:  # (B, C, H, W) -> (B, H, W, C)
+                resized = np.transpose(resized, (0, 2, 3, 1))
+            elif image.ndim == 3:  # (1, C, H, W) -> (H, W, C)
+                resized = np.transpose(resized[0], (1, 2, 0))
+            else:  # (1, 1, H, W) -> (H, W)
+                resized = resized[0, 0]
 
             logger.debug(f"Resized image by factor {scale}")
             return resized
