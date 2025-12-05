@@ -472,8 +472,122 @@ class PointAutoIdentifier:
     def detect_points_sift(
         source_image: np.ndarray, destination_image: np.ndarray, **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
-        # Implement SIFT-based point detection here
-        return np.array([]), np.array([])
+        """Detect matching points between images using SIFT keypoint detector.
+
+        Args:
+            source_image: Source image as numpy array
+            destination_image: Destination image as numpy array
+            **kwargs: Additional parameters:
+                - max_ratio: Maximum ratio for Lowe's ratio test (default: 0.75)
+                - min_matches: Minimum number of matches required (default: 4)
+
+        Returns:
+            Tuple of numpy arrays: (source_points, destination_points)
+        """
+        from skimage.feature import SIFT, match_descriptors
+        from skimage.measure import ransac
+        from skimage.transform import AffineTransform
+        from skimage.filters import gaussian
+
+        # Get parameters
+        max_ratio = kwargs.get("max_ratio", 0.75)
+        min_matches = kwargs.get("min_matches", 4)
+        sigma = kwargs.get("sigma", 0.5)
+
+        # Ensure images are grayscale and uint8
+        if source_image.ndim > 2:
+            source_gray = source_image[:, :, 0]
+        else:
+            source_gray = source_image
+
+        if destination_image.ndim > 2:
+            destination_gray = destination_image[:, :, 0]
+        else:
+            destination_gray = destination_image
+
+        # Convert to float32
+        source_gray = source_gray.astype(np.float32)
+        destination_gray = destination_gray.astype(np.float32)
+
+        # Perform a slight blur to reduce noise
+        source_gray = gaussian(source_gray, sigma=sigma)
+        destination_gray = gaussian(destination_gray, sigma=sigma)
+
+        # Normalize to 0-1 range for SIFT
+        source_gray = (source_gray - source_gray.min()) / (
+            source_gray.max() - source_gray.min()
+        )
+        destination_gray = (destination_gray - destination_gray.min()) / (
+            destination_gray.max() - destination_gray.min()
+        )
+
+        try:
+            # Detect SIFT keypoints and descriptors
+            sift_detector = SIFT()
+
+            sift_detector.detect_and_extract(source_gray)
+            keypoints_src = sift_detector.keypoints
+            descriptors_src = sift_detector.descriptors
+
+            sift_detector.detect_and_extract(destination_gray)
+            keypoints_dst = sift_detector.keypoints
+            descriptors_dst = sift_detector.descriptors
+
+            logger.info(f"Detected {len(keypoints_src)} keypoints in source image")
+            logger.info(f"Detected {len(keypoints_dst)} keypoints in destination image")
+
+            if len(keypoints_src) < min_matches or len(keypoints_dst) < min_matches:
+                logger.warning(
+                    f"Insufficient keypoints detected (need at least {min_matches})"
+                )
+                return np.array([]), np.array([])
+
+            # Match descriptors using Lowe's ratio test
+            matches = match_descriptors(
+                descriptors_src, descriptors_dst, max_ratio=max_ratio, cross_check=True
+            )
+
+            logger.info(f"Found {len(matches)} initial matches")
+
+            if len(matches) < min_matches:
+                logger.warning(
+                    f"Insufficient matches found (need at least {min_matches})"
+                )
+                return np.array([]), np.array([])
+
+            # Extract matched keypoint coordinates
+            src_points = keypoints_src[matches[:, 0]][:, ::-1]  # (y, x) -> (x, y)
+            dst_points = keypoints_dst[matches[:, 1]][:, ::-1]  # (y, x) -> (x, y)
+
+            # Use RANSAC to filter outliers
+            try:
+                model, inliers = ransac(
+                    (src_points, dst_points),
+                    AffineTransform,
+                    min_samples=3,
+                    residual_threshold=2,
+                    max_trials=1000,
+                )
+
+                src_points = src_points[inliers]
+                dst_points = dst_points[inliers]
+
+                logger.info(f"After RANSAC filtering: {len(src_points)} inlier matches")
+
+            except Exception as e:
+                logger.warning(f"RANSAC filtering failed: {e}, using all matches")
+
+            if len(src_points) < min_matches:
+                logger.warning(
+                    f"Insufficient inlier matches after RANSAC (need at least {min_matches})"
+                )
+                return np.array([]), np.array([])
+
+            return src_points, dst_points
+
+        except Exception as e:
+            logger.error(f"SIFT point detection failed: {e}")
+            return np.array([]), np.array([])
 
     @staticmethod
     def detect_points_matchanything(

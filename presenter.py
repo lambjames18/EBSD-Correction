@@ -329,6 +329,14 @@ class ApplicationPresenter:
                 src_img, dst_img, method=method
             )
 
+            # Scale points if resolutions are matched
+            if self.match_resolutions:
+                src_res, dst_res = self.get_resolutions()
+                res_scale = src_res / dst_res
+                dst_points = np.array(
+                    [(p[0] * res_scale, p[1] * res_scale) for p in dst_points]
+                )
+
             # Add detected points to point manager
             for sp, dp in zip(src_points, dst_points):
                 self.point_manager.source_points.add_point(

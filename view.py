@@ -235,7 +235,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         tools_menu.add_command(
             label="SIFT",
             command=lambda: self._on_auto_detect_points("sift"),
-            state="disabled",
+            # state="disabled",
         )
 
     def _create_main_layout(self):
