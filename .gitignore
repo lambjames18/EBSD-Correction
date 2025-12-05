@@ -6,3 +6,7 @@ __pycache__/core.cpython-38.pyc
 __pycache__/core.cpython-38.pyc
 *.log
 test_data/3D/control_pts.txt
+/test_data/2D/*.json
+/test_data/3D/*.json
+temp.py
+testing.py
