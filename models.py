@@ -266,14 +266,22 @@ class PointManager:
             logger.error(f"Failed to save points: {e}")
             raise
 
-    def load_from_file(self, src_path: Path, dst_path: Path) -> None:
-        """Load points from text files."""
+    def load_source_from_file(self, src_path: Path, current_slice: int = 0, is_2d: bool = True) -> None:
+        """Load source points from text file."""
         try:
-            self.source_points = self._load_points_from_file(src_path)
-            self.destination_points = self._load_points_from_file(dst_path)
-            logger.info(f"Loaded points from {src_path} and {dst_path}")
+            self.source_points = self._load_points_from_file(src_path, current_slice, is_2d)
+            logger.info(f"Loaded source points from {src_path}")
         except Exception as e:
-            logger.error(f"Failed to load points: {e}")
+            logger.error(f"Failed to load source points: {e}")
+            raise
+
+    def load_destination_from_file(self, dst_path: Path, current_slice: int = 0, is_2d: bool = True) -> None:
+        """Load destination points from text file."""
+        try:
+            self.destination_points = self._load_points_from_file(dst_path, current_slice, is_2d)
+            logger.info(f"Loaded destination points from {dst_path}")
+        except Exception as e:
+            logger.error(f"Failed to load destination points: {e}")
             raise
 
     def load_from_json(self, json_data: dict) -> None:
@@ -290,8 +298,23 @@ class PointManager:
             logger.error(f"Failed to load points from JSON: {e}")
             raise
 
-    def _load_points_from_file(self, path: Path) -> PointSet:
-        """Load points from a single file."""
+    def _load_points_from_file(self, path: Path, current_slice: int = 0, is_2d: bool = True) -> PointSet:
+        """Load points from a single file.
+
+        Args:
+            path: Path to the point file
+            current_slice: The current active slice index
+            is_2d: Whether the data is 2D (single slice) or 3D (multiple slices)
+
+        Returns:
+            PointSet with loaded points
+
+        Point file formats:
+            - 2 columns (x, y): Points are added to current_slice
+            - 3 columns (slice_idx, x, y):
+                - For 3D data: Points are added to their respective slices
+                - For 2D data: slice_idx is ignored, all points go to slice 0
+        """
         point_set = PointSet()
 
         if not path.exists():
@@ -308,15 +331,25 @@ class PointManager:
 
             # Handle 2D or 3D points
             if data.shape[1] == 2:
-                # 2D points, assume slice 0
+                # 2D points (x, y) - apply to current slice
                 for x, y in data:
-                    point_set.add_point(Point(int(x), int(y), 0))
+                    point_set.add_point(Point(int(x), int(y), current_slice))
+                logger.info(f"Loaded {len(data)} 2D points to slice {current_slice}")
+
             elif data.shape[1] == 3:
-                # 3D points with slice information
-                for slice_idx, x, y in data:
-                    point_set.add_point(Point(int(x), int(y), int(slice_idx)))
+                # 3D points (slice_idx, x, y)
+                if is_2d:
+                    # Ignore slice index for 2D data, add all to slice 0
+                    for slice_idx, x, y in data:
+                        point_set.add_point(Point(int(x), int(y), 0))
+                    logger.info(f"Loaded {len(data)} points to slice 0 (2D data, slice indices ignored)")
+                else:
+                    # Use slice indices for 3D data
+                    for slice_idx, x, y in data:
+                        point_set.add_point(Point(int(x), int(y), int(slice_idx)))
+                    logger.info(f"Loaded {len(data)} 3D points to their respective slices")
             else:
-                raise ValueError(f"Invalid point format in {path}")
+                raise ValueError(f"Invalid point format in {path}: expected 2 or 3 columns, got {data.shape[1]}")
 
         except Exception as e:
             logger.error(f"Error reading point file {path}: {e}")

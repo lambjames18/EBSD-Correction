@@ -181,7 +181,7 @@ class ApplicationPresenter:
                 if self.source_points_path is None:
                     if isinstance(path, (list, tuple)):
                         path = Path(path[0])
-                    self.source_points_path = path.parent / "distorted_pts.txt"
+                    self.source_points_path = path.parent / "source_pts.txt"
                 # Set the current mode to the first available modality
                 if self.source_image and self.source_image.modalities:
                     self.current_source_mode = self.source_image.modalities[0]
@@ -243,7 +243,7 @@ class ApplicationPresenter:
                 if self.dest_points_path is None:
                     if isinstance(path, (list, tuple)):
                         path = Path(path[0])
-                    self.dest_points_path = path.parent / "control_pts.txt"
+                    self.dest_points_path = path.parent / "destination_pts.txt"
                 # Set the current mode to the first available modality
                 if self.destination_image and self.destination_image.modalities:
                     self.current_dest_mode = self.destination_image.modalities[0]
@@ -267,25 +267,49 @@ class ApplicationPresenter:
             )
             return False
 
-    def load_points(
-        self, source_path: Optional[Path] = None, dest_path: Optional[Path] = None
-    ) -> bool:
-        """Load control points from files."""
+    def load_source_points(self, source_path: Path) -> bool:
+        """Load source control points from file."""
         try:
-            src_path = source_path or self.source_points_path
-            dst_path = dest_path or self.dest_points_path
+            # Determine if data is 2D (single slice)
+            is_2d = (self.source_image is None) or (self.source_image.shape[0] == 1)
 
-            if src_path and dst_path:
-                self.point_manager.load_from_file(src_path, dst_path)
-                logger.info("Loaded control points")
-                self._notify_view_points_changed()
-                return True
-            return False
+            self.point_manager.load_source_from_file(
+                source_path,
+                current_slice=self.current_slice,
+                is_2d=is_2d
+            )
+            self.source_points_path = source_path
+            logger.info(f"Loaded source control points from {source_path}")
+            self._notify_view_points_changed()
+            return True
 
         except Exception as e:
-            logger.error(f"Failed to load points: {e}")
+            logger.error(f"Failed to load source points: {e}")
             self._notify_view_error(
-                f"Failed to load points: {str(e)}, ({parse_error()})"
+                f"Failed to load source points: {str(e)}, ({parse_error()})"
+            )
+            return False
+
+    def load_destination_points(self, dest_path: Path) -> bool:
+        """Load destination control points from file."""
+        try:
+            # Determine if data is 2D (single slice)
+            is_2d = (self.destination_image is None) or (self.destination_image.shape[0] == 1)
+
+            self.point_manager.load_destination_from_file(
+                dest_path,
+                current_slice=self.current_slice,
+                is_2d=is_2d
+            )
+            self.dest_points_path = dest_path
+            logger.info(f"Loaded destination control points from {dest_path}")
+            self._notify_view_points_changed()
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to load destination points: {e}")
+            self._notify_view_error(
+                f"Failed to load destination points: {str(e)}, ({parse_error()})"
             )
             return False
 

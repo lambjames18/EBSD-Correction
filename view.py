@@ -181,7 +181,12 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             label="Open destination image", command=self._on_open_destination
         )
         file_menu.add_separator()
-        file_menu.add_command(label="Load points", command=self._on_load_points)
+        file_menu.add_command(
+            label="Load source points", command=self._on_load_source_points
+        )
+        file_menu.add_command(
+            label="Load destination points", command=self._on_load_destination_points
+        )
         file_menu.add_command(label="Save points", command=self._on_save_points)
         file_menu.add_separator()
         file_menu.add_command(
@@ -599,22 +604,27 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             finally:
                 self.show_progress(False)
 
-    def _on_load_points(self):
-        """Handle loading control points."""
+    def _on_load_source_points(self):
+        """Handle loading source control points."""
         src_path = filedialog.askopenfilename(
             title="Load Source Points",
             filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
         )
 
         if src_path:
-            dst_path = filedialog.askopenfilename(
-                title="Load Destination Points",
-                filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
-            )
+            if self.presenter.load_source_points(Path(src_path)):
+                self.set_status("Source points loaded successfully")
 
-            if dst_path:
-                if self.presenter.load_points(Path(src_path), Path(dst_path)):
-                    self.set_status("Points loaded successfully")
+    def _on_load_destination_points(self):
+        """Handle loading destination control points."""
+        dst_path = filedialog.askopenfilename(
+            title="Load Destination Points",
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
+        )
+
+        if dst_path:
+            if self.presenter.load_destination_points(Path(dst_path)):
+                self.set_status("Destination points loaded successfully")
 
     def _on_save_points(self):
         """Handle saving control points."""
@@ -907,9 +917,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
                 self.presenter.clear_points(slice_only=False)
                 self.set_status("Points cleared for entire stack")
         else:
-            if messagebox.askyesno(
-                "Clear Points", "Clear all points on current slice?"
-            ):
+            if messagebox.askyesno("Clear Points", "Clear all points?"):
                 self.presenter.clear_points(slice_only=True)
                 self.set_status("Points cleared for current image")
 
