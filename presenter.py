@@ -291,6 +291,51 @@ class ApplicationPresenter:
 
     # ========== Point Management ==========
 
+    def is_point_in_bounds(self, source: str, x: int, y: int) -> bool:
+        """Check if a point is within the bounds of the specified image.
+
+        Args:
+            source: "source" or "destination"
+            x: x coordinate
+            y: y coordinate
+
+        Returns:
+            True if point is within bounds, False otherwise
+        """
+        try:
+            if source == "source":
+                if not self.source_image:
+                    return False
+                # Get current image dimensions (accounting for match_resolutions)
+                img = self.source_image.get_slice(
+                    self.current_source_mode, self.current_slice
+                )
+                height, width = img.shape[:2]
+            elif source == "destination":
+                if not self.destination_image:
+                    return False
+                # Get current image dimensions (accounting for match_resolutions)
+                img = self.destination_image.get_slice(
+                    self.current_dest_mode, self.current_slice
+                )
+                height, width = img.shape[:2]
+
+                # Adjust bounds if resolutions are matched
+                if self.match_resolutions and self.source_image:
+                    src_res, dst_res = self.get_resolutions()
+                    res_scale = dst_res / src_res
+                    width = int(width * res_scale)
+                    height = int(height * res_scale)
+            else:
+                return False
+
+            # Check if point is within bounds
+            return 0 <= x < width and 0 <= y < height
+
+        except Exception as e:
+            logger.error(f"Error checking point bounds: {e}")
+            return False
+
     def add_point(self, source: str, x: int, y: int) -> None:
         """Add a control point."""
         try:

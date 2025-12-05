@@ -169,29 +169,26 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         # File menu
         file_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="New Project", command=self._on_new_project)
-        file_menu.add_separator()
+        file_menu.add_command(label="New project", command=self._on_new_project)
+        file_menu.add_command(label="Open project", command=self._on_open_project)
         file_menu.add_command(
-            label="Open Source Image...", command=self._on_open_source
+            label="Save project", command=self._on_save_project, accelerator="Ctrl+S"
         )
-        file_menu.add_command(
-            label="Open Destination Image...", command=self._on_open_destination
-        )
+        file_menu.add_command(label="Save project as", command=self._on_save_project_as)
         file_menu.add_separator()
-        file_menu.add_command(label="Load Points...", command=self._on_load_points)
-        file_menu.add_command(label="Save Points", command=self._on_save_points)
-        file_menu.add_separator()
-        file_menu.add_command(label="Open Project...", command=self._on_open_project)
-        file_menu.add_command(label="Save Project", command=self._on_save_project)
+        file_menu.add_command(label="Open source image", command=self._on_open_source)
         file_menu.add_command(
-            label="Save Project As...", command=self._on_save_project_as
+            label="Open destination image", command=self._on_open_destination
         )
         file_menu.add_separator()
+        file_menu.add_command(label="Load points", command=self._on_load_points)
+        file_menu.add_command(label="Save points", command=self._on_save_points)
+        file_menu.add_separator()
         file_menu.add_command(
-            label="Export Transform...", command=self._on_export_transform
+            label="Export transform", command=self._on_export_transform
         )
         file_menu.add_command(
-            label="Export Corrected Image...", command=self._on_export_corrected
+            label="Export corrected data", command=self._on_export_corrected
         )
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
@@ -204,13 +201,13 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         edit_menu.add_separator()
         edit_menu.add_command(label="Clear points", command=self._on_clear_points)
         edit_menu.add_separator()
-        edit_menu.add_command(label="Set Resolution", command=self._on_set_resolution)
+        edit_menu.add_command(label="Set resolution", command=self._on_set_resolution)
 
         # View menu
         view_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="View", menu=view_menu)
         view_menu.add_checkbutton(
-            label="Hide Points",
+            label="Hide points",
             variable=tk.BooleanVar(value=False),
             command=self._on_toggle_points,
         )
@@ -222,10 +219,10 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         )
         view_menu.add_separator()
         view_menu.add_command(
-            label="Zoom In", command=self._on_zoom_in, accelerator="Ctrl++"
+            label="Zoom in", command=self._on_zoom_in, accelerator="Ctrl++"
         )
         view_menu.add_command(
-            label="Zoom Out", command=self._on_zoom_out, accelerator="Ctrl+-"
+            label="Zoom out", command=self._on_zoom_out, accelerator="Ctrl+-"
         )
         view_menu.add_command(
             label="Zoom 100%", command=self._on_zoom_reset, accelerator="Ctrl+0"
@@ -411,6 +408,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
     def _bind_events(self):
         """Bind keyboard and mouse events."""
         # Keyboard shortcuts
+        self.bind("<Control-s>", lambda e: self._on_save_project())
         self.bind("<Control-z>", lambda e: self._on_undo())
         self.bind("<Control-y>", lambda e: self._on_redo())
         self.bind("<Control-equal>", lambda e: self._on_zoom_in())
@@ -688,7 +686,6 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
     def _on_export_corrected(self):
         """Handle exporting corrected image."""
         # This would need implementation for full export functionality
-        ### TODO: Get multiple output formats working
         self.set_status("Exporting corrected image")
 
         transform_type = self._get_transform_type_dialog()
@@ -748,6 +745,14 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_canvas_click(self, event, canvas_type):
         """Handle canvas click for point placement."""
+        # Check if appropriate image is loaded
+        if canvas_type == "source" and not self.presenter.source_image:
+            self.set_status("No source image loaded")
+            return
+        elif canvas_type == "destination" and not self.presenter.destination_image:
+            self.set_status("No destination image loaded")
+            return
+
         # Get scrollbar offsets
         if canvas_type == "source":
             scale = self.current_src_zoom / 100.0
@@ -762,6 +767,11 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         x += int(canvas.canvasx(0) / scale)
         y += int(canvas.canvasy(0) / scale)
 
+        # Validate point is within image bounds
+        if not self.presenter.is_point_in_bounds(canvas_type, x, y):
+            self.set_status(f"Point ({x}, {y}) is outside image bounds - click ignored")
+            return
+
         if self.awaiting_corresponding_point == canvas_type:
             # Add corresponding point
             self.presenter.add_point(canvas_type, x, y)
@@ -771,10 +781,12 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             # Start new point pair
             self.presenter.add_point(canvas_type, x, y)
             self.awaiting_corresponding_point = (
-                "destination" if canvas_type == "source" else None
+                "destination" if canvas_type == "source" else "source"
             )
             if self.awaiting_corresponding_point:
-                self.set_status("Click on destination image to add corresponding point")
+                self.set_status(
+                    f"Click on {self.awaiting_corresponding_point} image to add corresponding point"
+                )
 
     def _on_canvas_right_click(self, event, canvas_type):
         """Handle right-click for point removal."""
@@ -796,8 +808,9 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         )
         if tag == "":
             return
-        logger.debug(f"Removing point with index {int(tag)}")
         self.presenter.remove_point(int(tag))
+        logger.debug(f"Removed point with index {int(tag)}")
+        self.set_status(f"Removed point pair {int(tag)}")
 
     def _on_slice_changed(self):
         """Handle slice change."""
