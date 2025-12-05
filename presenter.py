@@ -197,9 +197,6 @@ class ApplicationPresenter:
                 )
                 # Switch to the newly added modality
                 self.current_source_mode = modality_key
-                logger.info(
-                    f"Added modality '{modality_key}' to source image and switched to it"
-                )
 
             self.project_manager.mark_modified()
             self._notify_view_data_loaded()

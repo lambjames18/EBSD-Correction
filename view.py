@@ -202,10 +202,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         edit_menu.add_command(label="Undo", command=self._on_undo, accelerator="Ctrl+Z")
         edit_menu.add_command(label="Redo", command=self._on_redo, accelerator="Ctrl+Y")
         edit_menu.add_separator()
-        edit_menu.add_command(
-            label="Clear Points (Current Slice)", command=self._on_clear_slice
-        )
-        edit_menu.add_command(label="Clear All Points", command=self._on_clear_all)
+        edit_menu.add_command(label="Clear points", command=self._on_clear_points)
         edit_menu.add_separator()
         edit_menu.add_command(label="Set Resolution", command=self._on_set_resolution)
 
@@ -218,6 +215,12 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             command=self._on_toggle_points,
         )
         view_menu.add_separator()
+        view_menu.add_command(label="View corrected image", command=self._on_apply)
+        view_menu.add_command(
+            label="View corrected image stack",
+            command=lambda: self._on_apply(True),
+        )
+        view_menu.add_separator()
         view_menu.add_command(
             label="Zoom In", command=self._on_zoom_in, accelerator="Ctrl++"
         )
@@ -227,35 +230,6 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         view_menu.add_command(
             label="Zoom 100%", command=self._on_zoom_reset, accelerator="Ctrl+0"
         )
-
-        # Transform menu
-        transform_menu = tk.Menu(self.menubar, tearoff=0)
-        self.menubar.add_cascade(label="Transform", menu=transform_menu)
-        transform_menu.add_command(
-            label="Preview TPS",
-            command=lambda: self._on_preview_transform(TransformType.TPS),
-        )
-        transform_menu.add_command(
-            label="Preview Affine TPS",
-            command=lambda: self._on_preview_transform(TransformType.TPS_AFFINE),
-        )
-        transform_menu.add_command(
-            label="Preview TPS (3D)",
-            command=lambda: self._on_preview_transform(TransformType.TPS, True),
-        )
-        transform_menu.add_command(
-            label="Preview Affine TPS (3D)",
-            command=lambda: self._on_preview_transform(TransformType.TPS_AFFINE, True),
-        )
-        transform_menu.add_separator()
-        transform_menu.add_command(
-            label="Apply to Current Slice", command=self._on_apply_current
-        )
-        transform_menu.add_command(
-            label="Apply to All Slices", command=self._on_apply_all
-        )
-        transform_menu.add_separator()
-        transform_menu.add_command(label="Test", command=self._on_progress_test)
 
     def _create_main_layout(self):
         """Create main layout with image viewers."""
@@ -490,11 +464,6 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     # ========== Event Handlers ==========
 
-    def _on_progress_test(self):
-        """Test progress bar."""
-        self.show_progress(True)
-        self.after(2000, lambda: self.show_progress(False))
-
     def _on_new_project(self):
         """Handle creating a new project."""
         if self.presenter.has_unsaved_changes():
@@ -509,6 +478,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         self.presenter.new_project()
         self.set_status("New project created")
+        self.title("Distortion Correction v2.0")
 
     def _on_open_source(self):
         """Handle opening source image."""
@@ -656,6 +626,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_open_project(self):
         """Handle opening a project."""
+        self._on_new_project()
         file_path = filedialog.askopenfilename(
             title="Open Project",
             filetypes=[("Project Files", "*.json"), ("All Files", "*.*")],
@@ -667,6 +638,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
             if self.presenter.load_project(Path(file_path)):
                 self.set_status("Project loaded successfully")
+                self.title(f"Distortion Correction v2.0 - {Path(file_path).name}")
 
             self.show_progress(False)
 
@@ -689,6 +661,7 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         if file_path:
             if self.presenter.save_project(Path(file_path)):
                 self.set_status(f"Project saved as {Path(file_path).name}")
+                self.title(f"Distortion Correction v2.0 - {Path(file_path).name}")
 
     def _on_export_transform(self):
         """Handle exporting transformation."""
@@ -908,17 +881,24 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.presenter.redo()
         self.set_status("Redone")
 
-    def _on_clear_slice(self):
+    def _on_clear_points(self):
         """Clear points on current slice."""
-        if messagebox.askyesno("Clear Points", "Clear all points on current slice?"):
-            self.presenter.clear_points(slice_only=True)
-            self.set_status("Points cleared for current slice")
-
-    def _on_clear_all(self):
-        """Clear all points."""
-        if messagebox.askyesno("Clear All Points", "Clear all points on all slices?"):
-            self.presenter.clear_points(slice_only=False)
-            self.set_status("All points cleared")
+        if self.presenter.source_image.shape[0] > 1:
+            response = self._get_point_clear_dialog()
+            if response is None:
+                return
+            elif response == "image":
+                self.presenter.clear_points(slice_only=True)
+                self.set_status("Points cleared for current image")
+            elif response == "stack":
+                self.presenter.clear_points(slice_only=False)
+                self.set_status("Points cleared for entire stack")
+        else:
+            if messagebox.askyesno(
+                "Clear Points", "Clear all points on current slice?"
+            ):
+                self.presenter.clear_points(slice_only=True)
+                self.set_status("Points cleared for current image")
 
     def _on_toggle_points(self):
         """Toggle point visibility."""
@@ -935,47 +915,28 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
             # Update image resolutions
             self.presenter.set_image_resolutions(src_res, dst_res)
 
-    def _on_preview_transform(self, transform_type, is_3d=False):
-        """Preview transformation."""
-        crop_mode = self._get_crop_mode_dialog()
-        if crop_mode is not None:
-            self.show_progress(True)
-            self.set_status(f"Generating {transform_type.value} preview...")
-            if is_3d:
-                self.presenter.apply_transform_3d(
-                    transform_type, crop_mode, preview=True
-                )
-            else:
-                self.presenter.apply_transform(transform_type, crop_mode, preview=True)
-            self.show_progress(False)
-
-    def _on_apply_current(self):
+    def _on_apply(self, is_3d=False):
         """Apply transformation to current slice."""
         transform_type = self._get_transform_type_dialog()
         if transform_type:
             crop_mode = self._get_crop_mode_dialog()
             if crop_mode is not None:
                 self.show_progress(True)
-                self.set_status("Applying transformation...")
-                self.presenter.apply_transform(transform_type, crop_mode, preview=False)
-                self.show_progress(False)
-                self.set_status("Transformation applied")
-
-    def _on_apply_all(self):
-        """Apply transformation to all slices."""
-        if not self.presenter.is_3d_mode:
-            messagebox.showinfo("Info", "This operation is only available for 3D data")
-            return
-
-        transform_type = self._get_transform_type_dialog()
-        if transform_type:
-            crop_mode = self._get_crop_mode_dialog()
-            if crop_mode is not None:
-                self.show_progress(True)
-                self.set_status("Applying transformation to all slices...")
-                self.presenter.apply_transform_3d(transform_type, crop_mode)
-                self.show_progress(False)
-                self.set_status("Transformation applied to all slices")
+                self.set_status(f"Generating {transform_type.value} preview...")
+                if is_3d:
+                    if self.presenter.source_image.shape[0] == 1:
+                        raise ValueError(
+                            "3D transformation can only be applied to image stacks"
+                        )
+                    self.presenter.apply_transform_3d(
+                        transform_type, crop_mode, preview=True
+                    )
+                else:
+                    self.presenter.apply_transform(
+                        transform_type, crop_mode, preview=True
+                    )
+                    self.show_progress(False)
+                self.set_status("Transformation preview completed")
 
     # ========== ViewInterface Implementation ==========
 
@@ -1448,6 +1409,51 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         # Bind Enter key to OK
         entry.bind("<Return>", lambda e: on_ok())
         dialog.bind("<Escape>", lambda e: on_cancel())
+
+        dialog.wait_window()
+        return result[0]
+
+    def _get_point_clear_dialog(self) -> Optional[str]:
+        """Show dialog to choose point clearing option."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Clear Points")
+        dialog.geometry("300x180")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill="both", expand=True)
+
+        # Label
+        ttk.Label(
+            main_frame, text="Choose an option to clear points:", wraplength=250
+        ).pack(pady=(0, 10))
+
+        result = [None]
+
+        def on_ok():
+            result[0] = selected_option.get()
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        # Radio buttons
+        selected_option = tk.StringVar(value="image")
+        options = [("Current Image", "image"), ("Entire Stack", "stack")]
+        for text, value in options:
+            tk.Radiobutton(
+                main_frame, text=text, variable=selected_option, value=value
+            ).pack(anchor="w", padx=20, pady=5)
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(
+            side="left", padx=5
+        )
 
         dialog.wait_window()
         return result[0]
@@ -2048,8 +2054,8 @@ class Interactive2DViewer:
 def setup_logging():
     """Setup application logging."""
     logging.basicConfig(
-        level=logging.DEBUG,
-        # level=logging.INFO,
+        # level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler("distortion_correction.log"),
