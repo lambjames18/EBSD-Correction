@@ -4,10 +4,6 @@ view_interface.py - View Interface for Distortion Correction Application
 This module defines the interface that any view implementation must follow.
 """
 
-### TODO
-# Get export working for dream3d
-# Get 3D data working
-
 import os
 import logging
 from abc import ABC, abstractmethod
@@ -928,7 +924,6 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
     def _on_set_resolution(self):
         """Set image resolution."""
-        ### TODO: Fix this
         src_res, dst_res = self._get_image_resolutions_dialog()
         if src_res is None or dst_res is None:
             return

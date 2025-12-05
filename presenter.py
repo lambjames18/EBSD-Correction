@@ -274,9 +274,7 @@ class ApplicationPresenter:
             is_2d = (self.source_image is None) or (self.source_image.shape[0] == 1)
 
             self.point_manager.load_source_from_file(
-                source_path,
-                current_slice=self.current_slice,
-                is_2d=is_2d
+                source_path, current_slice=self.current_slice, is_2d=is_2d
             )
             self.source_points_path = source_path
             logger.info(f"Loaded source control points from {source_path}")
@@ -294,12 +292,12 @@ class ApplicationPresenter:
         """Load destination control points from file."""
         try:
             # Determine if data is 2D (single slice)
-            is_2d = (self.destination_image is None) or (self.destination_image.shape[0] == 1)
+            is_2d = (self.destination_image is None) or (
+                self.destination_image.shape[0] == 1
+            )
 
             self.point_manager.load_destination_from_file(
-                dest_path,
-                current_slice=self.current_slice,
-                is_2d=is_2d
+                dest_path, current_slice=self.current_slice, is_2d=is_2d
             )
             self.dest_points_path = dest_path
             logger.info(f"Loaded destination control points from {dest_path}")
@@ -993,7 +991,6 @@ class ApplicationPresenter:
 
     def set_image_resolutions(self, src_res: float, dst_res: float) -> None:
         """Set image resolutions. This reloads the data with the correct resolutions."""
-        ### TODO: Fix this
         if self.source_image:
             self.source_image.resolution = src_res
         if self.destination_image:

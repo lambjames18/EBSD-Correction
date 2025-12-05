@@ -266,19 +266,27 @@ class PointManager:
             logger.error(f"Failed to save points: {e}")
             raise
 
-    def load_source_from_file(self, src_path: Path, current_slice: int = 0, is_2d: bool = True) -> None:
+    def load_source_from_file(
+        self, src_path: Path, current_slice: int = 0, is_2d: bool = True
+    ) -> None:
         """Load source points from text file."""
         try:
-            self.source_points = self._load_points_from_file(src_path, current_slice, is_2d)
+            self.source_points = self._load_points_from_file(
+                src_path, current_slice, is_2d
+            )
             logger.info(f"Loaded source points from {src_path}")
         except Exception as e:
             logger.error(f"Failed to load source points: {e}")
             raise
 
-    def load_destination_from_file(self, dst_path: Path, current_slice: int = 0, is_2d: bool = True) -> None:
+    def load_destination_from_file(
+        self, dst_path: Path, current_slice: int = 0, is_2d: bool = True
+    ) -> None:
         """Load destination points from text file."""
         try:
-            self.destination_points = self._load_points_from_file(dst_path, current_slice, is_2d)
+            self.destination_points = self._load_points_from_file(
+                dst_path, current_slice, is_2d
+            )
             logger.info(f"Loaded destination points from {dst_path}")
         except Exception as e:
             logger.error(f"Failed to load destination points: {e}")
@@ -298,7 +306,9 @@ class PointManager:
             logger.error(f"Failed to load points from JSON: {e}")
             raise
 
-    def _load_points_from_file(self, path: Path, current_slice: int = 0, is_2d: bool = True) -> PointSet:
+    def _load_points_from_file(
+        self, path: Path, current_slice: int = 0, is_2d: bool = True
+    ) -> PointSet:
         """Load points from a single file.
 
         Args:
@@ -342,14 +352,20 @@ class PointManager:
                     # Ignore slice index for 2D data, add all to slice 0
                     for slice_idx, x, y in data:
                         point_set.add_point(Point(int(x), int(y), 0))
-                    logger.info(f"Loaded {len(data)} points to slice 0 (2D data, slice indices ignored)")
+                    logger.info(
+                        f"Loaded {len(data)} points to slice 0 (2D data, slice indices ignored)"
+                    )
                 else:
                     # Use slice indices for 3D data
                     for slice_idx, x, y in data:
                         point_set.add_point(Point(int(x), int(y), int(slice_idx)))
-                    logger.info(f"Loaded {len(data)} 3D points to their respective slices")
+                    logger.info(
+                        f"Loaded {len(data)} 3D points to their respective slices"
+                    )
             else:
-                raise ValueError(f"Invalid point format in {path}: expected 2 or 3 columns, got {data.shape[1]}")
+                raise ValueError(
+                    f"Invalid point format in {path}: expected 2 or 3 columns, got {data.shape[1]}"
+                )
 
         except Exception as e:
             logger.error(f"Error reading point file {path}: {e}")
@@ -1051,7 +1067,6 @@ class TransformManager:
         order: int = 0,
     ) -> np.ndarray:
         """Apply transformation to a stack of images with interpolation between slices."""
-        ### TODO there is an issue with a "size" argument not being present when calling the TPS function when transforming a stack
         if output_shape is None:
             output_shape = image_stack.shape[1:3]
 
