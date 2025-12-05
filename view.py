@@ -42,11 +42,6 @@ class ViewInterface(ABC):
         """Called when an error occurs."""
         pass
 
-    #     @abstractmethod
-    #     def on_show_preview(self, warped: np.ndarray, reference: np.ndarray) -> None:
-    #         """Called to show transformation preview."""
-    #         pass
-
     @abstractmethod
     def on_project_loaded(self) -> None:
         """Called when a project has been loaded."""
@@ -227,6 +222,20 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         )
         view_menu.add_command(
             label="Zoom 100%", command=self._on_zoom_reset, accelerator="Ctrl+0"
+        )
+
+        # Tools menu
+        tools_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="Auto point detection", menu=tools_menu)
+        tools_menu.add_command(
+            label="MatchAnything",
+            command=lambda: self._on_auto_detect_points("matchanything"),
+            state="disabled",
+        )
+        tools_menu.add_command(
+            label="SIFT",
+            command=lambda: self._on_auto_detect_points("sift"),
+            state="disabled",
         )
 
     def _create_main_layout(self):
@@ -953,6 +962,17 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
                     )
                     self.show_progress(False)
                 self.set_status("Transformation preview completed")
+
+    def _on_auto_detect_points(self, method: str):
+        """Handle automatic point detection."""
+        self.show_progress(True)
+        self.set_status(f"Detecting points using {method}...")
+        success = self.presenter.auto_detect_points(method)
+        self.show_progress(False)
+        if success:
+            self.set_status(f"Points detected using {method}")
+        else:
+            self.set_status(f"Point detection using {method} failed")
 
     # ========== ViewInterface Implementation ==========
 

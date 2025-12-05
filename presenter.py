@@ -13,6 +13,7 @@ import numpy as np
 from models import (
     Point,
     PointManager,
+    PointAutoIdentifier,
     ImageLoader,
     ImageWriter,
     TransformManager,
@@ -53,6 +54,7 @@ class ApplicationPresenter:
         self.project_manager = ProjectManager()
         self.image_processor = ImageProcessor()
         self.image_writer = ImageWriter()
+        self.point_auto_identifier = PointAutoIdentifier()
 
         # Data storage
         self.source_image: Optional[ImageData] = None
@@ -312,6 +314,39 @@ class ApplicationPresenter:
             return False
 
     # ========== Point Management ==========
+
+    def auto_detect_points(self, method: str) -> None:
+        """Automatically detect control points using specified method."""
+        try:
+            if self.source_image is None or self.destination_image is None:
+                raise ValueError("Both source and destination images must be loaded.")
+
+            # Get current images
+            src_img, dst_img = self.get_current_images(normalize=True)
+
+            # Detect points
+            src_points, dst_points = self.point_auto_identifier.detect_points(
+                src_img, dst_img, method=method
+            )
+
+            # Add detected points to point manager
+            for sp, dp in zip(src_points, dst_points):
+                self.point_manager.source_points.add_point(
+                    Point(sp[0], sp[1], self.current_slice)
+                )
+                self.point_manager.destination_points.add_point(
+                    Point(dp[0], dp[1], self.current_slice)
+                )
+
+            self._save_points()
+            self.project_manager.mark_modified()
+            self._notify_view_points_changed()
+
+        except Exception as e:
+            logger.error(f"Auto point detection failed: {e}")
+            self._notify_view_error(
+                f"Auto point detection failed: {str(e)}, ({parse_error()})"
+            )
 
     def is_point_in_bounds(self, source: str, x: int, y: int) -> bool:
         """Check if a point is within the bounds of the specified image.

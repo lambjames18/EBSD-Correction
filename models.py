@@ -430,6 +430,59 @@ class PointManager:
         return False
 
 
+class PointAutoIdentifier:
+    """Automatically identifies corresponding control points between images."""
+
+    ENGINES = {
+        "sift": "detect_points_sift",
+        "matchanything": "detect_points_matchanything",
+    }
+
+    def __init__(self):
+        logger.info("PointAutoIdentifier initialized")
+
+    @classmethod
+    def detect_points(
+        cls,
+        source_image: np.ndarray,
+        destination_image: np.ndarray,
+        method: str = "sift",
+        **kwargs,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Identify corresponding points between source and destination images.
+
+        Args:
+            source_image: Source image as numpy array
+            destination_image: Destination image as numpy array
+            method: Method to use for point identification ('sift', 'matchanything', etc.)
+            **kwargs: Additional parameters for the identification method
+
+        Returns:
+            Tuple of numpy arrays: (source_points, destination_points)
+        """
+        loader_method = getattr(cls, cls.ENGINES[method], None)
+        if loader_method is None:
+            raise ValueError(f"Unsupported point identification method: {method}")
+        logger.info(
+            f"Identifying points using method '{method}' with parameters {kwargs}"
+        )
+        return loader_method(source_image, destination_image, **kwargs)
+
+    @staticmethod
+    def detect_points_sift(
+        source_image: np.ndarray, destination_image: np.ndarray, **kwargs
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # Implement SIFT-based point detection here
+        return np.array([]), np.array([])
+
+    @staticmethod
+    def detect_points_matchanything(
+        source_image: np.ndarray, destination_image: np.ndarray, **kwargs
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # Implement MatchAnything-based point detection here
+        return np.array([]), np.array([])
+
+
 class ImageLoader:
     """Handles loading and preprocessing of various image formats."""
 
