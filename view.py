@@ -57,6 +57,17 @@ class ViewInterface(ABC):
         """Called when a new project is created."""
         pass
 
+    @abstractmethod
+    def on_show_matched_points(
+        self,
+        src_img: np.ndarray,
+        dst_img: np.ndarray,
+        src_points: np.ndarray,
+        dst_points: np.ndarray,
+    ) -> None:
+        """Called to show matched points visualization."""
+        pass
+
 
 class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
     """Modern implementation of the distortion correction GUI using MVP pattern."""
@@ -141,9 +152,21 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.status_frame = ttk.Frame(self)
         self.status_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=2)
 
-        self.status_label = ttk.Label(self.status_frame, text="Ready", anchor="w")
-        self.status_label.pack(side="left", fill="x", expand=True)
+        # Left section: Cursor position and point counts
+        left_info_frame = ttk.Frame(self.status_frame)
+        left_info_frame.pack(side="left", padx=5)
 
+        self.cursor_label = ttk.Label(left_info_frame, text="Cursor: --, --", width=18)
+        self.cursor_label.pack(side="left", padx=(0, 10))
+
+        self.points_label = ttk.Label(left_info_frame, text="Points: 0 / 0", width=15)
+        self.points_label.pack(side="left", padx=(0, 5))
+
+        # Center section: Status message
+        self.status_label = ttk.Label(self.status_frame, text="Ready", anchor="w")
+        self.status_label.pack(side="left", fill="x", expand=True, padx=5)
+
+        # Right section: Progress bar
         self.progress_bar = ttk.Progressbar(
             self.status_frame,
             style="Niklas.Horizontal.TProgressbar",
@@ -212,6 +235,10 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         view_menu.add_command(
             label="View corrected image stack",
             command=lambda: self._on_apply(True),
+        )
+        view_menu.add_separator()
+        view_menu.add_command(
+            label="View matched points", command=self._on_view_matched_points
         )
         view_menu.add_separator()
         view_menu.add_command(
@@ -432,6 +459,14 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.right_canvas.bind(
             "<Button-1>", lambda e: self._on_canvas_click(e, "destination")
         )
+
+        # Mouse motion events for cursor tracking
+        self.left_canvas.bind("<Motion>", lambda e: self._on_canvas_motion(e, "source"))
+        self.right_canvas.bind(
+            "<Motion>", lambda e: self._on_canvas_motion(e, "destination")
+        )
+        self.left_canvas.bind("<Leave>", lambda _: self._on_canvas_leave())
+        self.right_canvas.bind("<Leave>", lambda _: self._on_canvas_leave())
         if os.name == "posix":
             remove_string = "<Button 2>"
             scroll_multiplier = 1
@@ -827,9 +862,46 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         logger.debug(f"Removed point with index {int(tag)}")
         self.set_status(f"Removed point pair {int(tag)}")
 
+    def _on_canvas_motion(self, event, canvas_type):
+        """Handle mouse motion for cursor position tracking."""
+        # Get scrollbar offsets and zoom scale
+        if canvas_type == "source":
+            scale = self.current_src_zoom / 100.0
+            canvas = self.left_canvas
+            image = self.presenter.source_image
+        else:
+            scale = self.current_dst_zoom / 100.0
+            canvas = self.right_canvas
+            image = self.presenter.destination_image
+
+        # Check if image is loaded
+        if image is None:
+            return
+
+        # Convert canvas coordinates to image coordinates
+        x = int(event.x / scale)
+        y = int(event.y / scale)
+        x += int(canvas.canvasx(0) / scale)
+        y += int(canvas.canvasy(0) / scale)
+
+        # Update cursor label
+        self.cursor_label.config(text=f"Cursor: {x}, {y}")
+
+    def _on_canvas_leave(self):
+        """Handle mouse leaving canvas."""
+        self.cursor_label.config(text="Cursor: --, --")
+
+    def _update_point_count(self):
+        """Update the point count display for current slice."""
+        src_points, dst_points = self.presenter.get_points()
+        src_count = len(src_points)
+        dst_count = len(dst_points)
+        self.points_label.config(text=f"Points: {src_count} / {dst_count}")
+
     def _on_slice_changed(self):
         """Handle slice change."""
         self.presenter.set_current_slice(self.slice_var.get())
+        self._update_point_count()
 
     def _on_source_mode_changed(self, event=None):
         """Handle source mode change."""
@@ -974,6 +1046,26 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         else:
             self.set_status(f"Point detection using {method} failed")
 
+    def _on_view_matched_points(self):
+        """Handle viewing matched points visualization."""
+        if not self.presenter.source_image or not self.presenter.destination_image:
+            self.on_error("Both source and destination images must be loaded")
+            return
+
+        src_points, dst_points = self.presenter.get_points()
+        if src_points.size == 0 or dst_points.size == 0:
+            self.on_error("No control points defined to visualize")
+            return
+        elif src_points.shape[0] != dst_points.shape[0]:
+            self.on_error("Source and destination points counts do not match")
+            return
+
+        self.show_progress(True)
+        self.set_status("Generating matched points visualization...")
+        self.presenter.show_matched_points()
+        self.show_progress(False)
+        self.set_status("Matched points visualization opened")
+
     # ========== ViewInterface Implementation ==========
 
     def on_data_loaded(self):
@@ -1013,10 +1105,15 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         # Update match resolutions checkbox
         self.match_resolutions_var.set(self.presenter.match_resolutions)
 
+        # Update clahe checkboxes
+        self.clahe_source_var.set(self.presenter.clahe_active_source)
+        self.clahe_dest_var.set(self.presenter.clahe_active_dest)
+
         self.update_display()
 
     def on_points_changed(self):
         """Called when control points have changed."""
+        self._update_point_count()
         self.update_display()
 
     def on_display_update_needed(self):
@@ -1046,9 +1143,31 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         Viewer.root.wait_window()
         self.set_status("Preview window closed")
 
+    def on_show_matched_points(
+        self,
+        src_img: np.ndarray,
+        dst_img: np.ndarray,
+        src_points: np.ndarray,
+        dst_points: np.ndarray,
+    ):
+        """Called to show matched points visualization."""
+        # Create matched points viewer window
+        Viewer = MatchedPointsViewer(
+            self,
+            src_img,
+            dst_img,
+            src_points,
+            dst_points,
+            "Matched Points Visualization",
+        )
+        self.set_status("Matched points viewer opened")
+        Viewer.root.wait_window()
+        self.set_status("Matched points viewer closed")
+
     def on_project_loaded(self):
         """Called when a project has been loaded."""
         self.on_data_loaded()
+        self._update_point_count()
         self.set_status("Project loaded")
 
     def on_request_corresponding_point(self, target: str):
@@ -1086,6 +1205,10 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         # Reset match resolutions
         self.match_resolutions_var.set(False)
+
+        # Reset cursor and point display
+        self.cursor_label.config(text="Cursor: --, --")
+        self.points_label.config(text="Points: 0 / 0")
 
         self.set_status("Ready")
 
@@ -1493,6 +1616,241 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
 
         dialog.wait_window()
         return result[0]
+
+
+class MatchedPointsViewer:
+    """Tkinter implementation of a matched points visualization viewer"""
+
+    def __init__(
+        self, master, src_img, dst_img, src_points, dst_points, title="Matched Points"
+    ):
+        """
+        Initialize the matched points viewer
+
+        Parameters:
+        -----------
+        src_img : numpy.ndarray
+            Source image
+        dst_img : numpy.ndarray
+            Destination image
+        src_points : numpy.ndarray
+            Source points array (N x 2)
+        dst_points : numpy.ndarray
+            Destination points array (N x 2)
+        title : str
+            Window title
+        """
+        self.master = master
+        self.src_img = self._normalize_image(src_img)
+        self.dst_img = self._normalize_image(dst_img)
+        self.src_points = src_points
+        self.dst_points = dst_points
+        self.title = title
+        self.monochromatic = False
+
+        # Setup the GUI
+        self.setup_gui()
+
+    def _normalize_image(self, img):
+        """Normalize image to 0-255 range and ensure it's in the right format"""
+        if img.dtype == np.float64 or img.dtype == np.float32:
+            img = (img * 255).astype(np.uint8)
+        elif img.dtype != np.uint8:
+            img = img.astype(np.uint8)
+
+        # Convert to RGB if grayscale
+        if len(img.shape) == 2:
+            img = np.stack([img, img, img], axis=2)
+        elif img.shape[2] == 1:
+            img = np.concatenate([img, img, img], axis=2)
+
+        return img
+
+    def _get_window_size(self):
+        """Calculate appropriate window size based on image dimensions"""
+        # Calculate combined width (both images side by side)
+        total_width = self.src_img.shape[1] + self.dst_img.shape[1]
+        max_height = max(self.src_img.shape[0], self.dst_img.shape[0])
+
+        display_height = self.root.winfo_screenheight()
+        display_width = self.root.winfo_screenwidth()
+
+        # Scale to fit screen with some margin
+        ratio = total_width / max_height
+        if ratio >= 1:
+            width = min(display_width * 0.9, int(display_height * ratio * 0.8))
+            height = int(display_height * 0.8)
+        else:
+            width = int(display_width * 0.9)
+            height = min(display_height * 0.9, int(display_width * 0.9 / ratio))
+
+        return int(width), int(height)
+
+    def setup_gui(self):
+        """Setup the tkinter GUI"""
+        # Create main window
+        self.root = tk.Toplevel(self.master)
+        self.root.title(self.title)
+        width, height = self._get_window_size()
+        self.root.geometry(f"{width}x{height}")
+
+        # Create main frame
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Configure grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+
+        # Create canvas for display
+        self.canvas = tk.Canvas(main_frame, bg="gray")
+        self.canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Info frame
+        info_frame = ttk.Frame(main_frame)
+        info_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=5)
+
+        info_text = f"Showing {len(self.src_points)} matched point pairs"
+        info_label = ttk.Label(info_frame, text=info_text)
+        info_label.pack(side=tk.LEFT, padx=5)
+
+        # Close button
+        close_button = ttk.Button(info_frame, text="Close", command=self.root.destroy)
+        close_button.pack(side=tk.RIGHT, padx=5)
+
+        # Initial display
+        self.update_display()
+
+        # Bind canvas resize event
+        self.canvas.bind("<Configure>", self.on_canvas_resize)
+
+    def create_matched_visualization(self):
+        """Create visualization with both images and connecting lines"""
+        # Get dimensions
+        h1, w1 = self.src_img.shape[:2]
+        h2, w2 = self.dst_img.shape[:2]
+
+        # Create combined canvas
+        max_height = max(h1, h2)
+        combined_width = w1 + w2
+        combined_img = np.ones((max_height, combined_width, 3), dtype=np.uint8) * 128
+
+        # Place source image on left
+        combined_img[:h1, :w1] = self.src_img
+
+        # Place destination image on right
+        combined_img[:h2, w1 : w1 + w2] = self.dst_img
+
+        # Draw lines and points
+        for i in range(len(self.src_points)):
+            src_x, src_y = int(self.src_points[i, 0]), int(self.src_points[i, 1])
+            dst_x, dst_y = int(self.dst_points[i, 0]) + w1, int(self.dst_points[i, 1])
+            # Randomly generate a very bright color for visibility
+            lc, p0c, p1c = self._make_color()
+
+            # Draw line between points (using simple line drawing)
+            self._draw_line(combined_img, src_x, src_y, dst_x, dst_y, lc)
+
+            # Draw circles at point locations
+            self._draw_circle(combined_img, src_x, src_y, 5, p0c)
+            self._draw_circle(combined_img, dst_x, dst_y, 5, p1c)
+        return Image.fromarray(combined_img)
+
+    def _make_color(self):
+        if self.monochromatic:
+            return (255, 0, 0), (255, 0, 0), (0, 0, 255)
+        H = float(np.random.randint(0, 360))
+        S = 1.0
+        V = 1.0
+        C = V * S
+        X = C * (1 - abs((H / 60) % 2 - 1))
+        m = V - C
+        if 0 <= H < 60:
+            r1, g1, b1 = C, X, 0
+        elif 60 <= H < 120:
+            r1, g1, b1 = X, C, 0
+        elif 120 <= H < 180:
+            r1, g1, b1 = 0, C, X
+        elif 180 <= H < 240:
+            r1, g1, b1 = 0, X, C
+        elif 240 <= H < 300:
+            r1, g1, b1 = X, 0, C
+        else:
+            r1, g1, b1 = C, 0, X
+        r, g, b = int((r1 + m) * 255), int((g1 + m) * 255), int((b1 + m) * 255)
+        return (r, g, b), (r, g, b), (r, g, b)
+
+    def _draw_line(self, img, x0, y0, x1, y1, color):
+        """Draw a line on the image using Bresenham's algorithm"""
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            # Check bounds
+            if 0 <= y0 < img.shape[0] and 0 <= x0 < img.shape[1]:
+                img[y0, x0] = color
+
+            if x0 == x1 and y0 == y1:
+                break
+
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+
+    def _draw_circle(self, img, cx, cy, radius, color):
+        """Draw a filled circle on the image"""
+        for y in range(max(0, cy - radius), min(img.shape[0], cy + radius + 1)):
+            for x in range(max(0, cx - radius), min(img.shape[1], cx + radius + 1)):
+                if (x - cx) ** 2 + (y - cy) ** 2 <= radius**2:
+                    img[y, x] = color
+
+    def update_display(self):
+        """Update the displayed image"""
+        # Create matched visualization
+        pil_image = self.create_matched_visualization()
+
+        # Get canvas size
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+
+        if canvas_width > 1 and canvas_height > 1:
+            # Calculate scaling to fit canvas while maintaining aspect ratio
+            scale_x = canvas_width / pil_image.width
+            scale_y = canvas_height / pil_image.height
+            scale = min(scale_x, scale_y)
+
+            new_width = int(pil_image.width * scale)
+            new_height = int(pil_image.height * scale)
+
+            # Resize image
+            pil_image = pil_image.resize(
+                (new_width, new_height), Image.Resampling.LANCZOS
+            )
+
+        # Convert to PhotoImage
+        self.photo = ImageTk.PhotoImage(pil_image)
+
+        # Clear canvas and display image
+        self.canvas.delete("all")
+        self.canvas.create_image(
+            canvas_width // 2 if canvas_width > 1 else 200,
+            canvas_height // 2 if canvas_height > 1 else 200,
+            image=self.photo,
+            anchor=tk.CENTER,
+        )
+
+    def on_canvas_resize(self, event):
+        """Handle canvas resize event"""
+        self.update_display()
 
 
 class Interactive3DViewer:

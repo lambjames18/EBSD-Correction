@@ -1063,6 +1063,40 @@ class ApplicationPresenter:
         dst_res = self.destination_image.resolution if self.destination_image else 1.0
         return src_res, dst_res
 
+    def show_matched_points(self) -> None:
+        """Show visualization of matched control points between source and destination images."""
+        try:
+            # Get current images
+            src_img, dst_img = self.get_current_images(normalize=True)
+
+            if src_img is None or dst_img is None:
+                self._notify_view_error("Both source and destination images must be loaded")
+                return
+
+            # Get point pairs for current slice
+            src_points, dst_points = self.point_manager.get_point_pairs(self.current_slice)
+
+            if src_points.size == 0 or dst_points.size == 0:
+                self._notify_view_error("No control points defined for current slice")
+                return
+
+            # Scale points if resolutions are matched
+            if self.match_resolutions:
+                src_res, dst_res = self.get_resolutions()
+                res_scale = dst_res / src_res
+                dst_points = np.array(
+                    [(p[0] * res_scale, p[1] * res_scale) for p in dst_points]
+                )
+
+            # Notify view to show matched points
+            self._notify_view_show_matched_points(src_img, dst_img, src_points, dst_points)
+
+        except Exception as e:
+            logger.error(f"Failed to show matched points: {e}")
+            self._notify_view_error(
+                f"Failed to show matched points: {str(e)}, ({parse_error()})"
+            )
+
     # ========== Private Helper Methods ==========
 
     def _save_points(self) -> None:
@@ -1164,6 +1198,13 @@ class ApplicationPresenter:
         """Notify view that a new project has been created."""
         if self.view:
             self.view.on_project_reset()
+
+    def _notify_view_show_matched_points(
+        self, src_img: np.ndarray, dst_img: np.ndarray, src_points: np.ndarray, dst_points: np.ndarray
+    ) -> None:
+        """Notify view to show matched points visualization."""
+        if self.view:
+            self.view.on_show_matched_points(src_img, dst_img, src_points, dst_points)
 
 
 def parse_error():
