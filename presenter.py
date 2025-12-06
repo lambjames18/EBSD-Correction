@@ -340,10 +340,10 @@ class ApplicationPresenter:
             # Add detected points to point manager
             for sp, dp in zip(src_points, dst_points):
                 self.point_manager.source_points.add_point(
-                    Point(sp[0], sp[1], self.current_slice)
+                    Point(int(sp[0]), int(sp[1]), self.current_slice)
                 )
                 self.point_manager.destination_points.add_point(
-                    Point(dp[0], dp[1], self.current_slice)
+                    Point(int(dp[0]), int(dp[1]), self.current_slice)
                 )
 
             self._save_points()
@@ -1070,11 +1070,15 @@ class ApplicationPresenter:
             src_img, dst_img = self.get_current_images(normalize=True)
 
             if src_img is None or dst_img is None:
-                self._notify_view_error("Both source and destination images must be loaded")
+                self._notify_view_error(
+                    "Both source and destination images must be loaded"
+                )
                 return
 
             # Get point pairs for current slice
-            src_points, dst_points = self.point_manager.get_point_pairs(self.current_slice)
+            src_points, dst_points = self.point_manager.get_point_pairs(
+                self.current_slice
+            )
 
             if src_points.size == 0 or dst_points.size == 0:
                 self._notify_view_error("No control points defined for current slice")
@@ -1089,7 +1093,9 @@ class ApplicationPresenter:
                 )
 
             # Notify view to show matched points
-            self._notify_view_show_matched_points(src_img, dst_img, src_points, dst_points)
+            self._notify_view_show_matched_points(
+                src_img, dst_img, src_points, dst_points
+            )
 
         except Exception as e:
             logger.error(f"Failed to show matched points: {e}")
@@ -1200,7 +1206,11 @@ class ApplicationPresenter:
             self.view.on_project_reset()
 
     def _notify_view_show_matched_points(
-        self, src_img: np.ndarray, dst_img: np.ndarray, src_points: np.ndarray, dst_points: np.ndarray
+        self,
+        src_img: np.ndarray,
+        dst_img: np.ndarray,
+        src_points: np.ndarray,
+        dst_points: np.ndarray,
     ) -> None:
         """Notify view to show matched points visualization."""
         if self.view:

@@ -583,7 +583,7 @@ class PointAutoIdentifier:
                 )
                 return np.array([]), np.array([])
 
-            return src_points, dst_points
+            return src_points.astype(int), dst_points.astype(int)
 
         except Exception as e:
             logger.error(f"SIFT point detection failed: {e}")
