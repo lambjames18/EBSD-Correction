@@ -726,6 +726,7 @@ class ImageLoader:
             col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
 
         raw_data = np.genfromtxt(path, skip_header=header_lines, dtype=float)
+        raw_data[np.isnan(raw_data)] = 0.0
 
         if raw_data.shape[0] != ncols * nrows:
             raise ValueError(

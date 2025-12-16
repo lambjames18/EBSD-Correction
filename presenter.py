@@ -328,6 +328,9 @@ class ApplicationPresenter:
             src_points, dst_points = self.point_auto_identifier.detect_points(
                 src_img, dst_img, method=method
             )
+            if src_points.size == 0 or dst_points.size == 0:
+                logger.warning("No points detected by auto identifier")
+                return False
 
             # Scale points if resolutions are matched
             if self.match_resolutions:
@@ -350,11 +353,14 @@ class ApplicationPresenter:
             self.project_manager.mark_modified()
             self._notify_view_points_changed()
 
+            return True
+
         except Exception as e:
             logger.error(f"Auto point detection failed: {e}")
             self._notify_view_error(
                 f"Auto point detection failed: {str(e)}, ({parse_error()})"
             )
+            return False
 
     def is_point_in_bounds(self, source: str, x: int, y: int) -> bool:
         """Check if a point is within the bounds of the specified image.
