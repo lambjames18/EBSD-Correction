@@ -133,7 +133,6 @@ class ThinPlateSplineTransform:
         affine[1, :, :] += a1[1]
         del xgd, ygd, x, y
 
-        tracemalloc.start()
         if self.affine_only:
             self.params = affine
         else:
@@ -178,70 +177,54 @@ class ThinPlateSplineTransform:
 
                 # Clean up chunk memory
                 del R, Rsq, U, bend_chunk, bend_chunk_reshaped
-        current, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+
+            self.params = affine + bend
 
         self.size = size
         self._estimated = True
-        return peak
-        # return True
+        return True
 
     def _TPS_makeL(self, cp):
-        """Function to make the L matrix for thin plate spline calculation."""
-        # cp: [K x 2] control points
-        # L: [(K+3) x (K+3)]
+        """Function to make the L matrix for thin plate spline calculation.
+
+        Parameters
+        ----------
+        cp : (K, 2) array_like
+            Control points.
+        Returns
+        -------
+        L : (K+3, K+3) ndarray
+            The L matrix for thin plate spline calculation.
+        """
         K = cp.shape[0]
         L = np.zeros((K + 3, K + 3))
-        # make P in L
+
+        # Make P in L
         L[:K, K] = 1
         L[:K, K + 1 : K + 3] = cp
-        # make P.T in L
+
+        # Make P.T in L
         L[K, :K] = 1
         L[K + 1 :, :K] = cp.T
-        R = cdist(cp, cp, "euclidean")
+
+        # Compute U matrix
+        R = cdist(cp, cp, "euclidean").astype(self.dtype)
+        t0 = time.time()
         Rsq = R * R
-        Rsq[R == 0] = (
-            1  # avoid log(0) undefined, will correct itself as log(1) = 0, so U(0) = 0
-        )
-        U = Rsq * np.log(Rsq)
+        Rsq[R == 0] = 1
+        U0 = Rsq * np.log(Rsq)
+
+        t0 = time.time()
+        mask = R > 0
+        U1 = np.zeros_like(R, dtype=self.dtype)
+        U1[mask] = R[mask] ** 2 * (2 * np.log(R[mask]))
+
+        t0 = time.time()
+        R_safe = np.maximum(R, 1e-10)
+        U2 = R * R * np.log(R_safe * R_safe)
+        U2[R < 1e-10] = 0
+        U = U2
+
         np.fill_diagonal(U, 0)  # should be redundant
         L[:K, :K] = U
         return L
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    import time
-    import tracemalloc
-
-    tform = ThinPlateSplineTransform()
-
-    Ns = [100, 1000, 5000]
-    results = []
-    for N in Ns:
-        np.random.seed(0)
-        src = np.random.rand(5000, 2) * N
-        dst = src + (np.random.rand(5000, 2) - 0.5) * 10  # small random displacement
-        size = (N, N)
-
-        start_time = time.time()
-        peak = tform.estimate(src, dst, size, available_memory_gb=20.0)
-        end_time = time.time()
-
-        results.append((N, end_time - start_time, peak / 10**6))
-
-    results = np.array(results)
-
-    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-    ax2 = ax.twinx()
-
-    ax.plot(results[:, 0], results[:, 1], "o-", color="blue", label="Time (s)")
-    ax2.plot(results[:, 0], results[:, 2], "s--", color="red", label="Memory (MB)")
-    ax.set_xscale("log")
-    ax.set_xlabel("Number of Control Points")
-    ax.set_ylabel("Time (s)")
-    ax2.set_ylabel("Memory (MB)")
-    ax.legend(loc="upper left")
-    ax2.legend(loc="upper right")
-    plt.title("Thin Plate Spline Transform Performance")
-    plt.show()
