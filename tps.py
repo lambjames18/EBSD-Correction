@@ -1,8 +1,5 @@
 import numpy as np
 from scipy.spatial.distance import cdist
-from scipy.sparse import csr_matrix
-from scipy.sparse.linalg import spsolve
-from skimage import transform as tf
 from tqdm import tqdm
 
 
@@ -62,6 +59,25 @@ class ThinPlateSplineTransform:
 
         return chunk_size
 
+    def _check_valid_points(self, src, dst):
+        """Check if source and destination points are valid."""
+        if src.shape != dst.shape:
+            raise ValueError("Source and destination points must have the same shape.")
+        elif src.shape == (2,):
+            raise ValueError(
+                "Incorrect shape for control points; expected (N, 2), received (2,)."
+            )
+        elif src.shape[1] != 2:
+            raise ValueError("Control points must be 2D coordinates.")
+        elif src.shape[0] < 3:
+            raise ValueError("At least 3 control points are required.")
+        # Check for duplicate points
+        src_duplicates = np.unique(src, axis=0).shape[0] != src.shape[0]
+        dst_duplicates = np.unique(dst, axis=0).shape[0] != dst.shape[0]
+        if src_duplicates or dst_duplicates:
+            raise ValueError("Control points contain duplicates.")
+        return True
+
     def estimate(self, src, dst, size, available_memory_gb=2.0):
         """Estimate optimal spline mappings between source and destination points.
 
@@ -83,6 +99,9 @@ class ThinPlateSplineTransform:
         -----
         The number N of source and destination points must match.
         """
+        # validate input points
+        self._check_valid_points(src, dst)
+
         # convert input pixels in arrays. cps are control points
         xs = np.asarray(dst[:, 0])
         ys = np.array(dst[:, 1])
@@ -209,17 +228,14 @@ class ThinPlateSplineTransform:
 
         # Compute U matrix
         R = cdist(cp, cp, "euclidean").astype(self.dtype)
-        t0 = time.time()
         Rsq = R * R
         Rsq[R == 0] = 1
         U0 = Rsq * np.log(Rsq)
 
-        t0 = time.time()
         mask = R > 0
         U1 = np.zeros_like(R, dtype=self.dtype)
         U1[mask] = R[mask] ** 2 * (2 * np.log(R[mask]))
 
-        t0 = time.time()
         R_safe = np.maximum(R, 1e-10)
         U2 = R * R * np.log(R_safe * R_safe)
         U2[R < 1e-10] = 0
