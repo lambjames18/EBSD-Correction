@@ -10,3 +10,4 @@ test_data/3D/control_pts.txt
 /test_data/3D/*.json
 temp.py
 testing.py
+MatchAnything/*
