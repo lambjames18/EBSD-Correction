@@ -11,3 +11,6 @@ test_data/3D/control_pts.txt
 temp.py
 testing.py
 MatchAnything/*
+.vscode/
+CoNi67/*
+Andy/*
