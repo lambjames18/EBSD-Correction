@@ -256,8 +256,9 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         self.menubar.add_cascade(label="Auto point detection", menu=tools_menu)
         tools_menu.add_command(
             label="MatchAnything",
-            command=lambda: self._on_auto_detect_points("matchanything"),
-            state="disabled",
+            command=lambda: self._on_auto_detect_points("roma"),
+            # command=lambda: self._on_auto_detect_points("matchanything"),
+            # state="disabled",
         )
         tools_menu.add_command(
             label="SIFT",
