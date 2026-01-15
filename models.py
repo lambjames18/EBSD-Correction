@@ -438,9 +438,11 @@ class PointAutoIdentifier:
     ENGINES = {
         "sift": "detect_points_sift",
         "matchanything": "detect_points_matchanything",
+        "roma": "detect_points_matchanything",  # Alias for convenience
     }
 
     def __init__(self):
+        self._roma_matcher = None  # Cache ROMA matcher for reuse
         logger.info("PointAutoIdentifier initialized")
 
     @classmethod
@@ -595,8 +597,85 @@ class PointAutoIdentifier:
     def detect_points_matchanything(
         source_image: np.ndarray, destination_image: np.ndarray, **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
-        # Implement MatchAnything-based point detection here
-        return np.array([]), np.array([])
+        """Detect matching points between images using ROMA (MatchAnything).
+
+        Args:
+            source_image: Source image as numpy array (H, W) or (H, W, C)
+            destination_image: Destination image as numpy array (H, W) or (H, W, C)
+            **kwargs: Additional parameters:
+                - confidence_threshold: Minimum confidence (default: 0.1)
+                - ransac_filter: Whether to apply RANSAC (default: True)
+                - ransac_threshold: RANSAC threshold in pixels (default: 5.5)
+                - num_samples: Maximum number of matches to sample (default: 5000)
+                - checkpoint_path: Path to model checkpoint
+                - device: Device to use ('cuda' or 'cpu')
+                - resize_by_stretch: Whether to resize by stretching (default: True)
+                - coarse_resolution: Resolution for coarse matching (default: (560, 560))
+                - upsample_resolution: Resolution for upsampling (default: (864, 864))
+
+        Returns:
+            Tuple of (source_points, destination_points) as numpy arrays (Nx2)
+        """
+        try:
+            # Import here to avoid loading ROMA unless needed
+            from roma_matcher import RomaMatcher
+
+            # Extract parameters with defaults
+            confidence_threshold = kwargs.get("confidence_threshold", 0.1)
+            ransac_filter = kwargs.get("ransac_filter", True)
+            ransac_threshold = kwargs.get("ransac_threshold", 5.5)
+            num_samples = kwargs.get("num_samples", 5000)
+            checkpoint_path = kwargs.get(
+                "checkpoint_path", "matchanything_roma.ckpt"
+            )
+            device = kwargs.get("device", "cuda")
+            resize_by_stretch = kwargs.get("resize_by_stretch", True)
+            coarse_resolution = kwargs.get("coarse_resolution", (560, 560))
+            upsample_resolution = kwargs.get("upsample_resolution", (864, 864))
+
+            # Create matcher
+            matcher = RomaMatcher(
+                checkpoint_path=checkpoint_path,
+                confidence_threshold=confidence_threshold,
+                num_samples=num_samples,
+                device=device,
+                resize_by_stretch=resize_by_stretch,
+                coarse_resolution=coarse_resolution,
+                upsample_resolution=upsample_resolution,
+            )
+
+            # Detect points
+            src_points, dst_points, _ = matcher.detect_points(
+                source_image, destination_image, ransac_filter=ransac_filter, ransac_threshold=ransac_threshold
+            )
+
+            logger.info(f"ROMA detected {len(src_points)} matches")
+
+            if len(src_points) < 4:
+                logger.warning(
+                    "Insufficient matches found (< 4). Cannot estimate transformation."
+                )
+                return np.array([]), np.array([])
+
+            return src_points.astype(int), dst_points.astype(int)
+
+        except ImportError as e:
+            logger.error(
+                f"Failed to import ROMA matcher. Make sure roma_matcher.py is available: {e}"
+            )
+            return np.array([]), np.array([])
+        except FileNotFoundError as e:
+            logger.error(f"ROMA checkpoint not found: {e}")
+            logger.error(
+                "Please download weights from: https://drive.google.com/file/d/12L3g9-w8rR9K2L4rYaGaDJ7NqX1D713d/view"
+            )
+            return np.array([]), np.array([])
+        except Exception as e:
+            logger.error(f"ROMA point detection failed: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            return np.array([]), np.array([])
 
 
 class ImageLoader:
@@ -629,7 +708,7 @@ class ImageLoader:
             path = path[0]
 
         if not is_list:
-            path = Path(path)
+            path = Path(path).resolve()
 
             if not path.exists():
                 raise FileNotFoundError(f"File not found: {path}")
@@ -642,10 +721,10 @@ class ImageLoader:
 
         else:
             loader_method = cls.load_images
-            first_path = Path(path[0])
+            first_path = Path(path[0]).resolve()
             first_suffix = first_path.suffix.lower()
             for i in range(len(path)):
-                _p = Path(path[i])
+                _p = Path(path[i]).resolve()
 
                 if not _p.exists():
                     raise FileNotFoundError(f"File not found: {path}")
