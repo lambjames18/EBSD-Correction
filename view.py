@@ -19,6 +19,9 @@ from presenter import ApplicationPresenter, TransformType, CropMode, DataFormat
 logger = logging.getLogger(__name__)
 
 
+## TODO: Mutual information metric and feature density metric
+
+
 class ViewInterface(ABC):
     """Abstract base class for view implementations."""
 
@@ -1039,10 +1042,14 @@ class ModernDistortionCorrectionView(tk.Tk, ViewInterface):
         """Handle automatic point detection."""
         self.show_progress(True)
         self.set_status(f"Detecting points using {method}...")
+        original_n_points = len(self.presenter.get_points()[0])
         success = self.presenter.auto_detect_points(method)
+        new_n_points = len(self.presenter.get_points()[0])
         self.show_progress(False)
         if success:
-            self.set_status(f"Points detected using {method}")
+            self.set_status(
+                f"Points detected using {method}: {new_n_points - original_n_points} new points"
+            )
         else:
             self.set_status(f"Point detection using {method} failed")
 

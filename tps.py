@@ -1,9 +1,8 @@
 import numpy as np
 from scipy.spatial.distance import cdist
-from scipy.sparse import csr_matrix
-from scipy.sparse.linalg import spsolve
-from skimage import transform as tf
 from tqdm import tqdm
+
+## TODO: Build out inverse transform functionality so that you can go both ways
 
 
 class ThinPlateSplineTransform:
